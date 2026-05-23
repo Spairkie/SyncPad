@@ -1,6 +1,7 @@
 // SyncPad – templates.js
-// Static template registry. Each template is plain text; the editor stays
-// plain text in the database. Markdown preview renders them prettily.
+// Static built-in templates + localStorage-backed custom templates.
+
+// ── Built-in templates ────────────────────────────────────────────────────────
 
 export const TEMPLATES = {
   blank: {
@@ -94,9 +95,66 @@ Thank you,
 };
 
 export function getTemplate(key) {
+  // Check custom templates first
+  const custom = getCustomTemplates();
+  if (custom[key]) return custom[key].body;
   return TEMPLATES[key]?.body ?? null;
 }
 
 export function templateKeys() {
   return Object.keys(TEMPLATES);
+}
+
+// ── Custom templates (localStorage) ──────────────────────────────────────────
+
+const CUSTOM_KEY = 'syncpad_custom_templates';
+
+/**
+ * Load custom templates from localStorage.
+ * @returns {Record<string, {label: string, body: string}>}
+ */
+export function getCustomTemplates() {
+  try {
+    const raw = localStorage.getItem(CUSTOM_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return (parsed && typeof parsed === 'object') ? parsed : {};
+  } catch { return {}; }
+}
+
+function _saveCustomTemplates(templates) {
+  try { localStorage.setItem(CUSTOM_KEY, JSON.stringify(templates)); } catch {}
+}
+
+/**
+ * Save the current note text as a new custom template.
+ * @param {string} label  – display name
+ * @param {string} body   – template text
+ * @returns {string} key  – generated key for this template
+ */
+export function saveCustomTemplate(label, body) {
+  const key  = `custom_${Date.now()}`;
+  const all  = getCustomTemplates();
+  all[key]   = { label: label.trim().slice(0, 60) || 'Untitled', body };
+  _saveCustomTemplates(all);
+  return key;
+}
+
+/**
+ * Rename an existing custom template.
+ */
+export function renameCustomTemplate(key, newLabel) {
+  const all = getCustomTemplates();
+  if (!all[key]) return;
+  all[key].label = newLabel.trim().slice(0, 60) || all[key].label;
+  _saveCustomTemplates(all);
+}
+
+/**
+ * Delete a custom template.
+ */
+export function deleteCustomTemplate(key) {
+  const all = getCustomTemplates();
+  delete all[key];
+  _saveCustomTemplates(all);
 }

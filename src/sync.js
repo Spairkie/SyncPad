@@ -220,6 +220,10 @@ export function getPendingRemote() {
   return _pendingRemoteContent;
 }
 
+export function getPendingRemoteTs() {
+  return _pendingRemoteTimestamp;
+}
+
 function _clearPending() {
   _pendingRemoteContent   = null;
   _pendingRemoteTimestamp = null;

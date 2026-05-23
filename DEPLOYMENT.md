@@ -1,437 +1,191 @@
-# SyncPad Deployment Guide
+# SyncPad — Deployment Guide
 
-This guide walks you through deploying SyncPad with **Supabase** for the backend and **GitHub Pages** for hosting.
-
-Target URL used by this project:
-
-```text
-https://spairkie.github.io/SyncPad/
-```
+> ⚠️ **Personal / demo project.**  
+> Read-only links, room locks, and Admin / Room Tools are frontend/convenience controls, not backend-enforced security boundaries.  
+> Do **not** deploy SyncPad for use with passwords, HIPAA/PII, classified data, or anything sensitive.
 
 ---
 
-## What you need first
+## Prerequisites
 
-- A GitHub account
-- A Supabase account
-- The SyncPad project folder
-- A browser
-- Optional: GitHub Desktop or Git command line
-
-SyncPad is a static app. There is no build step, no `npm install`, and no server to run.
+- A [Supabase](https://supabase.com) project (free tier works)
+- A GitHub account with GitHub Pages enabled
 
 ---
 
-## Step 1 — Create the Supabase project
+## Base path
 
-1. Go to Supabase and create a new project.
-2. Save your project password somewhere safe.
-3. Wait for the project to finish provisioning.
-4. Open the project dashboard.
+SyncPad is deployed at `/SyncPad` on GitHub Pages. The base path appears in **two files**:
 
-You will use this project for:
+| File | Line |
+|---|---|
+| `src/app.js` | `const BASE = '/SyncPad';` |
+| `service-worker.js` | `const BASE = '/SyncPad';` |
+
+**To host at the root** (custom domain, Vercel, Netlify, etc.):
+1. Change both constants to `const BASE = '';`
+2. Update `manifest.json`: `"start_url": "/"` and `"scope": "/"`
+3. Replace all `/SyncPad/` prefixes in `index.html` with `/`
+4. Update the `404.html` redirect script if present
+
+No other JS files need changes — all path logic flows through the `BASE` constant via helper functions.
+
+---
+
+## Step 1 — Supabase project
+
+1. Go to [supabase.com](https://supabase.com) → **New project**
+2. Note your **Project URL** and **anon public key** from Settings → API
+3. Optional: enable the `pg_cron` extension (Database → Extensions) for automatic expired-room cleanup
+
+---
+
+## Step 2 — Database and storage setup
+
+In the Supabase **SQL Editor**, paste and run the full contents of `supabase-setup.sql`.
+
+The script is **idempotent** — safe to rerun on an existing project. It creates:
 
 - `syncpad_rooms` table
-- `syncpad_files` table
-- Realtime sync
-- Storage bucket for file attachments
-- Optional scheduled cleanup for expired rooms
+- `syncpad_files` table (FK to rooms + cascade delete on metadata rows)
+- All required indexes
+- Row Level Security (RLS) policies for the `anon` role
+- `cleanup_expired_syncpad_rooms()` function
+- Optional `pg_cron` schedule (every 10 minutes) — skipped gracefully if pg_cron is not enabled
+- Realtime publication entries for both tables
+- `syncpad-files` Storage bucket (private)
+- Storage RLS policies for upload, read, and delete
+
+> **Important:** The bucket is private. SyncPad always accesses files via signed URLs. Do not make the bucket public.
 
 ---
 
-## Step 2 — Enable Realtime requirements
+## Step 3 — Configure credentials
 
-The setup SQL adds the required tables to Supabase Realtime.
-
-You do not need to manually create channels. SyncPad creates Broadcast and Presence channels from the browser.
-
----
-
-## Step 3 — Enable pg_cron for backend expiration cleanup
-
-This step is recommended.
-
-SyncPad can clear expired rooms from the browser when someone opens the room after expiration. The updated version also includes a backend cleanup function so expired rooms can be cleaned even when nobody is online.
-
-1. In Supabase, go to **Database**.
-2. Open **Extensions**.
-3. Search for `pg_cron`.
-4. Enable `pg_cron`.
-
-If you skip this step, the app still works. The SQL setup will create the cleanup function, but it will not schedule the automatic cleanup job.
-
----
-
-## Step 4 — Run the Supabase setup SQL
-
-1. Open **SQL Editor** in Supabase.
-2. Open the local file:
-
-```text
-supabase-setup.sql
-```
-
-3. Copy the entire file.
-4. Paste it into the Supabase SQL Editor.
-5. Click **Run**.
-
-The script is safe to rerun. It creates or updates:
-
-- `syncpad_rooms`
-- `syncpad_files`
-- indexes
-- RLS policies
-- Realtime publication entries
-- `syncpad-files` private Storage bucket
-- Storage policies
-- `public.cleanup_expired_syncpad_rooms()`
-- optional `syncpad-expired-room-cleanup` pg_cron job
-
----
-
-## Step 5 — Confirm the Storage bucket
-
-In Supabase:
-
-1. Go to **Storage**.
-2. Open **Buckets**.
-3. Confirm there is a bucket named:
-
-```text
-syncpad-files
-```
-
-4. Confirm it is **private**, not public.
-
-If the bucket was not created, create it manually with this exact name:
-
-```text
-syncpad-files
-```
-
----
-
-## Step 6 — Confirm the cleanup job
-
-If you enabled `pg_cron`, run this in Supabase SQL Editor:
-
-```sql
-select jobid, jobname, schedule, active
-from cron.job
-where jobname = 'syncpad-expired-room-cleanup';
-```
-
-You should see one active job with this schedule:
-
-```text
-*/10 * * * *
-```
-
-That means the cleanup runs every 10 minutes.
-
-You can also manually test the function with:
-
-```sql
-select * from public.cleanup_expired_syncpad_rooms();
-```
-
-Expected result columns:
-
-```text
-cleared_unencrypted | deleted_encrypted
-```
-
-Important behavior:
-
-- Expired unencrypted rooms are cleared in place.
-- Expired encrypted rooms are deleted because the database does not know the passphrase needed to write an encrypted empty note.
-
----
-
-## Step 7 — Get your Supabase URL and anon key
-
-In Supabase:
-
-1. Go to **Project Settings**.
-2. Open **API**.
-3. Copy the **Project URL**.
-4. Copy the **anon public** key.
-
-They will look similar to this:
-
-```text
-https://your-project-ref.supabase.co
-```
-
-and a long JWT-style anon key.
-
-The anon key is public in this app. That is normal for Supabase browser apps.
-
----
-
-## Step 8 — Add your Supabase credentials to SyncPad
-
-Open:
-
-```text
-index.html
-```
-
-Find this block near the bottom of the `<head>` section:
+Open `index.html` and replace the placeholder credentials:
 
 ```html
 <script>
   window.SYNCPAD_CONFIG = {
-    supabaseUrl:     'https://YOUR_PROJECT.supabase.co',
-    supabaseAnonKey: 'YOUR_ANON_KEY_HERE',
+    supabaseUrl:     'https://YOUR-PROJECT-REF.supabase.co',
+    supabaseAnonKey: 'YOUR-ANON-PUBLIC-KEY',
   };
 </script>
 ```
 
-Replace it with your real Supabase values:
-
-```html
-<script>
-  window.SYNCPAD_CONFIG = {
-    supabaseUrl:     'https://your-project-ref.supabase.co',
-    supabaseAnonKey: 'your-real-anon-public-key',
-  };
-</script>
-```
-
-Save the file.
-
-Do not use the Supabase `service_role` key in this app. Only use the `anon public` key.
+The anon key is public-facing by design in Supabase. RLS policies (installed by `supabase-setup.sql`) control what the anon role can actually do.
 
 ---
 
-## Step 9 — Create or update the GitHub repository
+## Step 4 — Deploy to GitHub Pages
 
-For this deployment target, the repository should be named:
+1. Push the repository to GitHub (the entire project root, no build needed)
+2. **Settings → Pages → Source:** Deploy from a branch → `main` → `/` (root)
+3. GitHub deploys to `https://YOUR-USERNAME.github.io/SyncPad/`
 
-```text
-SyncPad
-```
+The `404.html` file handles SPA routing: unknown paths store the room ID in `sessionStorage`, then redirect to the app root so the correct room loads.
 
-The project folder should contain files like this at the repository root:
+### Alternative hosting
 
-```text
-404.html
-README.md
-DEPLOYMENT.md
-index.html
-manifest.json
-service-worker.js
-supabase-setup.sql
-assets/
-src/
-styles/
-```
-
-Do not put the app inside an extra nested folder unless you also update the deployment paths.
+SyncPad deploys to any static host — Vercel, Netlify, Cloudflare Pages, or any CDN. No server-side logic is needed. Just set the publish directory to the repo root and configure the rewrite rule to serve `index.html` for all paths. Then update the `BASE` constant as described above.
 
 ---
 
-## Step 10 — Push the project to GitHub
+## Step 5 — Verify deployment
 
-Using Git command line from inside the project folder:
+After deploying, confirm these work in a browser:
 
-```bash
-git init
-git branch -M main
-git remote add origin https://github.com/spairkie/SyncPad.git
-git add .
-git commit -m "Deploy SyncPad"
-git push -u origin main
-```
-
-If the repo already exists and already has history, use:
-
-```bash
-git add .
-git commit -m "Update SyncPad deployment"
-git push
-```
+- [ ] Landing screen loads at the root URL
+- [ ] Creating a room redirects to `/<roomId>`
+- [ ] Joining a room by URL works
+- [ ] Hard-refreshing a room URL loads correctly (404.html redirect)
+- [ ] Read-only link (`?mode=read`) opens in read-only mode
+- [ ] Uploading a file works
+- [ ] Downloading a file works
+- [ ] Two browser tabs show each other in the Devices panel
+- [ ] Typing in one tab shows the indicator in the other
 
 ---
 
-## Step 11 — Enable GitHub Pages
+## Scheduled cleanup
 
-In GitHub:
+### Expired rooms (Postgres-side)
 
-1. Open the `SyncPad` repository.
-2. Go to **Settings**.
-3. Open **Pages**.
-4. Under **Build and deployment**, choose:
-   - Source: **Deploy from a branch**
-   - Branch: **main**
-   - Folder: **/** root
-5. Save.
-
-After GitHub Pages finishes publishing, the app should be available at:
-
-```text
-https://spairkie.github.io/SyncPad/
-```
-
----
-
-## Step 12 — Test basic room creation
-
-Open:
-
-```text
-https://spairkie.github.io/SyncPad/
-```
-
-The app should automatically create a room URL like:
-
-```text
-https://spairkie.github.io/SyncPad/calm-lake-xxxxxxxxxx
-```
-
-The random room suffix now uses `crypto.getRandomValues()` for stronger entropy.
-
-Type a test note and refresh the page. The note should still be there.
-
----
-
-## Step 13 — Test live sync
-
-1. Open the same room URL in two browser tabs.
-2. Type in one tab.
-3. Confirm the second tab updates live.
-4. Check the device counter in the header.
-
-If live sync does not work:
-
-- Confirm your Supabase URL and anon key are correct.
-- Confirm `syncpad_rooms` was added to Realtime by the setup SQL.
-- Confirm your browser console does not show Supabase connection errors.
-
----
-
-## Step 14 — Test passcode mode
-
-1. Open a room.
-2. Go to **Settings**.
-3. Set a passcode.
-4. Copy the room URL.
-5. Open it in a private/incognito window.
-6. Confirm the app asks for the passcode.
-
-Important: passcode mode is a normal app entry gate. It is not backend security. For real note confidentiality, use text encryption.
-
----
-
-## Step 15 — Test text encryption
-
-1. Open a room.
-2. Add a test note.
-3. Go to **Settings**.
-4. Enable encryption.
-5. Enter a strong passphrase.
-6. Refresh the page.
-7. Confirm the app asks for the encryption passphrase.
-8. Enter the passphrase and confirm the note decrypts.
-
-Important:
-
-- The encryption passphrase is not stored anywhere.
-- If you lose the passphrase, the encrypted note cannot be recovered.
-- Text is encrypted, but files are not encrypted in v1.
-
----
-
-## Step 16 — Test read-only links
-
-1. Open the share modal.
-2. Copy the read-only link.
-3. Open it in another browser tab.
-4. Confirm you can view and copy the note.
-5. Confirm you cannot type, clear, import, upload, delete, or change settings.
-
-Important: read-only mode is enforced by the frontend. The current v1 Supabase RLS policies do not enforce true backend read-only access.
-
----
-
-## Step 17 — Test expiration
-
-1. Open a room.
-2. Go to **Settings**.
-3. Set expiration to a short value, such as:
-
-```text
-30s
-```
-
-4. Wait for it to expire.
-5. Confirm the note clears.
-
-To test backend cleanup manually, run:
+If `pg_cron` is enabled, the SQL setup schedules a job every 10 minutes:
 
 ```sql
-select * from public.cleanup_expired_syncpad_rooms();
+-- Verify the job exists
+SELECT jobid, jobname, schedule, active
+FROM   cron.job
+WHERE  jobname = 'syncpad-expired-room-cleanup';
+
+-- Run manually at any time
+SELECT * FROM public.cleanup_expired_syncpad_rooms();
 ```
 
----
+Unencrypted expired rooms are cleared in place. Encrypted expired rooms are deleted (the DB cannot recreate the encrypted empty payload without the user's passphrase).
 
-## Step 18 — Test view-once
+### Storage orphan cleanup
 
-1. Create a room and type a note.
-2. Enable **View-once** in Settings.
-3. Copy the editable link.
-4. Open the link in another normal browser session.
-5. Confirm the note displays, then the server copy clears.
+Deleting a `syncpad_rooms` row cascades the `syncpad_files` metadata rows via `ON DELETE CASCADE`. It does **not** remove the physical objects in the `syncpad-files` Storage bucket.
 
-Important:
+**To identify orphaned storage objects:**
 
-- The creator does not consume their own view-once note.
-- Read-only links do not consume view-once notes.
-- View-once is not a guaranteed security boundary because direct backend access could bypass the normal app workflow.
+```sql
+-- List all file paths tracked in metadata
+SELECT room_id, file_path, filename, file_size
+FROM   syncpad_files
+ORDER  BY room_id, uploaded_at;
+```
 
----
+Then in the Supabase Dashboard → Storage → `syncpad-files`:
+- Browse objects by folder (each folder = a room ID)
+- Compare against the query results above
+- Objects with no matching `file_path` row are orphans
 
-## Step 19 — Test file attachments
+Delete orphaned objects via the Dashboard UI or the Storage REST API.
 
-1. Open a room without text encryption enabled.
-2. Upload a small test file.
-3. Download it from another tab.
-4. Delete it.
+> ⚠️ **Always verify before deleting.** There is no undo for deleted storage objects.
 
-Files are not encrypted in v1. New uploads are blocked while text encryption is enabled.
-
----
-
-## Step 20 — Final production checklist
-
-Before sharing widely, confirm:
-
-- Supabase credentials are replaced in `index.html`.
-- `supabase-setup.sql` ran successfully.
-- `syncpad-files` bucket exists and is private.
-- Realtime works across two tabs.
-- Expiration cleanup function exists.
-- pg_cron job exists if you want automatic backend cleanup.
-- Read-only behavior works as expected.
-- Encryption works after refresh.
-- GitHub Pages URL works after refresh on a room path.
-- Browser console has no major errors.
+Full automated cleanup (listing all bucket objects and deleting orphans programmatically) requires a Supabase Edge Function with the service role key. This is a future roadmap item — see README.md.
 
 ---
 
-## Important security notes
+## Troubleshooting
 
-SyncPad v1 is good for personal use, demos, and casual sharing, but it is not a full permissioned document platform.
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| Blank page on load | Wrong `BASE` path | Check `const BASE` in `src/app.js` and `service-worker.js` |
+| "Could not load room" | Wrong Supabase credentials | Check `supabaseUrl` and `supabaseAnonKey` in `index.html` |
+| Files not uploading | Storage bucket missing or wrong RLS | Re-run `supabase-setup.sql`; verify bucket policies |
+| Realtime not syncing | Supabase Realtime not enabled | Dashboard → Database → Replication → enable both tables |
+| Expired rooms not cleared | `pg_cron` not enabled | Enable `pg_cron` extension; re-run `supabase-setup.sql` |
+| App serving old cached content | Stale service worker | Bump `CACHE_VERSION` in `service-worker.js`; redeploy |
+| Room URL 404 on hard refresh | `404.html` not present | Ensure `404.html` is in the repo root and deployed |
+| Mobile "Add to Home Screen" fails | Wrong manifest paths | Verify `/SyncPad/` prefix in `manifest.json` icons |
 
-Current limitations:
+---
 
-- Passcode mode is a frontend entry gate, not backend access control.
-- Read-only mode is frontend-only.
-- Editing lock is frontend-only.
-- View-once is a normal app workflow, not a guaranteed burn-after-reading control.
-- Files are not encrypted.
-- The anon Supabase key is public by design.
-- The current RLS policies are permissive so anonymous browser clients can create, read, and update rooms.
+## Service worker cache versioning
 
-For sensitive notes, enable text encryption and use a strong passphrase.
+The service worker uses a named cache (`syncpad-v2` as of this release). To force all clients to download a fresh copy after a significant update:
+
+1. Increment the version constant in `service-worker.js`:  
+   `const CACHE_VERSION = 'syncpad-v3';`
+2. Deploy
+3. On next load, the old cache is purged and the new assets are fetched
+
+---
+
+## Security reminder
+
+| Control | Enforcement |
+|---|---|
+| Read-only links | Frontend JS only |
+| Room lock | Frontend JS only |
+| Admin / Room Tools | Frontend JS only |
+| Passcode | Client-side hash check |
+| Text encryption | In-browser (AES-256-GCM) |
+| File access | Signed URLs (1 h TTL) — no end-to-end encryption |
+
+A determined user with the anon key can bypass all frontend controls. Do not use SyncPad for sensitive data.

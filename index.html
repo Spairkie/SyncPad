@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="SyncPad — Live shared notepad. Real-time sync across all your devices." />
+  <meta name="description" content="SyncPad — Temporary shared notepad. Real-time sync across all your devices." />
   <meta name="theme-color" content="#0f0f11" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -11,20 +11,19 @@
   <title>SyncPad</title>
 
   <!-- PWA -->
-  <link rel="manifest"        href="/SyncPad/manifest.json" />
-  <link rel="icon"            href="/SyncPad/assets/icon-192.png" type="image/png" />
+  <link rel="manifest"         href="/SyncPad/manifest.json" />
+  <link rel="icon"             href="/SyncPad/assets/icon-192.png" type="image/png" />
   <link rel="apple-touch-icon" href="/SyncPad/assets/icon-192.png" />
 
   <!-- Styles -->
   <link rel="stylesheet" href="/SyncPad/styles/style.css" />
 
-  <!-- Supabase JS (UMD — exposes window.supabase) -->
+  <!-- Supabase JS -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-
   <!-- QR Code -->
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 
-  <!-- ⚠️  Replace these values with your Supabase project credentials -->
+  <!-- ⚠️  Replace with your Supabase project credentials -->
   <script>
     window.SYNCPAD_CONFIG = {
       supabaseUrl:     'https://ddehkgdssdhhwpqljbiq.supabase.co',
@@ -33,6 +32,38 @@
   </script>
 </head>
 <body>
+
+<!-- ══════════════════════════════════════════════════════════════
+     LANDING SCREEN  (shown when no room is in the URL)
+═══════════════════════════════════════════════════════════════ -->
+<div id="landing-screen" class="hidden">
+  <div class="landing-glow-bg"></div>
+  <div class="landing-inner">
+    <div class="landing-logo">Sync<span>Pad</span></div>
+    <p class="landing-tagline">A temporary shared notepad for fast&nbsp;handoff between devices.</p>
+
+    <button class="landing-create-btn" id="landing-create-btn">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Create Room
+    </button>
+
+    <div class="landing-or">or join existing</div>
+
+    <div class="landing-join">
+      <input id="landing-join-input" class="landing-join-input"
+             placeholder="Paste room link or ID…"
+             autocomplete="off" spellcheck="false" />
+      <button id="landing-join-btn" class="landing-join-btn">Join</button>
+    </div>
+
+    <div class="landing-chips">
+      <span class="landing-chip">No account needed</span>
+      <span class="landing-chip">Realtime sync</span>
+      <span class="landing-chip">Read-only sharing</span>
+      <span class="landing-chip">File handoff</span>
+    </div>
+  </div>
+</div>
 
 <!-- ══════════════════════════════════════════════════════════════
      LOADING SCREEN
@@ -91,27 +122,30 @@
     You are offline. Changes are saved locally and will sync when reconnected.
   </div>
 
-  <!-- Encryption-locked banner (remote enabled encryption, we have no key) -->
+  <!-- Encryption-locked banner -->
   <div class="enc-locked-bar hidden" id="enc-locked-bar">
     <span>🔐 This room is encrypted. Reload to enter the passphrase.</span>
     <button class="enc-locked-reload-btn">Reload</button>
   </div>
 
-  <!-- Generic edit-blocked banner (read-only or lock) -->
+  <!-- Edit-blocked banner -->
   <div class="edit-blocked-bar hidden" id="edit-blocked-bar">
     <span class="edit-blocked-text" id="edit-blocked-text"></span>
   </div>
 
-  <!-- ── Header ──────────────────────────────────────────── -->
+  <!-- ── Header ─────────────────────────────────────────────────── -->
   <header class="app-header">
+
+    <!-- Left: Logo -->
     <div class="header-logo">Sync<span>Pad</span></div>
 
+    <!-- Center: Room info -->
     <div class="header-room">
       <div class="room-name-row">
         <span class="room-name" id="room-name" title="Click to copy room link"></span>
-        <span class="encryption-badge hidden" id="encryption-badge">🔐 Encrypted</span>
-        <span class="readonly-badge hidden" id="readonly-badge">👁 Read-only</span>
-        <span class="locked-badge hidden" id="locked-badge">🔒 Editing locked</span>
+        <span class="encryption-badge hidden" id="encryption-badge">Encrypted</span>
+        <span class="readonly-badge hidden"   id="readonly-badge">Read-only</span>
+        <span class="locked-badge hidden"     id="locked-badge">Editing locked</span>
       </div>
       <div class="status-row">
         <div class="status-dot connected" id="status-dot"></div>
@@ -122,36 +156,91 @@
       </div>
     </div>
 
+    <!-- Right: Actions -->
     <div class="header-actions">
-      <button class="header-btn" id="btn-share"    title="Share">⬆️</button>
-      <button class="header-btn" id="btn-preview"  title="Preview Markdown" aria-pressed="false">👁</button>
-      <button class="header-btn" id="btn-tools"    title="Tools">🔧</button>
-      <button class="header-btn" id="btn-files"    title="Files" data-readonly-hide>📎</button>
-      <button class="header-btn" id="btn-presence" title="Devices">👥</button>
-      <button class="header-btn" id="btn-settings" title="Settings" data-readonly-hide>⚙️</button>
+
+      <!-- Share -->
+      <button class="header-btn" id="btn-share" title="Share this room" aria-label="Share">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+        <span>Share</span>
+      </button>
+
+      <!-- More dropdown -->
+      <div class="more-dropdown-wrap">
+        <button class="header-btn header-btn--icon" id="btn-more" title="More options" aria-label="More options" aria-expanded="false">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+        </button>
+
+        <div id="more-dropdown" role="menu">
+          <button class="more-item" id="btn-tools" role="menuitem">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+            <span class="more-item-label">Tools</span>
+          </button>
+          <button class="more-item" id="btn-files" role="menuitem">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+            <span class="more-item-label">Files</span>
+          </button>
+          <button class="more-item" id="btn-presence" role="menuitem">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <span class="more-item-label">Devices</span>
+          </button>
+          <div class="more-separator"></div>
+          <button class="more-item" id="btn-settings" role="menuitem" data-readonly-hide>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            <span class="more-item-label">Settings</span>
+          </button>
+          <button class="more-item" id="btn-shortcuts" role="menuitem">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8"/></svg>
+            <span class="more-item-label">Keyboard Shortcuts</span>
+          </button>
+          <button class="more-item" id="btn-export" role="menuitem">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <span class="more-item-label">Export</span>
+          </button>
+          <div class="more-separator"></div>
+          <button class="more-item" id="btn-admin" role="menuitem">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            <span class="more-item-label">Admin / Room Tools</span>
+          </button>
+        </div>
+      </div>
     </div>
   </header>
 
-  <!-- ── Editor area ─────────────────────────────────────── -->
+  <!-- ── Editor toolbar (Write / Preview / Split + word count) ── -->
+  <div class="editor-toolbar">
+    <div class="md-segmented" role="group" aria-label="View mode">
+      <button class="md-seg-btn active" data-mode="write"   aria-pressed="true">Write</button>
+      <button class="md-seg-btn"        data-mode="preview" aria-pressed="false">Preview</button>
+      <button class="md-seg-btn"        data-mode="split"   aria-pressed="false">Split</button>
+    </div>
+    <span class="toolbar-word-count" id="toolbar-word-count" aria-live="polite"></span>
+  </div>
+
+  <!-- ── Editor area ────────────────────────────────────────────── -->
   <div class="editor-area">
     <div class="editor-wrap">
       <textarea id="note-editor"
-                placeholder="Start typing…"
+                placeholder="Start typing. Your note syncs live across devices."
                 spellcheck="true"
                 autocorrect="on"
                 autocapitalize="sentences"></textarea>
 
-      <!-- Markdown preview pane (hidden by default) -->
+      <!-- Markdown preview pane -->
       <div id="note-preview" class="note-preview hidden" aria-live="polite"></div>
 
       <!-- Remote update notice -->
-      <div class="remote-notice hidden" id="remote-notice">
-        <span class="remote-notice-label">Remote update available</span>
+      <div class="remote-notice hidden" id="remote-notice" role="alert">
+        <div class="remote-notice-header">
+          <span class="remote-notice-label">Another device updated this note</span>
+          <span class="remote-notice-meta" id="remote-notice-meta"></span>
+        </div>
+        <div class="remote-notice-counts hidden" id="remote-notice-counts"></div>
         <div class="remote-notice-actions">
-          <button class="remote-notice-btn" id="remote-apply-btn"   title="Replace local content with remote">Apply</button>
-          <button class="remote-notice-btn" id="remote-keep-btn"    title="Discard the remote update">Keep mine</button>
-          <button class="remote-notice-btn" id="remote-copy-btn"    title="Copy remote content to clipboard">Copy remote</button>
-          <button class="remote-notice-btn" id="remote-dismiss-btn" title="Hide this notice">Dismiss</button>
+          <button class="remote-notice-btn primary" id="remote-apply-btn"   title="Replace your local version with the incoming update">Apply</button>
+          <button class="remote-notice-btn"          id="remote-keep-btn"    title="Keep your local version and discard the incoming update">Keep mine</button>
+          <button class="remote-notice-btn"          id="remote-copy-btn"    title="Copy the incoming content to clipboard">Copy remote</button>
+          <button class="remote-notice-btn subtle"   id="remote-dismiss-btn" title="Hide this notice (the update is still available)">Dismiss</button>
         </div>
       </div>
     </div>
@@ -161,20 +250,50 @@
 
     <!-- Expiration bar -->
     <div class="expiration-bar hidden" id="expiration-bar">
-      <span class="exp-icon">⏱</span>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
       <span>Expires in <span class="exp-time">—</span></span>
       <button class="exp-cancel">Remove</button>
     </div>
   </div>
 
-  <!-- ── Footer ──────────────────────────────────────────── -->
+  <!-- ── Footer ────────────────────────────────────────────────── -->
   <footer class="app-footer">
     <span class="word-count" id="word-count">0 words · 0 chars</span>
     <div class="footer-tools">
-      <button class="footer-tool-btn" id="btn-copy-footer" title="Copy note">📋 Copy</button>
-      <button class="footer-tool-btn" id="btn-insert-ts" data-readonly-hide title="Insert timestamp">🕐 Time</button>
+      <button class="footer-tool-btn" id="btn-copy-footer" title="Copy note">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        Copy
+      </button>
+      <button class="footer-tool-btn" id="btn-insert-ts" data-readonly-hide title="Insert timestamp">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Time
+      </button>
     </div>
   </footer>
+
+  <!-- ── Mobile action bar (hidden on desktop) ─────────────────── -->
+  <div class="mobile-action-bar" id="mobile-action-bar">
+    <button class="mob-action-btn" id="mob-btn-share" aria-label="Share">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+      <span class="mob-label">Share</span>
+    </button>
+    <button class="mob-action-btn" id="mob-btn-files" aria-label="Files">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+      <span class="mob-label">Files</span>
+    </button>
+    <button class="mob-action-btn" id="mob-btn-tools" aria-label="Tools">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+      <span class="mob-label">Tools</span>
+    </button>
+    <button class="mob-action-btn" id="mob-btn-presence" aria-label="Devices">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      <span class="mob-label">Devices</span>
+    </button>
+    <button class="mob-action-btn" id="mob-btn-settings" data-readonly-hide aria-label="Settings">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      <span class="mob-label">Settings</span>
+    </button>
+  </div>
 
 </div><!-- /#app-screen -->
 
@@ -184,60 +303,77 @@
 
 <div class="panel-backdrop" id="panel-backdrop"></div>
 
-<!-- Tools -->
+<!-- Tools panel -->
 <div class="side-panel" id="tools-panel">
   <div class="panel-header">
     <h3>Tools</h3>
-    <button class="panel-close" aria-label="Close">✕</button>
+    <button class="panel-close" aria-label="Close">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
   </div>
   <div class="panel-body">
     <div class="tools-grid">
       <button class="tool-btn" id="tool-copy">
-        <span class="tool-icon">📋</span><span class="tool-label">Copy Note</span>
+        <span class="tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span>
+        <span class="tool-label">Copy Note</span>
       </button>
       <button class="tool-btn" id="tool-copy-link">
-        <span class="tool-icon">🔗</span><span class="tool-label">Copy Link</span>
+        <span class="tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>
+        <span class="tool-label">Copy Link</span>
       </button>
       <button class="tool-btn" id="tool-paste" data-readonly-hide>
-        <span class="tool-icon">📄</span><span class="tool-label">Paste</span>
+        <span class="tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg></span>
+        <span class="tool-label">Paste</span>
       </button>
       <button class="tool-btn" id="tool-share">
-        <span class="tool-icon">⬆️</span><span class="tool-label">Share</span>
+        <span class="tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg></span>
+        <span class="tool-label">Share</span>
       </button>
       <button class="tool-btn" id="tool-download">
-        <span class="tool-icon">⬇️</span><span class="tool-label">Download .txt</span>
+        <span class="tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>
+        <span class="tool-label">Download .txt</span>
       </button>
       <button class="tool-btn" id="tool-import" data-readonly-hide>
-        <span class="tool-icon">📂</span><span class="tool-label">Import .txt</span>
+        <span class="tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span>
+        <span class="tool-label">Import .txt</span>
       </button>
       <button class="tool-btn" id="tool-templates" data-readonly-hide>
-        <span class="tool-icon">📝</span><span class="tool-label">Templates</span>
+        <span class="tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span>
+        <span class="tool-label">Templates</span>
       </button>
       <button class="tool-btn" id="tool-timestamp" data-readonly-hide>
-        <span class="tool-icon">🕐</span><span class="tool-label">Timestamp</span>
+        <span class="tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+        <span class="tool-label">Timestamp</span>
       </button>
       <button class="tool-btn" id="tool-select-all">
-        <span class="tool-icon">🔡</span><span class="tool-label">Select All</span>
+        <span class="tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h6v6H3z"/><path d="M15 3h6v6h-6z"/><path d="M3 15h6v6H3z"/><path d="M15 15h6v6h-6z"/></svg></span>
+        <span class="tool-label">Select All</span>
       </button>
       <button class="tool-btn" id="tool-monospace">
-        <span class="tool-icon">💻</span><span class="tool-label">Monospace</span>
+        <span class="tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg></span>
+        <span class="tool-label">Monospace</span>
       </button>
       <button class="tool-btn danger" id="tool-clear" data-readonly-hide>
-        <span class="tool-icon">🗑️</span><span class="tool-label">Clear Note</span>
+        <span class="tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+        <span class="tool-label">Clear Note</span>
       </button>
     </div>
   </div>
 </div>
 
-<!-- Files -->
+<!-- Files panel -->
 <div class="side-panel" id="files-panel">
   <div class="panel-header">
     <h3>Files</h3>
-    <button class="panel-close" aria-label="Close">✕</button>
+    <button class="panel-close" aria-label="Close">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
   </div>
   <div class="panel-body">
     <div class="files-upload-zone" id="files-upload-zone" data-readonly-hide>
-      <span class="upload-icon">📎</span>
+      <span class="upload-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      </span>
       Click or drag &amp; drop to upload
       <div class="upload-hint">Max 10 MB per file</div>
     </div>
@@ -249,20 +385,24 @@
     </div>
 
     <div id="files-list"></div>
-    <div class="files-empty hidden" id="files-empty">No files attached to this note.</div>
+    <div class="files-empty hidden" id="files-empty">
+      <div class="empty-state">
+        <div class="empty-state-title">No files yet</div>
+        <div class="empty-state-sub">Drop files here or click the upload area above.</div>
+      </div>
+    </div>
   </div>
 </div>
 
-<!-- Presence / Devices -->
+<!-- Presence / Devices panel -->
 <div class="side-panel" id="presence-panel">
   <div class="panel-header">
     <h3>Connected Devices</h3>
-    <button class="panel-close" aria-label="Close">✕</button>
+    <button class="panel-close" aria-label="Close">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
   </div>
   <div class="panel-body">
-    <div class="presence-header-row">
-      <h4>Who's here</h4>
-    </div>
     <div id="devices-list"></div>
     <p style="font-size:12px;color:var(--text-muted);margin-top:14px;">
       Tap your device name to rename it. Names are local to this device.
@@ -270,14 +410,23 @@
   </div>
 </div>
 
-<!-- Settings -->
+<!-- Settings panel -->
 <div class="side-panel" id="settings-panel">
   <div class="panel-header">
     <h3>Settings</h3>
-    <button class="panel-close" aria-label="Close">✕</button>
+    <button class="panel-close" aria-label="Close">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
   </div>
   <div class="panel-body">
 
+    <!-- Appearance -->
+    <div class="settings-section">
+      <div class="settings-section-title">Appearance</div>
+      <div class="theme-picker" id="theme-picker"></div>
+    </div>
+
+    <!-- Security -->
     <div class="settings-section">
       <div class="settings-section-title">Security</div>
 
@@ -306,6 +455,7 @@
       </div>
     </div>
 
+    <!-- Expiration -->
     <div class="settings-section">
       <div class="settings-section-title">Expiration</div>
 
@@ -326,6 +476,7 @@
       </div>
     </div>
 
+    <!-- About -->
     <div class="settings-section">
       <div class="settings-section-title">About</div>
       <div class="setting-row">
@@ -346,48 +497,57 @@
 <!-- Share modal -->
 <div class="modal-backdrop" id="share-modal">
   <div class="modal share-modal">
-    <h3>Share this note</h3>
+    <h3>Share this room</h3>
 
-    <!-- Editable link section -->
-    <div class="share-section">
-      <div class="share-section-title">Editable link</div>
+    <!-- Edit access card -->
+    <div class="share-card share-card--edit">
+      <div class="share-card-header">
+        <div class="share-card-title">Edit access</div>
+        <span class="share-badge share-badge--edit">Can edit</span>
+      </div>
       <p class="share-section-desc">Anyone with this link can view and edit in real time.</p>
       <div class="share-url-box">
         <span class="share-url-text" id="share-editable-text"></span>
         <button class="share-copy-btn" id="share-editable-copy">Copy</button>
       </div>
       <div class="share-qr" id="share-editable-qr"></div>
-      <button class="share-qr-download" id="share-editable-qr-download">Download QR</button>
+      <button class="share-qr-download" id="share-editable-qr-download">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download QR
+      </button>
     </div>
 
-    <!-- Read-only link section -->
-    <div class="share-section share-readonly">
-      <div class="share-section-title">Read-only link</div>
+    <!-- Read-only access card -->
+    <div class="share-card share-card--view">
+      <div class="share-card-header">
+        <div class="share-card-title">Read-only access</div>
+        <span class="share-badge share-badge--view">View only</span>
+      </div>
       <p class="share-section-desc">Anyone with this link can view but not edit.</p>
       <div class="share-url-box">
         <span class="share-url-text" id="share-readonly-text"></span>
         <button class="share-copy-btn" id="share-readonly-copy">Copy</button>
       </div>
       <div class="share-qr" id="share-readonly-qr"></div>
-      <button class="share-qr-download" id="share-readonly-qr-download">Download QR</button>
+      <button class="share-qr-download" id="share-readonly-qr-download">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download QR
+      </button>
     </div>
 
-    <!-- Warnings -->
+    <!-- Passcode / encryption notices -->
     <div class="share-passcode-notice hidden" id="share-passcode-notice">
-      🔒 This note has a passcode &mdash; share it separately.
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      This note has a passcode — share it separately.
     </div>
     <div class="share-encryption-notice hidden" id="share-encryption-notice">
-      🔐 Encryption is on. The passphrase is not included in this link &mdash; share it separately.
+      🔐 Encryption is on. The passphrase is not included in this link — share it separately.
     </div>
 
-    <!-- Send-to-phone helper -->
-    <div class="share-send-to-phone">
-      <div class="share-section-title">Send to another device</div>
-      <ol class="share-steps">
-        <li>Scan the QR code.</li>
-        <li>Open this room.</li>
-        <li>Text will sync live.</li>
-      </ol>
+    <!-- Security disclaimer -->
+    <div class="share-security-notice">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0;margin-top:1px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <span><strong>Convenience only.</strong> Read-only mode and room lock are not backend security boundaries. Do not share passwords, PII, or sensitive data via SyncPad.</span>
     </div>
 
     <button class="share-native-btn hidden" id="share-native-btn">Share via&hellip;</button>
@@ -402,14 +562,157 @@
 <div class="modal-backdrop" id="templates-modal">
   <div class="modal templates-modal">
     <div class="templates-header">
-      <h3>Insert template</h3>
-      <button class="templates-close" aria-label="Close">✕</button>
+      <h3>Templates</h3>
+      <button class="templates-close" aria-label="Close">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <!-- Tab bar -->
+    <div class="templates-tabs" role="tablist">
+      <button class="tmpl-tab active" data-tab="insert" role="tab" aria-selected="true">Insert</button>
+      <button class="tmpl-tab" data-tab="custom" role="tab" aria-selected="false">My Templates</button>
     </div>
     <div class="templates-body">
       <div id="templates-list" class="templates-list"></div>
     </div>
     <div class="modal-actions">
+      <button class="modal-btn-secondary" id="btn-save-as-template" data-readonly-hide>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        Save current note as template
+      </button>
       <button class="modal-btn-cancel templates-close">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Search panel -->
+<div class="side-panel" id="search-panel">
+  <div class="panel-header">
+    <h3>Find in Note</h3>
+    <button class="panel-close" aria-label="Close">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+  <div class="panel-body">
+    <div class="search-bar">
+      <input id="search-input" class="search-input" type="search" placeholder="Search…" autocomplete="off" spellcheck="false" aria-label="Search text" />
+      <span class="search-count" id="search-count" aria-live="polite"></span>
+    </div>
+    <div class="search-actions">
+      <button class="search-nav-btn" id="search-prev" title="Previous match" aria-label="Previous match">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        Prev
+      </button>
+      <button class="search-nav-btn" id="search-next" title="Next match" aria-label="Next match">
+        Next
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
+    </div>
+    <p class="search-hint">Case-insensitive. Works in the raw note text.</p>
+  </div>
+</div>
+
+<!-- Admin / Room Tools panel -->
+<div class="side-panel side-panel--wide" id="admin-panel">
+  <div class="panel-header">
+    <h3>Admin / Room Tools</h3>
+    <button class="panel-close" aria-label="Close">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+  <div class="panel-body" id="admin-panel-body">
+    <!-- Populated dynamically by dashboard.js -->
+  </div>
+</div>
+
+<!-- File preview modal -->
+<div class="file-preview-backdrop" id="file-preview-modal" role="dialog" aria-modal="true" aria-label="File preview">
+  <div class="file-preview-dialog">
+    <div class="file-preview-header">
+      <div class="file-preview-header-info">
+        <span id="file-preview-title" class="file-preview-title"></span>
+        <span id="file-preview-meta"  class="file-preview-meta"></span>
+      </div>
+      <div class="file-preview-header-btns">
+        <button id="file-preview-download" class="file-preview-dl-btn" title="Download">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download
+        </button>
+        <button id="file-preview-close" class="file-preview-close-btn" aria-label="Close preview">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+    </div>
+    <div id="file-preview-body" class="file-preview-body"></div>
+  </div>
+</div>
+
+<!-- Export modal -->
+<div class="modal-backdrop" id="export-modal">
+  <div class="modal export-modal" role="dialog" aria-modal="true" aria-labelledby="export-modal-title">
+    <h3 id="export-modal-title">Export Note</h3>
+    <div class="export-options">
+      <button class="export-btn" id="export-txt">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        Download .txt
+        <span class="export-desc">Plain text file</span>
+      </button>
+      <button class="export-btn" id="export-md">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/></svg>
+        Download .md
+        <span class="export-desc">Markdown file</span>
+      </button>
+      <button class="export-btn" id="export-html">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+        Download .html
+        <span class="export-desc">Rendered HTML page</span>
+      </button>
+      <div class="export-separator"></div>
+      <button class="export-btn" id="export-copy-text">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        Copy as plain text
+        <span class="export-desc">Copy to clipboard</span>
+      </button>
+      <button class="export-btn" id="export-copy-md">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        Copy as Markdown
+        <span class="export-desc">Copy raw markdown to clipboard</span>
+      </button>
+    </div>
+    <div class="modal-actions">
+      <button class="modal-btn-cancel" id="export-modal-close">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Keyboard shortcuts modal -->
+<div class="modal-backdrop" id="shortcuts-modal">
+  <div class="modal shortcuts-modal" role="dialog" aria-modal="true" aria-labelledby="shortcuts-modal-title">
+    <h3 id="shortcuts-modal-title">Keyboard Shortcuts</h3>
+    <div class="shortcuts-list">
+      <div class="shortcuts-group">
+        <div class="shortcuts-group-title">View</div>
+        <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>P</kbd> <span>Toggle Preview</span></div>
+        <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>S</kbd> <span>Split view</span></div>
+        <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>M</kbd> <span>Toggle Monospace</span></div>
+        <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>F</kbd> <span>Find in note</span></div>
+      </div>
+      <div class="shortcuts-group">
+        <div class="shortcuts-group-title">Edit</div>
+        <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>S</kbd> <span>Force save</span></div>
+        <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>B</kbd> <span>Bold selection</span></div>
+        <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>I</kbd> <span>Italic selection</span></div>
+        <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>K</kbd> <span>Insert link</span></div>
+      </div>
+      <div class="shortcuts-group">
+        <div class="shortcuts-group-title">Navigation</div>
+        <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>/</kbd> <span>This modal</span></div>
+        <div class="shortcut-row"><kbd>Esc</kbd> <span>Close panel / modal</span></div>
+      </div>
+      <p class="shortcuts-note">Mac users: replace <kbd>Ctrl</kbd> with <kbd>⌘</kbd>.</p>
+    </div>
+    <div class="modal-actions">
+      <button class="modal-btn-cancel" id="shortcuts-modal-close">Close</button>
     </div>
   </div>
 </div>
@@ -429,7 +732,7 @@
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════
-     MAIN MODULE — single entry point, no inline modules
+     MAIN MODULE
 ═══════════════════════════════════════════════════════════════ -->
 <script type="module" src="/SyncPad/src/app.js"></script>
 

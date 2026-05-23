@@ -4,14 +4,16 @@ import {
   countWords, countChars, formatFileSize, fileEmoji, formatTimestamp,
   escapeHtml,
 } from './utils.js';
+import { getIcon } from './icons.js';
 
 // ── Screen management ─────────────────────────────────────────────────────────
 
 export function showScreen(name) {
-  document.getElementById('loading-screen')?.classList.toggle('hidden', name !== 'loading');
-  document.getElementById('passcode-screen')?.classList.toggle('hidden', name !== 'passcode');
+  document.getElementById('landing-screen')?.classList.toggle('hidden',    name !== 'landing');
+  document.getElementById('loading-screen')?.classList.toggle('hidden',    name !== 'loading');
+  document.getElementById('passcode-screen')?.classList.toggle('hidden',   name !== 'passcode');
   document.getElementById('encryption-screen')?.classList.toggle('hidden', name !== 'encryption');
-  document.getElementById('app-screen')?.classList.toggle('hidden', name !== 'app');
+  document.getElementById('app-screen')?.classList.toggle('hidden',        name !== 'app');
 }
 
 export function setLoadingMessage(msg) {
@@ -55,10 +57,34 @@ export function showToast(message, type = '', duration = 2800) {
 
 // ── Remote update notice (4 actions: Apply / Keep mine / Copy remote / Dismiss) ─
 
-export function showRemoteNotice({ onApply, onKeep, onCopy, onDismiss } = {}) {
+export function showRemoteNotice({ onApply, onKeep, onCopy, onDismiss, localText, remoteText, remoteTs } = {}) {
   const el = document.getElementById('remote-notice');
   if (!el) return;
   el.classList.remove('hidden');
+
+  // Populate meta line (time)
+  const metaEl = document.getElementById('remote-notice-meta');
+  if (metaEl) {
+    if (remoteTs) {
+      const ago = _relativeTime(remoteTs);
+      metaEl.textContent = ago ? `· ${ago}` : '';
+    } else {
+      metaEl.textContent = '';
+    }
+  }
+
+  // Populate word counts
+  const countsEl = document.getElementById('remote-notice-counts');
+  if (countsEl) {
+    const localW  = localText  != null ? countWords(localText)  : null;
+    const remoteW = remoteText != null ? countWords(remoteText) : null;
+    if (localW != null && remoteW != null) {
+      countsEl.textContent = `Your version: ${localW} words  ·  Incoming: ${remoteW} words`;
+      countsEl.classList.remove('hidden');
+    } else {
+      countsEl.classList.add('hidden');
+    }
+  }
 
   const wire = (id, handler) => {
     const btn = el.querySelector(`#${id}`);
@@ -71,6 +97,15 @@ export function showRemoteNotice({ onApply, onKeep, onCopy, onDismiss } = {}) {
   wire('remote-keep-btn',    onKeep);
   wire('remote-copy-btn',    onCopy);
   wire('remote-dismiss-btn', onDismiss);
+}
+
+function _relativeTime(ts) {
+  if (!ts) return '';
+  const diffMs = Date.now() - ts;
+  if (diffMs < 0) return 'just now';
+  if (diffMs < 60_000) return 'just now';
+  if (diffMs < 3_600_000) return `${Math.floor(diffMs / 60_000)}m ago`;
+  return `${Math.floor(diffMs / 3_600_000)}h ago`;
 }
 
 export function hideRemoteNotice() {
@@ -141,11 +176,13 @@ export function setRoomName(name) {
 // ── Word / char count ─────────────────────────────────────────────────────────
 
 export function updateWordCount(text) {
-  const el = document.getElementById('word-count');
-  if (!el) return;
   const w = countWords(text);
   const c = countChars(text);
-  el.textContent = `${w} word${w !== 1 ? 's' : ''} · ${c} char${c !== 1 ? 's' : ''}`;
+  const label = `${w} word${w !== 1 ? 's' : ''} · ${c} char${c !== 1 ? 's' : ''}`;
+  const el = document.getElementById('word-count');
+  if (el) el.textContent = label;
+  const tb = document.getElementById('toolbar-word-count');
+  if (tb) tb.textContent = label;
 }
 
 // ── Device count ──────────────────────────────────────────────────────────────
@@ -164,18 +201,39 @@ export function renderDevicesList(devices, myDeviceId, onNameChange) {
   devices.forEach(device => {
     const isMe = device.device_id === myDeviceId;
     const item = document.createElement('div');
-    item.className = `device-item${isMe ? ' me' : ''}`;
-    const roBadge = device.read_only ? ' <span class="device-role">viewer</span>' : '';
+    item.className = `device-item${isMe ? ' me' : ''}${device.read_only ? ' viewer' : ''}${device.typing ? ' typing' : ''}`;
+    item.dataset.deviceId = device.device_id || '';
+
+    const roBadge = device.read_only
+      ? '<span class="device-role">viewer</span>'
+      : '<span class="device-role">editor</span>';
+
+    // Activity sub-text: typing beats cursor line
+    let activityHtml = '';
+    if (!isMe) {
+      if (device.typing) {
+        activityHtml = '<span class="device-activity typing">Typing…</span>';
+      } else if (device.cursor_line != null) {
+        activityHtml = `<span class="device-activity">Near line ${device.cursor_line}</span>`;
+      } else if (device.read_only) {
+        activityHtml = '<span class="device-activity muted">Viewing</span>';
+      }
+    }
+
     item.innerHTML = `
       <div class="device-dot"></div>
-      ${isMe
-        ? `<input class="device-name-edit" value="${escapeHtml(device.device_name)}" maxlength="32" title="Edit your device name" />${roBadge}`
-        : `<div class="device-name-text">${escapeHtml(device.device_name)}${device.typing ? ' <span class="device-typing">typing…</span>' : ''}${roBadge}</div>`
-      }
+      <div class="device-info">
+        ${isMe
+          ? `<input class="device-name device-name-edit" value="${escapeHtml(device.device_name)}" maxlength="32" title="Tap to rename your device" aria-label="Your device name" />`
+          : `<div class="device-name device-name-text">${escapeHtml(device.device_name)}</div>`
+        }
+        <div class="device-meta">${roBadge}${activityHtml}</div>
+      </div>
       <div class="${isMe ? 'device-you' : ''}">${isMe ? 'You' : ''}</div>`;
+
     if (isMe) {
       const input = item.querySelector('.device-name-edit');
-      input.addEventListener('change', () => onNameChange(input.value));
+      input?.addEventListener('change', () => onNameChange(input.value));
     }
     list.appendChild(item);
   });
@@ -190,7 +248,8 @@ export function renderFilesList(files, onDownload, onDelete, opts = {}) {
   list.innerHTML = '';
   if (!files?.length) { empty?.classList.remove('hidden'); return; }
   empty?.classList.add('hidden');
-  const canDelete = opts.canDelete !== false;
+  const canDelete  = opts.canDelete  !== false;
+  const onPreview  = opts.onPreview  || null;
   files.forEach(file => {
     const item = document.createElement('div');
     item.className = 'file-item';
@@ -201,9 +260,11 @@ export function renderFilesList(files, onDownload, onDelete, opts = {}) {
         <div class="file-meta">${formatFileSize(file.file_size)} · ${formatTimestamp(file.uploaded_at)}</div>
       </div>
       <div class="file-actions">
-        <button class="file-action-btn download" title="Download">⬇</button>
-        ${canDelete ? '<button class="file-action-btn delete"   title="Delete">🗑</button>' : ''}
+        ${onPreview ? `<button class="file-action-btn preview" title="Preview">${getIcon('eye', 15)}</button>` : ''}
+        <button class="file-action-btn download" title="Download">${getIcon('download', 15)}</button>
+        ${canDelete ? `<button class="file-action-btn delete" title="Delete">${getIcon('trash', 15)}</button>` : ''}
       </div>`;
+    if (onPreview) item.querySelector('.preview').addEventListener('click', () => onPreview(file));
     item.querySelector('.download').addEventListener('click', () => onDownload(file));
     if (canDelete) {
       item.querySelector('.delete').addEventListener('click', () => onDelete(file));
@@ -218,7 +279,7 @@ export function setUploadingState(uploading) {
 
 // ── Panels ────────────────────────────────────────────────────────────────────
 
-const PANEL_IDS = ['tools-panel', 'files-panel', 'presence-panel', 'settings-panel'];
+const PANEL_IDS = ['tools-panel', 'files-panel', 'presence-panel', 'settings-panel', 'search-panel', 'admin-panel'];
 
 export function openPanel(id) {
   closeAllPanels();
@@ -242,6 +303,8 @@ export function openModal(id)  { document.getElementById(id)?.classList.add('vis
 export function closeModal(id) { document.getElementById(id)?.classList.remove('visible'); }
 export function closeAllModals() {
   document.querySelectorAll('.modal-backdrop').forEach(m => m.classList.remove('visible'));
+  // File preview uses .open (different backdrop class); close it here too
+  document.getElementById('file-preview-modal')?.classList.remove('open');
 }
 
 // ── Share modal ───────────────────────────────────────────────────────────────
@@ -271,8 +334,8 @@ export function populateShareModal({ editableUrl, readOnlyUrl, hasPasscode, hasE
   }
 
   // QR-download buttons
-  _wireQrDownload('share-editable-qr-download', 'share-editable-qr');
-  _wireQrDownload('share-readonly-qr-download', 'share-readonly-qr');
+  _wireQrDownload('share-editable-qr-download', 'share-editable-qr', 'syncpad-editable-qr.png');
+  _wireQrDownload('share-readonly-qr-download', 'share-readonly-qr', 'syncpad-readonly-qr.png');
 }
 
 function _wireShareRow(textId, btnId, url) {
@@ -283,9 +346,12 @@ function _wireShareRow(textId, btnId, url) {
   btn.onclick = async () => {
     try {
       await navigator.clipboard.writeText(url || '');
+      showToast('Link copied to clipboard.', 'success');
       btn.textContent = 'Copied!';
-      setTimeout(() => { btn.textContent = 'Copy'; }, 1800);
-    } catch { btn.textContent = 'Copy'; }
+      setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+    } catch {
+      btn.textContent = 'Copy';
+    }
   };
 }
 
@@ -305,7 +371,7 @@ function _renderQr(containerId, url) {
   } catch {}
 }
 
-function _wireQrDownload(btnId, qrContainerId) {
+function _wireQrDownload(btnId, qrContainerId, filename) {
   const btn = document.getElementById(btnId);
   const container = document.getElementById(qrContainerId);
   if (!btn || !container) return;
@@ -316,7 +382,7 @@ function _wireQrDownload(btnId, qrContainerId) {
     if (!src) { showToast('QR code is not ready yet.', 'warning'); return; }
     const a = document.createElement('a');
     a.href = src;
-    a.download = 'syncpad-qr.png';
+    a.download = filename || 'syncpad-qr.png';
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
   };
 }
@@ -516,16 +582,23 @@ export function setEncryptionBadge(visible) {
 // ── File upload zone ──────────────────────────────────────────────────────────
 
 export function setFileHandlers(onFileSelected) {
-  const input = document.getElementById('file-input');
-  const zone  = document.getElementById('files-upload-zone');
+  const input       = document.getElementById('file-input');
+  const zone        = document.getElementById('files-upload-zone');
+  const panel       = document.getElementById('files-panel');
+  const editorArea  = document.querySelector('.editor-area');
+
   if (input) {
     input.onchange = () => {
       if (input.files[0]) onFileSelected(input.files[0]);
       input.value = '';
     };
   }
+
+  // Click on the upload zone opens the file picker
+  if (zone) zone.onclick = () => input?.click();
+
+  // ── Per-zone drag style (upload zone) ─────────────────────────────────────
   if (zone) {
-    zone.onclick     = () => input?.click();
     zone.ondragover  = (e) => { e.preventDefault(); zone.classList.add('drag-over'); };
     zone.ondragleave = ()  => zone.classList.remove('drag-over');
     zone.ondrop      = (e) => {
@@ -534,32 +607,129 @@ export function setFileHandlers(onFileSelected) {
       if (f) onFileSelected(f);
     };
   }
+
+  // ── Panel-wide drop (full files panel body) ────────────────────────────────
+  // Shows an overlay across the entire panel so users can drop anywhere.
+  if (panel) {
+    let _dragDepth = 0;  // track enter/leave depth for nested elements
+    const overlay  = _ensureDropOverlay(panel, 'Drop file here to upload');
+
+    panel.addEventListener('dragenter', (e) => {
+      if (!e.dataTransfer?.types?.includes('Files')) return;
+      _dragDepth++;
+      overlay?.classList.add('visible');
+    });
+    panel.addEventListener('dragleave', () => {
+      _dragDepth = Math.max(0, _dragDepth - 1);
+      if (_dragDepth === 0) overlay?.classList.remove('visible');
+    });
+    panel.addEventListener('dragover', (e) => {
+      if (!e.dataTransfer?.types?.includes('Files')) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    });
+    panel.addEventListener('drop', (e) => {
+      e.preventDefault();
+      _dragDepth = 0;
+      overlay?.classList.remove('visible');
+      const f = e.dataTransfer?.files?.[0];
+      if (f) onFileSelected(f);
+    });
+  }
+
+  // ── Editor-area drop ───────────────────────────────────────────────────────
+  // Allows dropping a file onto the note editor area to trigger an upload.
+  if (editorArea) {
+    let _edDragDepth = 0;
+    const edOverlay = _ensureDropOverlay(editorArea, 'Drop file to upload to this room');
+
+    editorArea.addEventListener('dragenter', (e) => {
+      if (!e.dataTransfer?.types?.includes('Files')) return;
+      _edDragDepth++;
+      edOverlay?.classList.add('visible');
+    });
+    editorArea.addEventListener('dragleave', () => {
+      _edDragDepth = Math.max(0, _edDragDepth - 1);
+      if (_edDragDepth === 0) edOverlay?.classList.remove('visible');
+    });
+    editorArea.addEventListener('dragover', (e) => {
+      if (!e.dataTransfer?.types?.includes('Files')) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    });
+    editorArea.addEventListener('drop', (e) => {
+      if (!e.dataTransfer?.types?.includes('Files')) return;
+      e.preventDefault();
+      _edDragDepth = 0;
+      edOverlay?.classList.remove('visible');
+      const f = e.dataTransfer?.files?.[0];
+      if (f) onFileSelected(f);
+    });
+  }
 }
 
-// ── Markdown preview ──────────────────────────────────────────────────────────
+/** Create (or reuse) a drop overlay element inside a container. */
+function _ensureDropOverlay(container, label) {
+  let overlay = container.querySelector('.drop-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.className = 'drop-overlay';
+    overlay.innerHTML = `
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="17 8 12 3 7 8"/>
+        <line x1="12" y1="3" x2="12" y2="15"/>
+      </svg>
+      <span>${label}</span>`;
+    // Make the container a positioning parent if it isn't already
+    const pos = getComputedStyle(container).position;
+    if (pos === 'static') container.style.position = 'relative';
+    container.appendChild(overlay);
+  }
+  return overlay;
+}
 
-export function setPreviewMode(showPreview, renderFn) {
+// ── Markdown mode (Write / Preview / Split) ───────────────────────────────────
+
+/**
+ * Switch the editor to one of three modes.
+ * @param {'write'|'preview'|'split'} mode
+ * @param {Function|null} [renderFn]  – called to produce preview HTML
+ */
+export function setMarkdownMode(mode, renderFn) {
   const editor  = document.getElementById('note-editor');
   const preview = document.getElementById('note-preview');
-  const btn     = document.getElementById('btn-preview');
+  const wrap    = document.querySelector('.editor-wrap');
   if (!editor || !preview) return;
 
-  if (showPreview) {
-    preview.innerHTML = renderFn ? renderFn() : '';
-    preview.classList.remove('hidden');
-    editor.classList.add('hidden');
-    btn?.classList.add('active');
-    btn?.setAttribute('aria-pressed', 'true');
-    if (btn) btn.textContent = '✎';
-    if (btn) btn.title = 'Switch to write mode';
-  } else {
-    preview.classList.add('hidden');
+  // Update segmented control
+  document.querySelectorAll('.md-seg-btn').forEach(btn => {
+    const active = btn.dataset.mode === mode;
+    btn.classList.toggle('active', active);
+    btn.setAttribute('aria-pressed', String(active));
+  });
+
+  if (mode === 'write') {
     editor.classList.remove('hidden');
-    btn?.classList.remove('active');
-    btn?.setAttribute('aria-pressed', 'false');
-    if (btn) btn.textContent = '👁';
-    if (btn) btn.title = 'Preview Markdown';
+    preview.classList.add('hidden');
+    wrap?.classList.remove('split-mode');
+  } else if (mode === 'preview') {
+    editor.classList.add('hidden');
+    preview.classList.remove('hidden');
+    wrap?.classList.remove('split-mode');
+    if (renderFn) preview.innerHTML = renderFn();
+  } else if (mode === 'split') {
+    editor.classList.remove('hidden');
+    preview.classList.remove('hidden');
+    wrap?.classList.add('split-mode');
+    if (renderFn) preview.innerHTML = renderFn();
   }
+}
+
+/** Backward-compatible shim — delegates to setMarkdownMode. */
+export function setPreviewMode(showPreview, renderFn) {
+  setMarkdownMode(showPreview ? 'preview' : 'write', renderFn);
 }
 
 export function refreshPreview(renderFn) {
@@ -568,37 +738,180 @@ export function refreshPreview(renderFn) {
   preview.innerHTML = renderFn ? renderFn() : '';
 }
 
+// ── Theme picker ──────────────────────────────────────────────────────────────
+
+/**
+ * Render the theme picker in #theme-picker.
+ * @param {Array<{id,label,swatch}>} themes
+ * @param {string}   currentId
+ * @param {Function} onSelect  – called with theme id
+ */
+export function renderThemePicker(themes, currentId, onSelect) {
+  const container = document.getElementById('theme-picker');
+  if (!container) return;
+  container.innerHTML = '';
+  themes.forEach(t => {
+    const btn = document.createElement('button');
+    btn.className = `theme-option${t.id === currentId ? ' active' : ''}`;
+    btn.dataset.themeId = t.id;
+    btn.title = t.label;
+    btn.innerHTML = `
+      <span class="theme-swatch" style="background:${escapeHtml(t.swatch)}"></span>
+      <span class="theme-label">${escapeHtml(t.label)}</span>
+      <span class="theme-check" style="opacity:${t.id === currentId ? 1 : 0}">
+        ${getIcon('check', 13)}
+      </span>`;
+    btn.addEventListener('click', () => {
+      onSelect(t.id);
+      renderThemePicker(themes, t.id, onSelect);
+    });
+    container.appendChild(btn);
+  });
+}
+
 // ── Templates modal ──────────────────────────────────────────────────────────
 
-export function openTemplatesModal(templates, onChoose) {
+/**
+ * Open the templates modal.
+ * @param {object} builtins   – TEMPLATES constant
+ * @param {object} customs    – result of getCustomTemplates()
+ * @param {Function} onChoose – (key, mode) => void
+ * @param {Function} onDelete – (key) => void  – called when user deletes a custom template
+ * @param {Function} onRename – (key, newLabel) => void
+ */
+export function openTemplatesModal(builtins, customs, onChoose, onDelete, onRename) {
   const modal = document.getElementById('templates-modal');
   if (!modal) return;
 
-  const body = modal.querySelector('.templates-body');
-  if (!body) return;
+  let _activeTab = 'insert';
 
-  // Rebuild the body fresh every open. This keeps the inline choice flow
-  // simple (it can replace the body without worrying about restoring it).
-  body.innerHTML = '<div id="templates-list" class="templates-list"></div>';
-  const list = body.querySelector('#templates-list');
-  Object.entries(templates).forEach(([key, t]) => {
-    const btn = document.createElement('button');
-    btn.className = 'template-btn';
-    btn.dataset.key = key;
-    btn.innerHTML = `<span class="template-label">${escapeHtml(t.label)}</span>`;
-    btn.addEventListener('click', () => _confirmTemplateInsert(key, onChoose));
-    list.appendChild(btn);
+  const _render = () => {
+    const body = modal.querySelector('.templates-body');
+    if (!body) return;
+    body.innerHTML = '';
+
+    if (_activeTab === 'insert') {
+      _renderInsertTab(body, builtins, customs, onChoose);
+    } else {
+      _renderCustomTab(body, customs, onDelete, onRename, _render);
+    }
+  };
+
+  // Tab wiring
+  modal.querySelectorAll('.tmpl-tab').forEach(tab => {
+    tab.onclick = () => {
+      modal.querySelectorAll('.tmpl-tab').forEach(t => {
+        t.classList.toggle('active', t === tab);
+        t.setAttribute('aria-selected', t === tab ? 'true' : 'false');
+      });
+      _activeTab = tab.dataset.tab;
+      _render();
+    };
   });
 
-  // Close button (modal-close class lives in the modal header)
-  modal.querySelectorAll('.templates-close').forEach((btn) => {
+  // Close buttons
+  modal.querySelectorAll('.templates-close').forEach(btn => {
     btn.onclick = () => closeModal('templates-modal');
   });
 
+  _render();
   openModal('templates-modal');
 }
 
-function _confirmTemplateInsert(key, onChoose) {
+function _renderInsertTab(body, builtins, customs, onChoose) {
+  const list = document.createElement('div');
+  list.className = 'templates-list';
+
+  const hasCustom = Object.keys(customs).length > 0;
+  if (hasCustom) {
+    const header = document.createElement('div');
+    header.className = 'templates-group-label';
+    header.textContent = 'My Templates';
+    list.appendChild(header);
+    Object.entries(customs).forEach(([key, t]) => {
+      list.appendChild(_makeTemplateBtn(key, t, onChoose));
+    });
+    const sep = document.createElement('div');
+    sep.className = 'templates-group-label';
+    sep.textContent = 'Built-in';
+    list.appendChild(sep);
+  }
+
+  Object.entries(builtins).forEach(([key, t]) => {
+    list.appendChild(_makeTemplateBtn(key, t, onChoose));
+  });
+
+  body.appendChild(list);
+}
+
+function _renderCustomTab(body, customs, onDelete, onRename, rerender) {
+  const keys = Object.keys(customs);
+
+  if (!keys.length) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-state';
+    empty.innerHTML = `
+      <div class="empty-state-title">No custom templates yet</div>
+      <div class="empty-state-sub">Use "Save current note as template" below to create one.</div>`;
+    body.appendChild(empty);
+    return;
+  }
+
+  const list = document.createElement('div');
+  list.className = 'templates-list custom-templates-list';
+  keys.forEach(key => {
+    const t    = customs[key];
+    const item = document.createElement('div');
+    item.className = 'custom-template-item';
+
+    const label = document.createElement('span');
+    label.className = 'custom-template-label';
+    label.textContent = t.label;
+
+    const actions = document.createElement('div');
+    actions.className = 'custom-template-actions';
+
+    const renameBtn = document.createElement('button');
+    renameBtn.className = 'custom-tmpl-btn';
+    renameBtn.title = 'Rename';
+    renameBtn.setAttribute('aria-label', 'Rename template');
+    renameBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
+    renameBtn.addEventListener('click', () => {
+      const newName = prompt('Rename template:', t.label);
+      if (newName?.trim()) { onRename(key, newName.trim()); rerender(); }
+    });
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'custom-tmpl-btn danger';
+    delBtn.title = 'Delete';
+    delBtn.setAttribute('aria-label', 'Delete template');
+    delBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`;
+    delBtn.addEventListener('click', () => {
+      if (!confirm(`Delete template "${t.label}"?`)) return;
+      onDelete(key);
+      rerender();
+    });
+
+    actions.appendChild(renameBtn);
+    actions.appendChild(delBtn);
+    item.appendChild(label);
+    item.appendChild(actions);
+    list.appendChild(item);
+  });
+
+  body.appendChild(list);
+}
+
+function _makeTemplateBtn(key, t, onChoose) {
+  const btn = document.createElement('button');
+  btn.className = 'template-btn';
+  btn.dataset.key = key;
+  btn.innerHTML = `<span class="template-label">${escapeHtml(t.label)}</span>`;
+  btn.addEventListener('click', () => _confirmTemplateInsert(key, t.label, onChoose));
+  return btn;
+}
+
+function _confirmTemplateInsert(key, label, onChoose) {
   const editor = document.getElementById('note-editor');
   const hasContent = !!editor && editor.value.trim().length > 0;
   if (!hasContent) {
@@ -606,7 +919,7 @@ function _confirmTemplateInsert(key, onChoose) {
     onChoose(key, 'replace');
     return;
   }
-  _showInlineChoice('This note already has content. What should happen?', [
+  _showInlineChoice(`Apply "${label}"?`, [
     { label: 'Replace note', value: 'replace', kind: 'danger' },
     { label: 'Append',       value: 'append',  kind: 'primary' },
     { label: 'Cancel',       value: null,      kind: 'cancel' },

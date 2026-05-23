@@ -19,14 +19,14 @@ import {
 
 import {
   initPresence, destroyPresence,
-  setTyping, updatePresenceDeviceName,
+  setTyping, updatePresenceDeviceName, setCursorLine,
 } from './presence.js';
 
 import {
   initSync, destroySync,
   onLocalInput, onEditorBlur, flushSave, cancelPendingSave,
   handleRemoteTyping, handleRemoteDatabaseChange,
-  setContentNoSave, applyPendingRemote, dismissPendingRemote, getPendingRemote,
+  setContentNoSave, applyPendingRemote, dismissPendingRemote, getPendingRemote, getPendingRemoteTs,
   setEncryption,
 } from './sync.js';
 
@@ -50,9 +50,16 @@ import {
 } from './permissions.js';
 
 import { renderMarkdown, toggleChecklistItem } from './markdown.js';
-import { TEMPLATES, getTemplate }              from './templates.js';
+import {
+  TEMPLATES, getTemplate, getCustomTemplates,
+  saveCustomTemplate, renameCustomTemplate, deleteCustomTemplate,
+} from './templates.js';
+import { loadSavedTheme, applyTheme, THEMES }  from './theme.js';
+import { initShortcuts, destroyShortcuts }     from './shortcuts.js';
 
 import * as UI from './ui.js';
+import { openFilePreview } from './file-preview.js';
+import { openDashboard }   from './dashboard.js';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
@@ -67,14 +74,24 @@ let _monospace     = false;
 let _eventsWired   = false;  // v1: guard against double-wiring
 let _consumingViewOnce = false; // v1: short-circuit own view-once clear echo
 let _isReadOnly    = false;  // v1: ?mode=read
-let _showPreview   = false;  // v1: markdown preview toggle
+let _markdownMode  = 'write'; // 'write' | 'preview' | 'split'
+let _showPreview   = false;  // derived: _markdownMode !== 'write'
 let _previewObserverWired = false;
+let _currentFiles  = [];     // v2: live file list for admin dashboard
+
+// ── Search state ──────────────────────────────────────────────────────────────
+let _searchMatches = []; // [{start,end}]
+let _searchIndex   = -1;
+let _searchTerm    = '';
 
 const BASE = '/SyncPad';
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 
 async function boot() {
+  // Apply saved theme immediately to avoid flash
+  loadSavedTheme();
+
   UI.showScreen('loading');
 
   // Load locally-stored monospace preference
@@ -92,7 +109,15 @@ async function boot() {
   _isReadOnly = getUrlMode() === 'read';
 
   const pathRoom = _parseRoomFromPath();
-  const roomId   = pathRoom ? sanitizeRoomId(pathRoom) : generateRoomId();
+
+  // If no room ID in the URL and no redirect, show the landing screen
+  if (!pathRoom && !redirectRoom) {
+    UI.showScreen('landing');
+    wireLandingEvents();
+    return;
+  }
+
+  const roomId = pathRoom ? sanitizeRoomId(pathRoom) : generateRoomId();
   if (!pathRoom) {
     const qs = location.search || '';
     history.replaceState(null, '', `${BASE}/${roomId}${qs}`);
@@ -104,6 +129,44 @@ async function boot() {
 function _parseRoomFromPath() {
   const path = location.pathname.replace(BASE, '').replace(/^\/+|\/+$/g, '');
   return path || null;
+}
+
+// ── Landing screen ────────────────────────────────────────────────────────────
+
+function wireLandingEvents() {
+  const createBtn = document.getElementById('landing-create-btn');
+  const joinInput = document.getElementById('landing-join-input');
+  const joinBtn   = document.getElementById('landing-join-btn');
+
+  const createRoom = () => {
+    const roomId = generateRoomId();
+    const qs     = location.search || '';
+    history.pushState(null, '', `${BASE}/${roomId}${qs}`);
+    UI.showScreen('loading');
+    joinRoom(roomId);
+  };
+
+  const joinRoom_ = () => {
+    const raw = joinInput?.value?.trim();
+    if (!raw) return;
+    // Accept full URL or bare ID
+    let id;
+    try {
+      const url = new URL(raw);
+      id = url.pathname.replace(BASE, '').replace(/^\/+|\/+$/g, '');
+    } catch {
+      id = raw;
+    }
+    id = sanitizeRoomId(id);
+    if (!id) { joinInput.focus(); return; }
+    history.pushState(null, '', `${BASE}/${id}`);
+    UI.showScreen('loading');
+    joinRoom(id);
+  };
+
+  createBtn?.addEventListener('click', createRoom);
+  joinBtn?.addEventListener('click', joinRoom_);
+  joinInput?.addEventListener('keydown', (e) => { if (e.key === 'Enter') joinRoom_(); });
 }
 
 async function _emptyContentForCurrentEncryption() {
@@ -254,6 +317,7 @@ async function startApp() {
   UI.setMonospace(_monospace);
   UI.setReadOnlyMode(_isReadOnly);
   UI.setLockedMode(!!_room.editing_locked);
+  UI.renderThemePicker(THEMES, getSavedTheme_(), (id) => applyTheme(id));
 
   initSync({
     roomId:           _roomId,
@@ -269,7 +333,10 @@ async function startApp() {
         try { await copyToClipboard(remoteText ?? getPendingRemote() ?? ''); UI.showToast('Remote content copied.', 'success'); }
         catch { UI.showToast('Could not copy.', 'error'); }
       },
-      onDismiss: () => { UI.hideRemoteNotice(); }, // keep pending available to apply later
+      onDismiss: () => { UI.hideRemoteNotice(); },
+      localText:  UI.getEditorValue(),
+      remoteText: remoteText,
+      remoteTs:   getPendingRemoteTs(),
     }),
     onDismissPending: UI.hideRemoteNotice,
   });
@@ -576,12 +643,31 @@ async function refreshFiles() {
           ? err.message
           : 'Could not delete file.';
         UI.showToast(msg, 'error', 5000);
-        // Refresh anyway — the file may now be gone from storage.
         await refreshFiles();
       }
     },
-    { canDelete: canDeleteFiles() }
+    {
+      canDelete: canDeleteFiles(),
+      onPreview: async (file) => {
+        try {
+          await openFilePreview(
+            file,
+            getDownloadUrl,
+            async (f) => {
+              try {
+                const url = await getDownloadUrl(f.file_path);
+                const a   = document.createElement('a');
+                a.href = url; a.download = f.filename;
+                document.body.appendChild(a); a.click(); document.body.removeChild(a);
+              } catch { UI.showToast('Could not download file.', 'error'); }
+            }
+          );
+        } catch { UI.showToast('Could not open preview.', 'error'); }
+      },
+    }
   );
+  // Keep a live reference for the admin dashboard
+  _currentFiles = files;
 }
 
 // ── Event wiring (guarded against double-wire) ────────────────────────────────
@@ -600,6 +686,18 @@ function wireEvents() {
   });
   editor?.addEventListener('blur', () => onEditorBlur());
 
+  // Broadcast cursor line on selection/click (throttled in presence.js at 800ms)
+  const _broadcastCursor = () => {
+    if (!editor) return;
+    const pos    = editor.selectionStart;
+    const before = editor.value.substring(0, pos);
+    const line   = (before.match(/\n/g) || []).length + 1;
+    setCursorLine(line);
+  };
+  editor?.addEventListener('keyup',    _broadcastCursor);
+  editor?.addEventListener('mouseup',  _broadcastCursor);
+  editor?.addEventListener('touchend', _broadcastCursor);
+
   // Block paste keystrokes when the editor is locked. The textarea readonly
   // attribute does the heavy lifting; this is belt-and-suspenders.
   editor?.addEventListener('paste', (e) => {
@@ -615,11 +713,29 @@ function wireEvents() {
   });
 
   // ── Header ─────────────────────────────────────────────────────────────────
-  document.getElementById('btn-tools')?.addEventListener('click', () => UI.togglePanel('tools-panel'));
-  document.getElementById('btn-files')?.addEventListener('click', () => UI.togglePanel('files-panel'));
-  document.getElementById('btn-presence')?.addEventListener('click', () => UI.togglePanel('presence-panel'));
-  document.getElementById('btn-settings')?.addEventListener('click', () => UI.togglePanel('settings-panel'));
+  document.getElementById('btn-tools')?.addEventListener('click', () => { closeMoreDropdown(); UI.togglePanel('tools-panel'); });
+  document.getElementById('btn-files')?.addEventListener('click', () => { closeMoreDropdown(); UI.togglePanel('files-panel'); });
+  document.getElementById('btn-presence')?.addEventListener('click', () => { closeMoreDropdown(); UI.togglePanel('presence-panel'); });
+  document.getElementById('btn-settings')?.addEventListener('click', () => { closeMoreDropdown(); UI.togglePanel('settings-panel'); });
   document.getElementById('device-count-btn')?.addEventListener('click', () => UI.togglePanel('presence-panel'));
+  document.getElementById('btn-admin')?.addEventListener('click', () => { closeMoreDropdown(); _openAdminDashboard(); });
+
+  // More dropdown toggle
+  const moreBtn      = document.getElementById('btn-more');
+  const moreDropdown = document.getElementById('more-dropdown');
+  function closeMoreDropdown() {
+    moreDropdown?.classList.remove('open');
+    moreBtn?.setAttribute('aria-expanded', 'false');
+  }
+  moreBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const open = moreDropdown?.classList.toggle('open');
+    moreBtn.setAttribute('aria-expanded', String(!!open));
+  });
+  document.addEventListener('click', (e) => {
+    if (!moreDropdown?.contains(e.target) && e.target !== moreBtn) closeMoreDropdown();
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeMoreDropdown(); UI.closeAllPanels(); UI.closeAllModals(); } });
 
   document.getElementById('btn-share')?.addEventListener('click', () => {
     UI.populateShareModal({
@@ -636,12 +752,32 @@ function wireEvents() {
       .then(() => UI.showToast('Room link copied!', 'success'));
   });
 
-  // ── Preview toggle ─────────────────────────────────────────────────────────
-  document.getElementById('btn-preview')?.addEventListener('click', () => {
-    _showPreview = !_showPreview;
-    UI.setPreviewMode(_showPreview, () => renderMarkdown(UI.getEditorValue()));
-    if (_showPreview) _wirePreviewClickOnce();
+  // ── Segmented markdown control ─────────────────────────────────────────────
+  document.querySelectorAll('.md-seg-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const mode = btn.dataset.mode;
+      if (!mode) return;
+      _markdownMode = mode;
+      _showPreview  = _markdownMode !== 'write';
+      UI.setMarkdownMode(_markdownMode, () => renderMarkdown(UI.getEditorValue()));
+      if (_showPreview) _wirePreviewClickOnce();
+    });
   });
+
+  // ── Mobile action bar ──────────────────────────────────────────────────────
+  document.getElementById('mob-btn-share')?.addEventListener('click', () => {
+    UI.populateShareModal({
+      editableUrl: buildRoomUrl(BASE, _roomId),
+      readOnlyUrl: buildReadOnlyUrl(BASE, _roomId),
+      hasPasscode: !!_room?.passcode_hash,
+      hasEncryption: !!_room?.encryption_enabled,
+    });
+    UI.openModal('share-modal');
+  });
+  document.getElementById('mob-btn-files')?.addEventListener('click',    () => UI.togglePanel('files-panel'));
+  document.getElementById('mob-btn-tools')?.addEventListener('click',    () => UI.togglePanel('tools-panel'));
+  document.getElementById('mob-btn-presence')?.addEventListener('click', () => UI.togglePanel('presence-panel'));
+  document.getElementById('mob-btn-settings')?.addEventListener('click', () => UI.togglePanel('settings-panel'));
 
   // ── Footer quick buttons ───────────────────────────────────────────────────
   document.getElementById('btn-copy-footer')?.addEventListener('click', () => {
@@ -737,7 +873,13 @@ function wireEvents() {
     },
     'tool-templates': () => {
       if (!canUseTemplates()) { UI.showToast(editBlockedReason() || 'Templates are disabled.', 'warning'); return; }
-      UI.openTemplatesModal(TEMPLATES, _onTemplateChosen);
+      UI.openTemplatesModal(
+        TEMPLATES,
+        getCustomTemplates(),
+        _onTemplateChosen,
+        (key) => { deleteCustomTemplate(key); },
+        (key, label) => { renameCustomTemplate(key, label); },
+      );
     },
   };
 
@@ -894,6 +1036,169 @@ function wireEvents() {
       UI.showToast(target ? 'Editing locked.' : 'Editing unlocked.', 'success');
     } catch { UI.showToast('Could not update editing lock.', 'error'); }
   });
+
+  // ── Export modal ───────────────────────────────────────────────────────────
+  document.getElementById('btn-export')?.addEventListener('click', () => {
+    closeMoreDropdown();
+    UI.openModal('export-modal');
+  });
+  document.getElementById('export-modal-close')?.addEventListener('click', () => UI.closeModal('export-modal'));
+
+  const _downloadBlob = (content, filename, mime) => {
+    const blob = new Blob([content], { type: mime });
+    const a    = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: filename });
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(a.href);
+  };
+
+  document.getElementById('export-txt')?.addEventListener('click', () => {
+    _downloadBlob(UI.getEditorValue(), `${_roomId}.txt`, 'text/plain');
+    UI.showToast('Downloaded .txt', 'success');
+  });
+  document.getElementById('export-md')?.addEventListener('click', () => {
+    _downloadBlob(UI.getEditorValue(), `${_roomId}.md`, 'text/markdown');
+    UI.showToast('Downloaded .md', 'success');
+  });
+  document.getElementById('export-html')?.addEventListener('click', () => {
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SyncPad – ${_roomId}</title>
+<style>body{font-family:system-ui,sans-serif;max-width:800px;margin:40px auto;padding:0 20px;color:#1a1a1a;line-height:1.7}
+pre{background:#f5f5f5;padding:1em;border-radius:4px;overflow:auto}code{background:#f5f5f5;padding:2px 4px;border-radius:2px}
+blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table{border-collapse:collapse}td,th{border:1px solid #ddd;padding:6px 10px}</style>
+</head><body>${renderMarkdown(UI.getEditorValue())}</body></html>`;
+    _downloadBlob(html, `${_roomId}.html`, 'text/html');
+    UI.showToast('Downloaded .html', 'success');
+  });
+  document.getElementById('export-copy-text')?.addEventListener('click', async () => {
+    await copyToClipboard(UI.getEditorValue());
+    UI.showToast('Copied plain text.', 'success');
+  });
+  document.getElementById('export-copy-md')?.addEventListener('click', async () => {
+    await copyToClipboard(UI.getEditorValue());
+    UI.showToast('Copied Markdown.', 'success');
+  });
+
+  // ── Keyboard shortcuts modal ───────────────────────────────────────────────
+  document.getElementById('btn-shortcuts')?.addEventListener('click', () => {
+    closeMoreDropdown();
+    UI.openModal('shortcuts-modal');
+  });
+  document.getElementById('shortcuts-modal-close')?.addEventListener('click', () => UI.closeModal('shortcuts-modal'));
+
+  // ── Save as template ───────────────────────────────────────────────────────
+  document.getElementById('btn-save-as-template')?.addEventListener('click', () => {
+    const body = UI.getEditorValue().trim();
+    if (!body) { UI.showToast('The note is empty — nothing to save as a template.', 'warning'); return; }
+    const label = prompt('Template name:', 'My template');
+    if (!label?.trim()) return;
+    saveCustomTemplate(label.trim(), body);
+    UI.showToast(`Saved as template "${label.trim()}".`, 'success');
+  });
+
+  // ── Search panel ───────────────────────────────────────────────────────────
+  const searchInput = document.getElementById('search-input');
+  const searchCount = document.getElementById('search-count');
+  const editor      = document.getElementById('note-editor');
+
+  const _runSearch = () => {
+    _searchTerm = (searchInput?.value || '').toLowerCase();
+    _searchMatches = [];
+    _searchIndex   = -1;
+    if (!_searchTerm || !editor) { if (searchCount) searchCount.textContent = ''; return; }
+    const text = editor.value.toLowerCase();
+    let pos = 0;
+    while (true) {
+      const idx = text.indexOf(_searchTerm, pos);
+      if (idx === -1) break;
+      _searchMatches.push({ start: idx, end: idx + _searchTerm.length });
+      pos = idx + 1;
+    }
+    if (_searchMatches.length > 0) {
+      _searchIndex = 0;
+      _jumpToMatch(0);
+    }
+    if (searchCount) {
+      searchCount.textContent = _searchMatches.length > 0
+        ? `${_searchMatches.length} match${_searchMatches.length !== 1 ? 'es' : ''}`
+        : 'No matches';
+    }
+  };
+
+  const _jumpToMatch = (idx) => {
+    if (!editor || !_searchMatches.length) return;
+    const m = _searchMatches[idx];
+    if (!m) return;
+    // Switch to write mode if in preview
+    if (_markdownMode !== 'write' && _markdownMode !== 'split') {
+      _markdownMode = 'write'; _showPreview = false;
+      UI.setMarkdownMode('write');
+    }
+    editor.focus();
+    editor.setSelectionRange(m.start, m.end);
+    // Scroll into view
+    try {
+      const before = editor.value.substring(0, m.start);
+      const lineNum = (before.match(/\n/g) || []).length;
+      const lineH   = parseInt(getComputedStyle(editor).lineHeight) || 20;
+      editor.scrollTop = Math.max(0, lineNum * lineH - editor.clientHeight / 2);
+    } catch {}
+    if (searchCount) searchCount.textContent = `${idx + 1} / ${_searchMatches.length}`;
+  };
+
+  searchInput?.addEventListener('input', _runSearch);
+  searchInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (!_searchMatches.length) return;
+      _searchIndex = (_searchIndex + 1) % _searchMatches.length;
+      _jumpToMatch(_searchIndex);
+    }
+    if (e.key === 'Escape') { UI.closeAllPanels(); editor?.focus(); }
+  });
+
+  document.getElementById('search-next')?.addEventListener('click', () => {
+    if (!_searchMatches.length) return;
+    _searchIndex = (_searchIndex + 1) % _searchMatches.length;
+    _jumpToMatch(_searchIndex);
+  });
+  document.getElementById('search-prev')?.addEventListener('click', () => {
+    if (!_searchMatches.length) return;
+    _searchIndex = (_searchIndex - 1 + _searchMatches.length) % _searchMatches.length;
+    _jumpToMatch(_searchIndex);
+  });
+
+  // ── Keyboard shortcuts init ────────────────────────────────────────────────
+  initShortcuts({
+    onTogglePreview:    () => {
+      const next = _markdownMode === 'preview' ? 'write' : 'preview';
+      _markdownMode = next; _showPreview = next !== 'write';
+      UI.setMarkdownMode(next, () => renderMarkdown(UI.getEditorValue()));
+      if (_showPreview) _wirePreviewClickOnce();
+    },
+    onToggleSplit: () => {
+      const next = _markdownMode === 'split' ? 'write' : 'split';
+      _markdownMode = next; _showPreview = next !== 'write';
+      UI.setMarkdownMode(next, () => renderMarkdown(UI.getEditorValue()));
+      if (_showPreview) _wirePreviewClickOnce();
+    },
+    onToggleMonospace: () => {
+      _monospace = !_monospace;
+      UI.setMonospace(_monospace);
+      try { localStorage.setItem('syncpad_monospace', _monospace ? '1' : '0'); } catch {}
+      UI.showToast(_monospace ? 'Monospace on.' : 'Monospace off.');
+    },
+    onOpenSearch: () => {
+      UI.openPanel('search-panel');
+      searchInput?.focus();
+    },
+    onForceClose: () => {
+      closeMoreDropdown();
+      UI.closeAllPanels();
+      UI.closeAllModals();
+    },
+    onOpenShortcuts: () => UI.openModal('shortcuts-modal'),
+  });
 }
 
 // ── Templates handler ─────────────────────────────────────────────────────────
@@ -921,10 +1226,17 @@ function _onTemplateChosen(key, mode) {
   UI.showToast(mode === 'append' ? 'Template appended.' : 'Template applied.', 'success');
 }
 
+// ── Theme helper (avoids importing getSavedTheme into app.js separately) ─────
+
+function getSavedTheme_() {
+  try { return localStorage.getItem('syncpad_theme') || 'charcoal-amber'; } catch {}
+  return 'charcoal-amber';
+}
+
 // ── Preview helpers ───────────────────────────────────────────────────────────
 
 function _refreshPreviewIfActive() {
-  if (_showPreview) UI.refreshPreview(() => renderMarkdown(UI.getEditorValue()));
+  if (_markdownMode !== 'write') UI.refreshPreview(() => renderMarkdown(UI.getEditorValue()));
 }
 
 function _wirePreviewClickOnce() {
@@ -948,7 +1260,83 @@ function _wirePreviewClickOnce() {
   });
 }
 
-// ── Clear note ────────────────────────────────────────────────────────────────
+// ── Admin / Room Tools dashboard ──────────────────────────────────────────────
+
+function _openAdminDashboard() {
+  const deviceId   = getDeviceId();
+  const deviceName = getDeviceName ? getDeviceName() : '';
+  const devices    = _getPresenceDevices();
+
+  openDashboard({
+    room:               _room,
+    roomId:             _roomId,
+    BASE,
+    files:              _currentFiles,
+    devices,
+    myDeviceId:         deviceId,
+    myDeviceName:       deviceName,
+    isReadOnly:         _isReadOnly,
+    encKeyActive:       !!_room?.encryption_enabled && !!_encKey,
+    supabaseConfigured: !!(window.SYNCPAD_CONFIG?.supabaseUrl && window.SYNCPAD_CONFIG?.supabaseAnonKey),
+
+    onCopyEditableLink: () => {
+      copyToClipboard(buildRoomUrl(BASE, _roomId))
+        .then(() => UI.showToast('Editable link copied!', 'success'))
+        .catch(() => UI.showToast('Could not copy.', 'error'));
+    },
+    onCopyReadOnlyLink: () => {
+      copyToClipboard(buildReadOnlyUrl(BASE, _roomId))
+        .then(() => UI.showToast('Read-only link copied!', 'success'))
+        .catch(() => UI.showToast('Could not copy.', 'error'));
+    },
+    onLock: async () => {
+      if (!canToggleLock()) { UI.showToast(editBlockedReason() || 'Lock controls are disabled.', 'warning'); return; }
+      const target = !_room?.editing_locked;
+      try {
+        if (target) { await flushSave(); cancelPendingTypingBroadcast(); }
+        await setEditingLocked(_roomId, target);
+        _room = await loadRoom(_roomId);
+        _updatePermissionContext();
+        UI.renderSettingsPanel(_room);
+        UI.setLockedMode(!!_room.editing_locked);
+        broadcastSettingsChange();
+        UI.showToast(target ? 'Editing locked.' : 'Editing unlocked.', 'success');
+      } catch { UI.showToast('Could not update editing lock.', 'error'); }
+    },
+    onClear: async () => {
+      if (!canClearNote()) { UI.showToast(editBlockedReason() || 'Clear is disabled.', 'warning'); return; }
+      if (!confirm('Clear the note for everyone? This cannot be undone.')) return;
+      await doClearNote();
+      // Re-open dashboard with updated state
+      setTimeout(_openAdminDashboard, 400);
+    },
+    onOpenFiles: () => UI.openPanel('files-panel'),
+    onClose: () => UI.closeAllPanels(),
+  });
+}
+
+/** Snapshot the current presence device list. */
+function _getPresenceDevices() {
+  // Presence devices are tracked in presence.js; expose via the rendered list
+  // by reading the devices-list DOM. This is a lightweight approach that avoids
+  // coupling presence.js state to app.js.
+  const listEl = document.getElementById('devices-list');
+  if (!listEl) return [];
+  const items = listEl.querySelectorAll('.device-item');
+  const devices = [];
+  items.forEach(el => {
+    devices.push({
+      device_id:   el.dataset.deviceId || '',
+      device_name: el.querySelector('.device-name')?.textContent?.trim() || 'Unknown',
+      read_only:   el.classList.contains('viewer'),
+      typing:      el.classList.contains('typing'),
+      cursor_line: null,
+    });
+  });
+  return devices;
+}
+
+
 
 async function doClearNote() {
   try {

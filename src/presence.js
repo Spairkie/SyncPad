@@ -1,7 +1,7 @@
 // SyncPad – presence.js
-// Supabase Presence: tracks connected devices and typing state.
+// Supabase Presence: tracks connected devices, typing state, and cursor activity.
 import { getSupabaseClient } from './supabase.js';
-import { getDeviceId, getDeviceName } from './utils.js';
+import { getDeviceId, getDeviceName, throttle } from './utils.js';
 
 let _ch               = null;
 let _typingTimer      = null;
@@ -11,9 +11,9 @@ let _readOnly         = false;
 /**
  * Initialize presence for a room.
  * @param {string} roomId
- * @param {function(Device[]): void} onPresenceChange  – called with array of connected devices
+ * @param {function(Device[]): void} onPresenceChange
  * @param {object} [opts]
- * @param {boolean} [opts.readOnly]  – this device is in read-only mode
+ * @param {boolean} [opts.readOnly]
  */
 export function initPresence(roomId, onPresenceChange, opts = {}) {
   _onPresenceChange = onPresenceChange;
@@ -36,6 +36,7 @@ export function initPresence(roomId, onPresenceChange, opts = {}) {
           device_name: getDeviceName(),
           typing:      false,
           read_only:   _readOnly,
+          cursor_line: null,
           joined_at:   Date.now(),
         });
       }
@@ -46,24 +47,27 @@ export function initPresence(roomId, onPresenceChange, opts = {}) {
 
 // ── Internal track helper ────────────────────────────────────────────────────
 
+let _lastTracked = {};
+
 async function _track(updates) {
   if (!_ch) return;
-  try {
-    await _ch.track({
-      device_id:   getDeviceId(),
-      device_name: getDeviceName(),
-      typing:      false,
-      read_only:   _readOnly,
-      ...updates,
-    });
-  } catch {}
+  const payload = {
+    device_id:   getDeviceId(),
+    device_name: getDeviceName(),
+    typing:      false,
+    read_only:   _readOnly,
+    cursor_line: null,
+    ..._lastTracked,
+    ...updates,
+  };
+  _lastTracked = { ...payload };
+  try { await _ch.track(payload); } catch {}
 }
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
 /** Mark this device as typing (auto-clears after 3 s). */
 export function setTyping(isTyping) {
-  // Don't advertise typing from read-only clients.
   if (_readOnly && isTyping) return;
   clearTimeout(_typingTimer);
   _track({ typing: isTyping });
@@ -71,6 +75,15 @@ export function setTyping(isTyping) {
     _typingTimer = setTimeout(() => _track({ typing: false }), 3000);
   }
 }
+
+/**
+ * Broadcast this device's approximate cursor line (throttled).
+ * Read-only devices broadcast their scroll position but NOT as "typing".
+ * @param {number|null} lineNumber  – 1-based line number, or null to clear
+ */
+export const setCursorLine = throttle(function(lineNumber) {
+  _track({ cursor_line: lineNumber ?? null });
+}, 800);
 
 /** Update the displayed device name in the presence channel. */
 export async function updatePresenceDeviceName(name) {
@@ -84,11 +97,11 @@ export function getPresenceState() {
 
 /**
  * Returns a normalised array of connected devices, sorted: self first, then alpha.
- * @returns {{ device_id, device_name, typing, read_only, isMe }[]}
+ * @returns {{ device_id, device_name, typing, read_only, cursor_line, isMe }[]}
  */
 export function getConnectedDevices() {
-  const state  = getPresenceState();
-  const myId   = getDeviceId();
+  const state   = getPresenceState();
+  const myId    = getDeviceId();
   const devices = [];
 
   for (const key of Object.keys(state)) {
@@ -100,6 +113,7 @@ export function getConnectedDevices() {
       device_name: e.device_name || 'Unknown',
       typing:      !!e.typing,
       read_only:   !!e.read_only,
+      cursor_line: e.cursor_line ?? null,
       isMe:        (e.device_id || key) === myId,
     });
   }
@@ -112,6 +126,8 @@ export function getConnectedDevices() {
 export function destroyPresence() {
   if (_ch) { getSupabaseClient().removeChannel(_ch); _ch = null; }
   clearTimeout(_typingTimer);
+  setCursorLine.cancel?.();
   _onPresenceChange = null;
   _readOnly         = false;
+  _lastTracked      = {};
 }
