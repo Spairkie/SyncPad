@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="SyncPad — Live shared notepad. Real-time sync across all your devices." />
+  <meta name="theme-color" content="#0f0f11" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="SyncPad" />
+  <title>SyncPad</title>
+
+  <!-- PWA -->
+  <link rel="manifest"        href="/SyncPad/manifest.json" />
+  <link rel="icon"            href="/SyncPad/assets/icon-192.png" type="image/png" />
+  <link rel="apple-touch-icon" href="/SyncPad/assets/icon-192.png" />
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="/SyncPad/styles/style.css" />
+
+  <!-- Supabase JS (UMD — exposes window.supabase) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+
+  <!-- QR Code -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+
+  <!-- ⚠️  Replace these values with your Supabase project credentials -->
+  <script>
+    window.SYNCPAD_CONFIG = {
+      supabaseUrl:     'https://YOUR_PROJECT.supabase.co',
+      supabaseAnonKey: 'YOUR_ANON_KEY_HERE',
+    };
+  </script>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════════
+     LOADING SCREEN
+═══════════════════════════════════════════════════════════════ -->
+<div id="loading-screen">
+  <div class="loading-logo">Sync<span>Pad</span></div>
+  <div class="loading-spinner"></div>
+  <p class="loading-message" id="loading-message">Loading…</p>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     PASSCODE SCREEN
+═══════════════════════════════════════════════════════════════ -->
+<div id="passcode-screen" class="auth-screen hidden">
+  <div class="auth-card">
+    <div class="auth-card-icon">🔒</div>
+    <h2>Passcode Required</h2>
+    <p>This note is protected. Enter the passcode to continue.</p>
+    <div class="room-badge" id="passcode-room-badge"></div>
+    <input id="passcode-input" class="auth-input" type="password"
+           placeholder="Enter passcode…" autocomplete="current-password" />
+    <div class="auth-error" id="passcode-error"></div>
+    <button id="passcode-submit-btn" class="auth-btn">Unlock</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     ENCRYPTION SCREEN
+═══════════════════════════════════════════════════════════════ -->
+<div id="encryption-screen" class="auth-screen hidden">
+  <div class="auth-card">
+    <div class="auth-card-icon">🔐</div>
+    <h2>Encrypted Note</h2>
+    <p>This note text is encrypted. Enter the passphrase to decrypt it.</p>
+    <div class="room-badge" id="encryption-room-badge"></div>
+    <input id="encryption-input" class="auth-input" type="password"
+           placeholder="Enter passphrase…" autocomplete="current-password" />
+    <div class="auth-error" id="encryption-error"></div>
+    <button id="encryption-submit-btn" class="auth-btn">Decrypt &amp; Open</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     MAIN APP SCREEN
+═══════════════════════════════════════════════════════════════ -->
+<div id="app-screen" class="hidden">
+
+  <!-- SW update bar -->
+  <div class="sw-update-bar" id="sw-update-bar">
+    <span>A new version of SyncPad is available.</span>
+    <button class="sw-update-btn">Refresh</button>
+  </div>
+
+  <!-- Offline banner -->
+  <div class="offline-banner" id="offline-banner">
+    You are offline. Changes are saved locally and will sync when reconnected.
+  </div>
+
+  <!-- Encryption-locked banner (remote enabled encryption, we have no key) -->
+  <div class="enc-locked-bar hidden" id="enc-locked-bar">
+    <span>🔐 This room is encrypted. Reload to enter the passphrase.</span>
+    <button class="enc-locked-reload-btn">Reload</button>
+  </div>
+
+  <!-- Generic edit-blocked banner (read-only or lock) -->
+  <div class="edit-blocked-bar hidden" id="edit-blocked-bar">
+    <span class="edit-blocked-text" id="edit-blocked-text"></span>
+  </div>
+
+  <!-- ── Header ──────────────────────────────────────────── -->
+  <header class="app-header">
+    <div class="header-logo">Sync<span>Pad</span></div>
+
+    <div class="header-room">
+      <div class="room-name-row">
+        <span class="room-name" id="room-name" title="Click to copy room link"></span>
+        <span class="encryption-badge hidden" id="encryption-badge">🔐 Encrypted</span>
+        <span class="readonly-badge hidden" id="readonly-badge">👁 Read-only</span>
+        <span class="locked-badge hidden" id="locked-badge">🔒 Editing locked</span>
+      </div>
+      <div class="status-row">
+        <div class="status-dot connected" id="status-dot"></div>
+        <span class="status-text" id="status-text">Connected</span>
+        <span class="device-count-badge" id="device-count-btn" title="View connected devices">
+          &middot; <span id="device-count">1</span> online
+        </span>
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <button class="header-btn" id="btn-share"    title="Share">⬆️</button>
+      <button class="header-btn" id="btn-preview"  title="Preview Markdown" aria-pressed="false">👁</button>
+      <button class="header-btn" id="btn-tools"    title="Tools">🔧</button>
+      <button class="header-btn" id="btn-files"    title="Files" data-readonly-hide>📎</button>
+      <button class="header-btn" id="btn-presence" title="Devices">👥</button>
+      <button class="header-btn" id="btn-settings" title="Settings" data-readonly-hide>⚙️</button>
+    </div>
+  </header>
+
+  <!-- ── Editor area ─────────────────────────────────────── -->
+  <div class="editor-area">
+    <div class="editor-wrap">
+      <textarea id="note-editor"
+                placeholder="Start typing…"
+                spellcheck="true"
+                autocorrect="on"
+                autocapitalize="sentences"></textarea>
+
+      <!-- Markdown preview pane (hidden by default) -->
+      <div id="note-preview" class="note-preview hidden" aria-live="polite"></div>
+
+      <!-- Remote update notice -->
+      <div class="remote-notice hidden" id="remote-notice">
+        <span class="remote-notice-label">Remote update available</span>
+        <div class="remote-notice-actions">
+          <button class="remote-notice-btn" id="remote-apply-btn"   title="Replace local content with remote">Apply</button>
+          <button class="remote-notice-btn" id="remote-keep-btn"    title="Discard the remote update">Keep mine</button>
+          <button class="remote-notice-btn" id="remote-copy-btn"    title="Copy remote content to clipboard">Copy remote</button>
+          <button class="remote-notice-btn" id="remote-dismiss-btn" title="Hide this notice">Dismiss</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Typing indicator -->
+    <div class="typing-indicator hidden" id="typing-indicator"></div>
+
+    <!-- Expiration bar -->
+    <div class="expiration-bar hidden" id="expiration-bar">
+      <span class="exp-icon">⏱</span>
+      <span>Expires in <span class="exp-time">—</span></span>
+      <button class="exp-cancel">Remove</button>
+    </div>
+  </div>
+
+  <!-- ── Footer ──────────────────────────────────────────── -->
+  <footer class="app-footer">
+    <span class="word-count" id="word-count">0 words · 0 chars</span>
+    <div class="footer-tools">
+      <button class="footer-tool-btn" id="btn-copy-footer" title="Copy note">📋 Copy</button>
+      <button class="footer-tool-btn" id="btn-insert-ts" data-readonly-hide title="Insert timestamp">🕐 Time</button>
+    </div>
+  </footer>
+
+</div><!-- /#app-screen -->
+
+<!-- ══════════════════════════════════════════════════════════════
+     SIDE PANELS
+═══════════════════════════════════════════════════════════════ -->
+
+<div class="panel-backdrop" id="panel-backdrop"></div>
+
+<!-- Tools -->
+<div class="side-panel" id="tools-panel">
+  <div class="panel-header">
+    <h3>Tools</h3>
+    <button class="panel-close" aria-label="Close">✕</button>
+  </div>
+  <div class="panel-body">
+    <div class="tools-grid">
+      <button class="tool-btn" id="tool-copy">
+        <span class="tool-icon">📋</span><span class="tool-label">Copy Note</span>
+      </button>
+      <button class="tool-btn" id="tool-copy-link">
+        <span class="tool-icon">🔗</span><span class="tool-label">Copy Link</span>
+      </button>
+      <button class="tool-btn" id="tool-paste" data-readonly-hide>
+        <span class="tool-icon">📄</span><span class="tool-label">Paste</span>
+      </button>
+      <button class="tool-btn" id="tool-share">
+        <span class="tool-icon">⬆️</span><span class="tool-label">Share</span>
+      </button>
+      <button class="tool-btn" id="tool-download">
+        <span class="tool-icon">⬇️</span><span class="tool-label">Download .txt</span>
+      </button>
+      <button class="tool-btn" id="tool-import" data-readonly-hide>
+        <span class="tool-icon">📂</span><span class="tool-label">Import .txt</span>
+      </button>
+      <button class="tool-btn" id="tool-templates" data-readonly-hide>
+        <span class="tool-icon">📝</span><span class="tool-label">Templates</span>
+      </button>
+      <button class="tool-btn" id="tool-timestamp" data-readonly-hide>
+        <span class="tool-icon">🕐</span><span class="tool-label">Timestamp</span>
+      </button>
+      <button class="tool-btn" id="tool-select-all">
+        <span class="tool-icon">🔡</span><span class="tool-label">Select All</span>
+      </button>
+      <button class="tool-btn" id="tool-monospace">
+        <span class="tool-icon">💻</span><span class="tool-label">Monospace</span>
+      </button>
+      <button class="tool-btn danger" id="tool-clear" data-readonly-hide>
+        <span class="tool-icon">🗑️</span><span class="tool-label">Clear Note</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Files -->
+<div class="side-panel" id="files-panel">
+  <div class="panel-header">
+    <h3>Files</h3>
+    <button class="panel-close" aria-label="Close">✕</button>
+  </div>
+  <div class="panel-body">
+    <div class="files-upload-zone" id="files-upload-zone" data-readonly-hide>
+      <span class="upload-icon">📎</span>
+      Click or drag &amp; drop to upload
+      <div class="upload-hint">Max 10 MB per file</div>
+    </div>
+    <input type="file" id="file-input" />
+
+    <div class="uploading-indicator hidden" id="uploading-indicator">
+      <div class="mini-spinner"></div>
+      Uploading…
+    </div>
+
+    <div id="files-list"></div>
+    <div class="files-empty hidden" id="files-empty">No files attached to this note.</div>
+  </div>
+</div>
+
+<!-- Presence / Devices -->
+<div class="side-panel" id="presence-panel">
+  <div class="panel-header">
+    <h3>Connected Devices</h3>
+    <button class="panel-close" aria-label="Close">✕</button>
+  </div>
+  <div class="panel-body">
+    <div class="presence-header-row">
+      <h4>Who's here</h4>
+    </div>
+    <div id="devices-list"></div>
+    <p style="font-size:12px;color:var(--text-muted);margin-top:14px;">
+      Tap your device name to rename it. Names are local to this device.
+    </p>
+  </div>
+</div>
+
+<!-- Settings -->
+<div class="side-panel" id="settings-panel">
+  <div class="panel-header">
+    <h3>Settings</h3>
+    <button class="panel-close" aria-label="Close">✕</button>
+  </div>
+  <div class="panel-body">
+
+    <div class="settings-section">
+      <div class="settings-section-title">Security</div>
+
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Passcode</div>
+          <div class="setting-sub" id="setting-passcode-status">None</div>
+        </div>
+        <button class="setting-btn" id="setting-passcode-btn">Set</button>
+      </div>
+
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Text Encryption</div>
+          <div class="setting-sub" id="setting-enc-status">Off</div>
+        </div>
+        <button class="setting-btn" id="setting-enc-btn">Enable</button>
+      </div>
+
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Lock editing</div>
+          <div class="setting-sub" id="setting-lock-status">Unlocked</div>
+        </div>
+        <button class="setting-btn" id="setting-lock-btn">Lock</button>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-section-title">Expiration</div>
+
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Auto-expire</div>
+          <div class="setting-sub" id="setting-exp-status">Never</div>
+        </div>
+        <button class="setting-btn" id="setting-exp-btn">Set</button>
+      </div>
+
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">View-once</div>
+          <div class="setting-sub" id="setting-vo-status">Off</div>
+        </div>
+        <button class="setting-btn" id="setting-vo-btn">Enable</button>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-section-title">About</div>
+      <div class="setting-row">
+        <div class="setting-label" style="color:var(--text-secondary);font-size:13px;line-height:1.6;">
+          SyncPad &mdash; live shared notepad.<br />
+          Built on Supabase Realtime.
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     MODALS
+═══════════════════════════════════════════════════════════════ -->
+
+<!-- Share modal -->
+<div class="modal-backdrop" id="share-modal">
+  <div class="modal share-modal">
+    <h3>Share this note</h3>
+
+    <!-- Editable link section -->
+    <div class="share-section">
+      <div class="share-section-title">Editable link</div>
+      <p class="share-section-desc">Anyone with this link can view and edit in real time.</p>
+      <div class="share-url-box">
+        <span class="share-url-text" id="share-editable-text"></span>
+        <button class="share-copy-btn" id="share-editable-copy">Copy</button>
+      </div>
+      <div class="share-qr" id="share-editable-qr"></div>
+      <button class="share-qr-download" id="share-editable-qr-download">Download QR</button>
+    </div>
+
+    <!-- Read-only link section -->
+    <div class="share-section share-readonly">
+      <div class="share-section-title">Read-only link</div>
+      <p class="share-section-desc">Anyone with this link can view but not edit.</p>
+      <div class="share-url-box">
+        <span class="share-url-text" id="share-readonly-text"></span>
+        <button class="share-copy-btn" id="share-readonly-copy">Copy</button>
+      </div>
+      <div class="share-qr" id="share-readonly-qr"></div>
+      <button class="share-qr-download" id="share-readonly-qr-download">Download QR</button>
+    </div>
+
+    <!-- Warnings -->
+    <div class="share-passcode-notice hidden" id="share-passcode-notice">
+      🔒 This note has a passcode &mdash; share it separately.
+    </div>
+    <div class="share-encryption-notice hidden" id="share-encryption-notice">
+      🔐 Encryption is on. The passphrase is not included in this link &mdash; share it separately.
+    </div>
+
+    <!-- Send-to-phone helper -->
+    <div class="share-send-to-phone">
+      <div class="share-section-title">Send to another device</div>
+      <ol class="share-steps">
+        <li>Scan the QR code.</li>
+        <li>Open this room.</li>
+        <li>Text will sync live.</li>
+      </ol>
+    </div>
+
+    <button class="share-native-btn hidden" id="share-native-btn">Share via&hellip;</button>
+
+    <div class="modal-actions">
+      <button class="modal-btn-cancel" id="share-modal-close">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Templates modal -->
+<div class="modal-backdrop" id="templates-modal">
+  <div class="modal templates-modal">
+    <div class="templates-header">
+      <h3>Insert template</h3>
+      <button class="templates-close" aria-label="Close">✕</button>
+    </div>
+    <div class="templates-body">
+      <div id="templates-list" class="templates-list"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="modal-btn-cancel templates-close">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     TOAST CONTAINER
+═══════════════════════════════════════════════════════════════ -->
+<div id="toast-container" aria-live="polite"></div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     PWA INSTALL BAR
+═══════════════════════════════════════════════════════════════ -->
+<div class="pwa-bar" id="pwa-install-bar">
+  <span class="pwa-bar-text"><strong>Install SyncPad</strong> for quick access.</span>
+  <button class="pwa-bar-btn install">Install</button>
+  <button class="pwa-bar-btn dismiss">Not now</button>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     MAIN MODULE — single entry point, no inline modules
+═══════════════════════════════════════════════════════════════ -->
+<script type="module" src="/SyncPad/src/app.js"></script>
+
+</body>
+</html>

@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SyncPad</title>
+  <script>
+    // GitHub Pages SPA routing fallback.
+    // Store the room path from the 404 URL, then redirect to the SPA root,
+    // preserving any query string so things like ?mode=read survive.
+    (function () {
+      var base   = '/SyncPad';
+      var path   = window.location.pathname.replace(base, '').replace(/^\/+|\/+$/g, '');
+      var search = window.location.search || '';
+      if (path) {
+        sessionStorage.setItem('syncpad_redirect_room', path);
+      }
+      window.location.replace(base + '/' + search);
+    })();
+  </script>
+</head>
+<body></body>
+</html>
