@@ -4,9 +4,27 @@ import { getSupabaseClient } from './supabase.js';
 import { getDeviceId, getDeviceName, throttle } from './utils.js';
 
 let _ch               = null;
+let _roomId           = null;
 let _typingTimer      = null;
 let _onPresenceChange = null; // (devices: Device[]) => void
 let _readOnly         = false;
+let _tabId            = null;
+
+function _getTabId() {
+  if (_tabId) return _tabId;
+  try {
+    let id = sessionStorage.getItem('syncpad_tab_id');
+    if (!id) {
+      id = crypto.randomUUID();
+      sessionStorage.setItem('syncpad_tab_id', id);
+    }
+    _tabId = id;
+    return id;
+  } catch {
+    _tabId = crypto.randomUUID();
+    return _tabId;
+  }
+}
 
 /**
  * Initialize presence for a room.
@@ -16,12 +34,15 @@ let _readOnly         = false;
  * @param {boolean} [opts.readOnly]
  */
 export function initPresence(roomId, onPresenceChange, opts = {}) {
+  destroyPresence();
+  _roomId           = roomId;
   _onPresenceChange = onPresenceChange;
   _readOnly         = !!opts.readOnly;
   const sb       = getSupabaseClient();
   const deviceId = getDeviceId();
+  const tabId    = _getTabId();
 
-  _ch = sb.channel(`presence:${roomId}`, { config: { presence: { key: deviceId } } });
+  _ch = sb.channel(`presence:${roomId}`, { config: { presence: { key: `${deviceId}:${tabId}` } } });
 
   const notify = () => _onPresenceChange?.(getConnectedDevices());
 
@@ -38,7 +59,9 @@ export function initPresence(roomId, onPresenceChange, opts = {}) {
           read_only:   _readOnly,
           cursor_line: null,
           joined_at:   Date.now(),
+          tab_id:      tabId,
         });
+        notify();
       }
     });
 
@@ -102,31 +125,44 @@ export function getPresenceState() {
 export function getConnectedDevices() {
   const state   = getPresenceState();
   const myId    = getDeviceId();
-  const devices = [];
+  const byDevice = new Map();
 
   for (const key of Object.keys(state)) {
     const entries = state[key];
     if (!Array.isArray(entries) || !entries.length) continue;
-    const e = entries[0];
-    devices.push({
-      device_id:   e.device_id   || key,
-      device_name: e.device_name || 'Unknown',
-      typing:      !!e.typing,
-      read_only:   !!e.read_only,
-      cursor_line: e.cursor_line ?? null,
-      isMe:        (e.device_id || key) === myId,
-    });
+    for (const e of entries) {
+      const id = e.device_id || key.split(':')[0] || key;
+      const prev = byDevice.get(id);
+      const joined = Number(e.joined_at || 0);
+      const prevJoined = Number(prev?.joined_at || 0);
+      const useCurrent = !prev || joined >= prevJoined;
+      byDevice.set(id, {
+        device_id:   id,
+        device_name: useCurrent ? (e.device_name || prev?.device_name || 'Unknown') : (prev?.device_name || 'Unknown'),
+        typing:      Boolean(prev?.typing || e.typing),
+        read_only:   useCurrent ? !!e.read_only : !!prev.read_only,
+        cursor_line: useCurrent ? (e.cursor_line ?? null) : (prev.cursor_line ?? null),
+        joined_at:   useCurrent ? joined : prevJoined,
+        isMe:        id === myId,
+      });
+    }
   }
 
+  const devices = Array.from(byDevice.values());
   devices.sort((a, b) => a.isMe ? -1 : b.isMe ? 1 : a.device_name.localeCompare(b.device_name));
   return devices;
 }
 
 /** Tear down the presence channel. */
 export function destroyPresence() {
-  if (_ch) { getSupabaseClient().removeChannel(_ch); _ch = null; }
+  if (_ch) {
+    try { _ch.untrack(); } catch {}
+    getSupabaseClient().removeChannel(_ch);
+    _ch = null;
+  }
   clearTimeout(_typingTimer);
   setCursorLine.cancel?.();
+  _roomId           = null;
   _onPresenceChange = null;
   _readOnly         = false;
   _lastTracked      = {};

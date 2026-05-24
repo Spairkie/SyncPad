@@ -321,6 +321,7 @@ async function joinReadOnlyShareRoute(token) {
 }
 
 async function joinRoom(roomId) {
+  teardownRealtimeSession();
   _roomId = roomId;
   UI.setLoadingMessage('Loading room…');
 
@@ -852,9 +853,16 @@ function wireEvents() {
     if (!canEdit()) { e.preventDefault(); }
   });
 
-  window.addEventListener('beforeunload', () => flushSave());
+  window.addEventListener('beforeunload', () => {
+    flushSave();
+    destroyPresence();
+  });
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') flushSave();
+    if (document.visibilityState === 'hidden') {
+      flushSave();
+      setTyping(false);
+      setCursorLine(null);
+    }
   });
 
   // ── Header ─────────────────────────────────────────────────────────────────
@@ -1323,6 +1331,17 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
     },
     onOpenShortcuts: () => UI.openModal('shortcuts-modal'),
   });
+}
+
+function teardownRealtimeSession() {
+  try { _unsubRoom?.(); } catch {}
+  try { _unsubFiles?.(); } catch {}
+  _unsubRoom = null;
+  _unsubFiles = null;
+  destroyPresence();
+  destroyBroadcast();
+  destroySync();
+  cancelPendingTypingBroadcast();
 }
 
 // ── Templates handler ─────────────────────────────────────────────────────────
