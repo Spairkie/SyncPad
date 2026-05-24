@@ -200,7 +200,7 @@ export function updateWordCount(text) {
 
 export function updateDeviceCount(n) {
   const el = document.getElementById('device-count');
-  if (el) el.textContent = n;
+  if (el) el.textContent = `${n} connected`;
 }
 
 // ── Devices list (presence panel) ─────────────────────────────────────────────
@@ -209,6 +209,10 @@ export function renderDevicesList(devices, myDeviceId, onNameChange) {
   const list = document.getElementById('devices-list');
   if (!list) return;
   list.innerHTML = '';
+  if (!devices.length) {
+    list.innerHTML = '<div class="device-empty">No other devices connected</div>';
+    return;
+  }
   devices.forEach(device => {
     const isMe = device.device_id === myDeviceId;
     const item = document.createElement('div');
@@ -245,6 +249,11 @@ export function renderDevicesList(devices, myDeviceId, onNameChange) {
     if (isMe) {
       const input = item.querySelector('.device-name-edit');
       input?.addEventListener('change', () => onNameChange(input.value));
+      input?.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        input.blur();
+      });
     }
     list.appendChild(item);
   });
