@@ -165,15 +165,19 @@ async function boot() {
 
 async function _openShareModal() {
   let readOnlyUrl = '';
+  let readOnlyError = false;
   try {
     const share = await getOrCreateReadOnlyShareLink(_roomId);
     readOnlyUrl = buildReadOnlyUrl(BASE, share?.token || '');
+    if (!share?.token) readOnlyError = true;
   } catch {
+    readOnlyError = true;
     UI.showToast('Could not create read-only link.', 'error');
   }
   UI.populateShareModal({
     editableUrl: buildRoomUrl(BASE, _roomId),
     readOnlyUrl,
+    readOnlyError,
     hasPasscode: !!_room?.passcode_hash,
     hasEncryption: !!_room?.encryption_enabled,
   });

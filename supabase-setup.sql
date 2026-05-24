@@ -115,7 +115,7 @@ begin
    limit 1;
 
   if v_token is null then
-    v_token := encode(gen_random_bytes(18), 'hex');
+    v_token := replace(gen_random_uuid()::text, '-', '') || replace(gen_random_uuid()::text, '-', '');
     insert into public.syncpad_share_links(room_id, token)
     values (p_room_id, v_token)
     on conflict (room_id) do update set disabled = false
