@@ -317,13 +317,14 @@ export function closeAllModals() {
 
 // ── Share modal ───────────────────────────────────────────────────────────────
 
-export function populateShareModal({ editableUrl, readOnlyUrl, hasPasscode, hasEncryption } = {}) {
+export function populateShareModal({ editableUrl, readOnlyUrl, readOnlyError = false, hasPasscode, hasEncryption } = {}) {
   // Editable URL row
   _wireShareRow('share-editable-text', 'share-editable-copy', editableUrl);
   _renderQr('share-editable-qr', editableUrl);
 
   // Read-only URL row
-  _wireShareRow('share-readonly-text', 'share-readonly-copy', readOnlyUrl);
+  const readOnlyDisplay = readOnlyUrl || (readOnlyError ? 'Could not create read-only link. Check Supabase setup.' : '');
+  _wireShareRow('share-readonly-text', 'share-readonly-copy', readOnlyUrl, readOnlyDisplay);
   _renderQr('share-readonly-qr', readOnlyUrl);
 
   // Warnings
@@ -343,15 +344,17 @@ export function populateShareModal({ editableUrl, readOnlyUrl, hasPasscode, hasE
 
   // QR-download buttons
   _wireQrDownload('share-editable-qr-download', 'share-editable-qr', 'syncpad-editable-qr.png');
-  _wireQrDownload('share-readonly-qr-download', 'share-readonly-qr', 'syncpad-readonly-qr.png');
+  _wireQrDownload('share-readonly-qr-download', 'share-readonly-qr', 'syncpad-readonly-qr.png', !readOnlyUrl);
 }
 
-function _wireShareRow(textId, btnId, url) {
+function _wireShareRow(textId, btnId, url, displayValue = url) {
   const textEl = document.getElementById(textId);
-  if (textEl) textEl.textContent = url || '';
+  if (textEl) textEl.textContent = displayValue || '';
   const btn = document.getElementById(btnId);
   if (!btn) return;
+  btn.disabled = !url;
   btn.onclick = async () => {
+    if (!url) return;
     try {
       await navigator.clipboard.writeText(url || '');
       showToast('Link copied to clipboard.', 'success');
@@ -379,11 +382,13 @@ function _renderQr(containerId, url) {
   } catch {}
 }
 
-function _wireQrDownload(btnId, qrContainerId, filename) {
+function _wireQrDownload(btnId, qrContainerId, filename, disabled = false) {
   const btn = document.getElementById(btnId);
   const container = document.getElementById(qrContainerId);
   if (!btn || !container) return;
+  btn.disabled = !!disabled;
   btn.onclick = () => {
+    if (disabled) return;
     const img = container.querySelector('img');
     const canvas = container.querySelector('canvas');
     const src = img?.src || canvas?.toDataURL?.('image/png');
