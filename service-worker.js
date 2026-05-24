@@ -7,7 +7,7 @@
 // IMPORTANT: do NOT cache Supabase REST, Realtime, Auth, or Storage URLs.
 // Cross-origin API requests pass through directly.
 
-const CACHE_VERSION = 'syncpad-v2';
+const CACHE_VERSION = 'syncpad-v3';
 const BASE = '/SyncPad';
 
 const PRECACHE_ASSETS = [

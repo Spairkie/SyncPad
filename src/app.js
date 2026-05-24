@@ -94,10 +94,10 @@ function _parseRoute() {
   const cleaned = location.pathname.replace(BASE, '').replace(/^\/+|\/+$/g, '');
   if (!cleaned) return { type: 'landing' };
 
-  if (cleaned === 'admin') return { type: 'info', title: 'Admin page', message: 'Admin page route is reserved for a future full-page experience.' };
-  if (cleaned === 'contact') return { type: 'info', title: 'Contact', message: 'Contact page route is reserved for a future full-page experience.' };
-  if (cleaned === 'privacy') return { type: 'info', title: 'Privacy', message: 'Privacy page route is reserved for a future full-page experience.' };
-  if (cleaned === 'terms') return { type: 'info', title: 'Terms', message: 'Terms page route is reserved for a future full-page experience.' };
+  if (cleaned === 'contact') return { type: 'contact' };
+  if (cleaned === 'privacy') return { type: 'privacy' };
+  if (cleaned === 'terms') return { type: 'terms' };
+  if (cleaned === 'admin') return { type: 'info', title: 'Admin page', message: 'Admin page route is reserved for a future private dashboard.' };
 
   const shareMatch = cleaned.match(/^share\/([^/]+)$/);
   if (shareMatch) return { type: 'share', token: shareMatch[1] };
@@ -139,6 +139,12 @@ async function boot() {
   if (route.type === 'landing' && !redirectRoom) {
     UI.showScreen('landing');
     wireLandingEvents();
+    return;
+  }
+
+  if ((route.type === 'contact' || route.type === 'privacy' || route.type === 'terms') && !redirectRoom) {
+    if (route.type === 'contact') wireContactEvents();
+    UI.showScreen(route.type);
     return;
   }
 
@@ -218,6 +224,67 @@ function wireLandingEvents() {
   createBtn?.addEventListener('click', createRoom);
   joinBtn?.addEventListener('click', joinRoom_);
   joinInput?.addEventListener('keydown', (e) => { if (e.key === 'Enter') joinRoom_(); });
+}
+
+
+let _contactEventsWired = false;
+
+function _getWeb3FormsKey() {
+  return (window.SYNCPAD_CONFIG?.web3FormsAccessKey || '').trim();
+}
+
+function _isPlaceholderWeb3Key(key) {
+  const normalized = (key || '').toLowerCase();
+  return !normalized || normalized.includes('replace') || normalized.includes('placeholder') || normalized.includes('your_');
+}
+
+function wireContactEvents() {
+  if (_contactEventsWired) return;
+  _contactEventsWired = true;
+
+  const form = document.getElementById('contact-form');
+  const status = document.getElementById('contact-status');
+  const submit = document.getElementById('contact-submit');
+  if (!form || !status || !submit) return;
+
+  const key = _getWeb3FormsKey();
+  const configured = !_isPlaceholderWeb3Key(key);
+
+  if (!configured) {
+    submit.disabled = true;
+    status.textContent = 'Contact form is not configured yet.';
+    status.className = 'contact-status warning';
+    return;
+  }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    submit.disabled = true;
+    status.textContent = 'Sending message…';
+    status.className = 'contact-status';
+    const payload = {
+      access_key: key,
+      subject: 'SyncPad contact form submission',
+      from_name: `${document.getElementById('contact-first-name')?.value || ''} ${document.getElementById('contact-last-name')?.value || ''}`.trim(),
+      email: document.getElementById('contact-email')?.value || '',
+      message: document.getElementById('contact-message')?.value || '',
+    };
+    try {
+      const res = await fetch('https://api.web3forms.com/submit', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.success) throw new Error(data?.message || 'Submit failed');
+      status.textContent = 'Message sent successfully.';
+      status.className = 'contact-status success';
+      form.reset();
+    } catch (err) {
+      status.textContent = 'Could not send message right now. Please try again later.';
+      status.className = 'contact-status error';
+    } finally {
+      submit.disabled = false;
+    }
+  });
 }
 
 async function _emptyContentForCurrentEncryption() {

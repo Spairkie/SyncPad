@@ -15,6 +15,9 @@ export function showScreen(name) {
   document.getElementById('encryption-screen')?.classList.toggle('hidden', name !== 'encryption');
   document.getElementById('app-screen')?.classList.toggle('hidden',        name !== 'app');
   document.getElementById('info-screen')?.classList.toggle('hidden',       name !== 'info');
+  document.getElementById('contact-screen')?.classList.toggle('hidden',    name !== 'contact');
+  document.getElementById('privacy-screen')?.classList.toggle('hidden',    name !== 'privacy');
+  document.getElementById('terms-screen')?.classList.toggle('hidden',      name !== 'terms');
 }
 
 export function setInfoScreen({ title = '', message = '' } = {}) {

@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="SyncPad — Temporary shared notepad. Real-time sync across all your devices." />
   <meta name="theme-color" content="#0f0f11" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="SyncPad" />
@@ -28,6 +29,7 @@
     window.SYNCPAD_CONFIG = {
       supabaseUrl:     'https://ddehkgdssdhhwpqljbiq.supabase.co',
       supabaseAnonKey: 'sb_publishable_ElR85NRU23YFtFaCHqu4qw_gzGMaN_r',
+      web3FormsAccessKey: '',
     };
   </script>
 </head>
@@ -63,6 +65,12 @@
       <span class="landing-chip">File handoff</span>
     </div>
   </div>
+
+    <div class="legal-links" aria-label="Legal links">
+      <a href="/SyncPad/contact">Contact</a>
+      <a href="/SyncPad/privacy">Privacy</a>
+      <a href="/SyncPad/terms">Terms</a>
+    </div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════
@@ -88,6 +96,12 @@
     <div class="auth-error" id="passcode-error"></div>
     <button id="passcode-submit-btn" class="auth-btn">Unlock</button>
   </div>
+
+    <div class="legal-links" aria-label="Legal links">
+      <a href="/SyncPad/contact">Contact</a>
+      <a href="/SyncPad/privacy">Privacy</a>
+      <a href="/SyncPad/terms">Terms</a>
+    </div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════
@@ -104,10 +118,63 @@
     <div class="auth-error" id="encryption-error"></div>
     <button id="encryption-submit-btn" class="auth-btn">Decrypt &amp; Open</button>
   </div>
+
+    <div class="legal-links" aria-label="Legal links">
+      <a href="/SyncPad/contact">Contact</a>
+      <a href="/SyncPad/privacy">Privacy</a>
+      <a href="/SyncPad/terms">Terms</a>
+    </div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════
-     INFO SCREEN (route placeholders)
+     CONTACT / PRIVACY / TERMS SCREENS
+═══════════════════════════════════════════════════════════════ -->
+<div id="contact-screen" class="legal-screen hidden">
+  <div class="legal-card">
+    <h1>Contact SyncPad</h1>
+    <p class="legal-lead">Have feedback or a bug report? Send a message below.</p>
+    <form id="contact-form" class="contact-form">
+      <div class="contact-grid">
+        <label>First name<input id="contact-first-name" name="first_name" type="text" required maxlength="80" /></label>
+        <label>Last name<input id="contact-last-name" name="last_name" type="text" required maxlength="80" /></label>
+      </div>
+      <label>Email<input id="contact-email" name="email" type="email" required maxlength="180" /></label>
+      <label>Message<textarea id="contact-message" name="message" required rows="6" maxlength="4000"></textarea></label>
+      <div id="contact-status" class="contact-status" aria-live="polite"></div>
+      <button id="contact-submit" type="submit" class="auth-btn">Send message</button>
+    </form>
+    <div class="legal-links">
+      <a href="/SyncPad/">Back to SyncPad</a>
+      <a href="/SyncPad/privacy">Privacy</a>
+      <a href="/SyncPad/terms">Terms</a>
+    </div>
+  </div>
+</div>
+
+<div id="privacy-screen" class="legal-screen hidden">
+  <div class="legal-card">
+    <h1>Privacy</h1>
+    <p class="legal-lead">SyncPad is anonymous by default, but not private by default.</p>
+    <ul class="legal-list">
+      <li>Normal rooms do not require accounts.</li><li>Editable room links are anonymous room paths.</li><li>Anyone with the editable room path can edit that room.</li><li>Read-only share links hide the room name but are still secret bearer links.</li><li>Room text and file metadata are stored in Supabase.</li><li>Uploaded files are stored in Supabase Storage.</li><li>Browser localStorage may store drafts, preferences, theme, device name, and similar local data.</li><li>Encrypted room text requires the passphrase.</li><li>If the passphrase is forgotten, encrypted room text cannot be recovered.</li><li>Uploaded files are not encrypted unless file encryption is actually implemented.</li><li>The site owner/admin may access unencrypted rooms/files for maintenance, troubleshooting, and abuse handling.</li><li>Contact form submissions go through Web3Forms only if configured.</li><li>No analytics or ad cookies are used unless actually added to the app.</li>
+    </ul>
+    <div class="legal-links"><a href="/SyncPad/">Back to SyncPad</a><a href="/SyncPad/contact">Contact</a><a href="/SyncPad/terms">Terms</a></div>
+  </div>
+</div>
+
+<div id="terms-screen" class="legal-screen hidden">
+  <div class="legal-card">
+    <h1>Terms</h1>
+    <p class="legal-lead">By using SyncPad, you agree to these simple terms.</p>
+    <ul class="legal-list">
+      <li>SyncPad is a personal/portfolio project.</li><li>There is no guarantee, warranty, uptime promise, or SLA.</li><li>Do not store sensitive information, passwords, classified information, HIPAA/PII, or anything important.</li><li>Anyone with an editable room URL can edit that room.</li><li>Anyone with a read-only share URL can read that room.</li><li>Content may be changed or deleted by other users with access, expiration, view-once behavior, manual clear, admin cleanup, bugs, or maintenance.</li><li>Encrypted room text depends on remembering the passphrase.</li><li>Files are not encrypted unless file encryption is actually implemented.</li><li>The site owner/admin may remove rooms/files/reports for maintenance, security, abuse prevention, or testing.</li><li>The app may change or be discontinued at any time.</li>
+    </ul>
+    <div class="legal-links"><a href="/SyncPad/">Back to SyncPad</a><a href="/SyncPad/contact">Contact</a><a href="/SyncPad/privacy">Privacy</a></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     INFO SCREEN
 ═══════════════════════════════════════════════════════════════ -->
 <div id="info-screen" class="auth-screen hidden">
   <div class="auth-card">
@@ -281,6 +348,7 @@
         Time
       </button>
     </div>
+    <div class="footer-links"><a href="/SyncPad/contact">Contact</a><a href="/SyncPad/privacy">Privacy</a><a href="/SyncPad/terms">Terms</a></div>
   </footer>
 
   <!-- ── Mobile action bar (hidden on desktop) ─────────────────── -->
@@ -500,6 +568,12 @@
     </div>
 
   </div>
+
+    <div class="legal-links" aria-label="Legal links">
+      <a href="/SyncPad/contact">Contact</a>
+      <a href="/SyncPad/privacy">Privacy</a>
+      <a href="/SyncPad/terms">Terms</a>
+    </div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════
@@ -727,6 +801,12 @@
       <button class="modal-btn-cancel" id="shortcuts-modal-close">Close</button>
     </div>
   </div>
+
+    <div class="legal-links" aria-label="Legal links">
+      <a href="/SyncPad/contact">Contact</a>
+      <a href="/SyncPad/privacy">Privacy</a>
+      <a href="/SyncPad/terms">Terms</a>
+    </div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════
