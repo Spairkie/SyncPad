@@ -540,7 +540,7 @@ async function startApp() {
     UI.updateDeviceCount(devices.length);
     UI.renderDevicesList(devices, deviceId, (name) => {
       setDeviceName(name);
-      updatePresenceDeviceName(name);
+      updatePresenceDeviceName(getDeviceName());
     });
   }, { readOnly: _isReadOnly });
 

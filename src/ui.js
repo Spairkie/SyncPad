@@ -249,6 +249,11 @@ export function renderDevicesList(devices, myDeviceId, onNameChange) {
     if (isMe) {
       const input = item.querySelector('.device-name-edit');
       input?.addEventListener('change', () => onNameChange(input.value));
+      input?.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        input.blur();
+      });
     }
     list.appendChild(item);
   });
