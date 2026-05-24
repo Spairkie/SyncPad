@@ -184,8 +184,11 @@ async function _openShareModal() {
     editableUrl: buildRoomUrl(BASE, _roomId),
     readOnlyUrl,
     readOnlyError,
+    roomPath: `/${_roomId}`,
     hasPasscode: !!_room?.passcode_hash,
     hasEncryption: !!_room?.encryption_enabled,
+    hasReadOnlyLink: !!readOnlyUrl,
+    isEditingLocked: !!_room?.editing_locked,
   });
   UI.openModal('share-modal');
 }

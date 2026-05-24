@@ -582,7 +582,16 @@
 <!-- Share modal -->
 <div class="modal-backdrop" id="share-modal">
   <div class="modal share-modal">
-    <h3>Share this room</h3>
+    <div class="share-modal-header">
+      <h3>Share this room</h3>
+      <p class="share-subtitle">Choose whether others can edit or only view this room.</p>
+    </div>
+
+    <div class="share-room-summary" aria-live="polite">
+      <div class="share-summary-label">Room</div>
+      <div class="share-room-path" id="share-room-path"></div>
+      <div class="share-room-badges" id="share-room-badges"></div>
+    </div>
 
     <!-- Editable link card -->
     <div class="share-card share-card--edit">
@@ -593,10 +602,14 @@
       <p class="share-section-desc">Editable link: anyone with this link can edit this room.</p>
       <div class="share-url-box">
         <span class="share-url-text" id="share-editable-text"></span>
-        <button class="share-copy-btn" id="share-editable-copy">Copy</button>
+        <button class="share-copy-btn" id="share-editable-copy" aria-label="Copy editable link">Copy</button>
       </div>
+      <button class="share-native-btn hidden" id="share-editable-native-btn" aria-label="Share editable link">
+        Share editable link
+      </button>
+      <div class="share-qr-title">QR for Editable link</div>
       <div class="share-qr" id="share-editable-qr"></div>
-      <button class="share-qr-download" id="share-editable-qr-download">
+      <button class="share-qr-download" id="share-editable-qr-download" aria-label="Download editable link QR">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         Download QR
       </button>
@@ -611,22 +624,29 @@
       <p class="share-section-desc">Read-only link: anyone with this link can view only. It hides the original room name.</p>
       <div class="share-url-box">
         <span class="share-url-text" id="share-readonly-text"></span>
-        <button class="share-copy-btn" id="share-readonly-copy">Copy</button>
+        <button class="share-copy-btn" id="share-readonly-copy" aria-label="Copy read-only link">Copy</button>
       </div>
+      <button class="share-native-btn hidden" id="share-readonly-native-btn" aria-label="Share read-only link">
+        Share read-only link
+      </button>
+      <div class="share-qr-title">QR for Read-only link</div>
       <div class="share-qr" id="share-readonly-qr"></div>
-      <button class="share-qr-download" id="share-readonly-qr-download">
+      <button class="share-qr-download" id="share-readonly-qr-download" aria-label="Download read-only link QR">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         Download QR
       </button>
     </div>
 
-    <!-- Passcode / encryption notices -->
-    <div class="share-passcode-notice hidden" id="share-passcode-notice">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-      This note has a passcode — share it separately.
+    <!-- Notes -->
+    <div class="share-note">
+      Anyone with the editable link can change the room. Use the read-only link when you only want someone to view.
     </div>
     <div class="share-encryption-notice hidden" id="share-encryption-notice">
-      🔐 Encryption is on. The passphrase is not included in this link — share it separately.
+      Encrypted note text still requires the passphrase. Files are not encrypted unless file encryption is added.
+    </div>
+    <div class="share-passcode-notice hidden" id="share-passcode-notice">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      Viewers may need the room passcode before opening the note.
     </div>
 
     <!-- Security disclaimer -->
@@ -635,10 +655,8 @@
       <span><strong>Convenience only.</strong> Read-only mode and room lock are not backend security boundaries. Do not share passwords, PII, or sensitive data via SyncPad.</span>
     </div>
 
-    <button class="share-native-btn hidden" id="share-native-btn">Share via&hellip;</button>
-
     <div class="modal-actions">
-      <button class="modal-btn-cancel" id="share-modal-close">Close</button>
+      <button class="modal-btn-cancel" id="share-modal-close" aria-label="Close share modal">Close</button>
     </div>
   </div>
 </div>
