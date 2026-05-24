@@ -329,7 +329,14 @@ export function closeAllModals() {
 
 // ── Share modal ───────────────────────────────────────────────────────────────
 
-export function populateShareModal({ editableUrl, readOnlyUrl, readOnlyError = false, hasPasscode, hasEncryption } = {}) {
+export function populateShareModal({
+  editableUrl, readOnlyUrl, readOnlyError = false, hasPasscode, hasEncryption,
+  roomPath = '', hasReadOnlyLink = false, isEditingLocked = false
+} = {}) {
+  const roomPathEl = document.getElementById('share-room-path');
+  if (roomPathEl) roomPathEl.textContent = roomPath || '';
+  _renderShareBadges({ hasPasscode, hasEncryption, hasReadOnlyLink, isEditingLocked });
+
   // Editable URL row
   _wireShareRow('share-editable-text', 'share-editable-copy', editableUrl);
   _renderQr('share-editable-qr', editableUrl);
@@ -343,20 +350,29 @@ export function populateShareModal({ editableUrl, readOnlyUrl, readOnlyError = f
   document.getElementById('share-passcode-notice')?.classList.toggle('hidden', !hasPasscode);
   document.getElementById('share-encryption-notice')?.classList.toggle('hidden', !hasEncryption);
 
-  // Native share
-  const nativeBtn = document.getElementById('share-native-btn');
-  if (nativeBtn) {
-    if (navigator.share) {
-      nativeBtn.classList.remove('hidden');
-      nativeBtn.onclick = () => navigator.share({ title: 'SyncPad', url: editableUrl }).catch(() => {});
-    } else {
-      nativeBtn.classList.add('hidden');
-    }
-  }
+  _wireNativeShare('share-editable-native-btn', editableUrl, 'Share editable link');
+  _wireNativeShare('share-readonly-native-btn', readOnlyUrl, 'Share read-only link');
 
   // QR-download buttons
   _wireQrDownload('share-editable-qr-download', 'share-editable-qr', 'syncpad-editable-qr.png');
   _wireQrDownload('share-readonly-qr-download', 'share-readonly-qr', 'syncpad-readonly-qr.png', !readOnlyUrl);
+}
+
+function _renderShareBadges({ hasPasscode, hasEncryption, hasReadOnlyLink, isEditingLocked }) {
+  const badgesEl = document.getElementById('share-room-badges');
+  if (!badgesEl) return;
+  badgesEl.innerHTML = '';
+  const badges = [];
+  if (hasPasscode) badges.push('Passcode protected');
+  if (hasEncryption) badges.push('Encrypted note');
+  if (hasReadOnlyLink) badges.push('Read-only link');
+  if (isEditingLocked) badges.push('Editing locked');
+  badges.forEach((label) => {
+    const badge = document.createElement('span');
+    badge.className = 'share-room-badge';
+    badge.textContent = label;
+    badgesEl.appendChild(badge);
+  });
 }
 
 function _wireShareRow(textId, btnId, url, displayValue = url) {
@@ -409,6 +425,19 @@ function _wireQrDownload(btnId, qrContainerId, filename, disabled = false) {
     a.href = src;
     a.download = filename || 'syncpad-qr.png';
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  };
+}
+
+function _wireNativeShare(btnId, url, label) {
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+  const canShare = !!(navigator.share && url);
+  btn.classList.toggle('hidden', !navigator.share);
+  btn.disabled = !canShare;
+  btn.setAttribute('aria-label', label);
+  btn.onclick = () => {
+    if (!canShare) return;
+    navigator.share({ title: 'SyncPad', text: label, url }).catch(() => {});
   };
 }
 

@@ -773,7 +773,17 @@ body.lock-mode .note-preview li.md-task input[type="checkbox"] { cursor: not-all
    SHARE MODAL (card redesign)
 ══════════════════════════════════════════════════════════════ */
 .share-modal { max-width: 480px; max-height: 92vh; overflow-y: auto; padding: 22px 20px; }
-.share-modal h3 { margin-bottom: 16px; }
+.share-modal h3 { margin-bottom: 6px; }
+.share-modal-header { margin-bottom: 14px; }
+.share-subtitle { margin: 0; font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
+.share-room-summary {
+  border: 1px solid var(--border); background: var(--bg-elevated);
+  border-radius: var(--radius-md); padding: 10px 12px; margin-bottom: 12px;
+}
+.share-summary-label { font-size: 11px; color: var(--text-muted); margin-bottom: 5px; text-transform: uppercase; letter-spacing: .04em; }
+.share-room-path { font-size: 13px; font-family: var(--font-mono); color: var(--text-primary); margin-bottom: 8px; word-break: break-all; }
+.share-room-badges { display: flex; flex-wrap: wrap; gap: 6px; }
+.share-room-badge { font-size: 11px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg-surface); color: var(--text-secondary); }
 .share-card {
   border-radius: var(--radius-lg); border: 1px solid var(--border);
   padding: 15px; margin-bottom: 12px;
@@ -808,6 +818,8 @@ body.lock-mode .note-preview li.md-task input[type="checkbox"] { cursor: not-all
   transition: opacity var(--transition);
 }
 .share-copy-btn:hover { opacity: 0.8; }
+.share-copy-btn:disabled, .share-qr-download:disabled, .share-native-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.share-qr-title { font-size: 11px; color: var(--text-secondary); margin: 2px 0 6px; }
 .share-qr { text-align: center; margin: 10px 0 8px; }
 .share-qr canvas, .share-qr img { border-radius: var(--radius-md); }
 .share-qr-download {
@@ -836,6 +848,11 @@ body.lock-mode .note-preview li.md-task input[type="checkbox"] { cursor: not-all
   background: var(--accent-dim); border: 1px solid rgba(245,166,35,0.25);
   border-radius: var(--radius-sm); padding: 8px 12px; margin-bottom: 8px;
   display: flex; align-items: center; gap: 6px;
+}
+.share-note {
+  margin: 12px 0 8px; padding: 10px 12px; border-radius: var(--radius-md);
+  border: 1px solid rgba(96,165,250,0.25); background: rgba(96,165,250,0.08);
+  color: var(--text-secondary); font-size: 12px; line-height: 1.55;
 }
 .share-send-to-phone {
   margin-top: 12px; padding: 12px 14px;
@@ -1042,6 +1059,9 @@ body.lock-mode .note-preview li.md-task input[type="checkbox"] { cursor: not-all
   .tools-grid { grid-template-columns: 1fr 1fr 1fr; }
   .templates-list { grid-template-columns: 1fr; }
   .share-modal { padding: 18px 16px; }
+  .share-url-box { align-items: stretch; flex-direction: column; gap: 7px; }
+  .share-copy-btn { width: 100%; min-height: 36px; }
+  .share-qr-download, .share-native-btn { min-height: 38px; }
   .remote-notice { left: 12px; right: 12px; transform: none; max-width: none; animation: none; }
   .remote-notice-actions { justify-content: stretch; }
   .remote-notice-btn { flex: 1; }
