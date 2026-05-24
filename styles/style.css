@@ -1440,6 +1440,22 @@ kbd {
 .dash-ol { padding-left: 18px; margin: 6px 0 8px; }
 .dash-ol li { margin-bottom: 4px; }
 
+
+.landing-legal-links {
+  width: 100%;
+  margin-top: 30px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  justify-content: center;
+}
+
+@media (max-width: 700px) {
+  .landing-legal-links {
+    margin-top: 24px;
+    padding-top: 14px;
+    gap: 16px;
+  }
+}
 .legal-links { display:flex; gap:14px; flex-wrap:wrap; justify-content:center; margin-top:20px; }
 .legal-links a { color: var(--text-muted); text-decoration:none; font-size:13px; }
 .legal-links a:hover { color: var(--text-primary); text-decoration:underline; }
