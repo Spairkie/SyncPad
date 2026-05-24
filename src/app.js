@@ -84,7 +84,31 @@ let _searchMatches = []; // [{start,end}]
 let _searchIndex   = -1;
 let _searchTerm    = '';
 
+
 const BASE = '/SyncPad';
+
+const RESERVED_ROOM_PATHS = new Set(['admin', 'contact', 'privacy', 'terms', 'share', 'assets', 'src', 'styles', 'docs']);
+
+function _parseRoute() {
+  const cleaned = location.pathname.replace(BASE, '').replace(/^\/+|\/+$/g, '');
+  if (!cleaned) return { type: 'landing' };
+
+  if (cleaned === 'admin') return { type: 'info', title: 'Admin page', message: 'Admin page route is reserved for a future full-page experience.' };
+  if (cleaned === 'contact') return { type: 'info', title: 'Contact', message: 'Contact page route is reserved for a future full-page experience.' };
+  if (cleaned === 'privacy') return { type: 'info', title: 'Privacy', message: 'Privacy page route is reserved for a future full-page experience.' };
+  if (cleaned === 'terms') return { type: 'info', title: 'Terms', message: 'Terms page route is reserved for a future full-page experience.' };
+
+  const shareMatch = cleaned.match(/^share\/(.+)$/);
+  if (shareMatch) {
+    return {
+      type: 'info',
+      title: 'Share link not implemented yet',
+      message: 'This hidden share-link route is reserved for a future read-only share flow.',
+    };
+  }
+
+  return { type: 'room', roomId: cleaned };
+}
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 
@@ -108,27 +132,31 @@ async function boot() {
   // URL mode (?mode=read)
   _isReadOnly = getUrlMode() === 'read';
 
-  const pathRoom = _parseRoomFromPath();
+  const route = _parseRoute();
 
-  // If no room ID in the URL and no redirect, show the landing screen
-  if (!pathRoom && !redirectRoom) {
+  if (route.type === 'landing' && !redirectRoom) {
     UI.showScreen('landing');
     wireLandingEvents();
     return;
   }
 
-  const roomId = pathRoom ? sanitizeRoomId(pathRoom) : generateRoomId();
-  if (!pathRoom) {
+  if (route.type === 'info' && !redirectRoom) {
+    UI.setInfoScreen({ title: route.title, message: route.message });
+    UI.showScreen('info');
+    return;
+  }
+
+  const rawRoomId = redirectRoom || route.roomId || generateRoomId();
+  const sanitizedRoomId = sanitizeRoomId(rawRoomId);
+  const blockedRoom = RESERVED_ROOM_PATHS.has(sanitizedRoomId.toLowerCase());
+  const roomId = blockedRoom ? generateRoomId() : sanitizedRoomId;
+
+  if (!redirectRoom && (route.type !== 'room' || roomId !== route.roomId || blockedRoom)) {
     const qs = location.search || '';
     history.replaceState(null, '', `${BASE}/${roomId}${qs}`);
   }
 
   await joinRoom(roomId);
-}
-
-function _parseRoomFromPath() {
-  const path = location.pathname.replace(BASE, '').replace(/^\/+|\/+$/g, '');
-  return path || null;
 }
 
 // ── Landing screen ────────────────────────────────────────────────────────────

@@ -14,6 +14,14 @@ export function showScreen(name) {
   document.getElementById('passcode-screen')?.classList.toggle('hidden',   name !== 'passcode');
   document.getElementById('encryption-screen')?.classList.toggle('hidden', name !== 'encryption');
   document.getElementById('app-screen')?.classList.toggle('hidden',        name !== 'app');
+  document.getElementById('info-screen')?.classList.toggle('hidden',       name !== 'info');
+}
+
+export function setInfoScreen({ title = '', message = '' } = {}) {
+  const t = document.getElementById('info-title');
+  const m = document.getElementById('info-message');
+  if (t) t.textContent = title;
+  if (m) m.textContent = message;
 }
 
 export function setLoadingMessage(msg) {
