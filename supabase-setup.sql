@@ -72,6 +72,86 @@ create index if not exists idx_syncpad_rooms_expires
 
 alter table syncpad_rooms enable row level security;
 alter table syncpad_files enable row level security;
+alter table if exists public.syncpad_share_links enable row level security;
+
+create table if not exists public.syncpad_share_links (
+  id uuid primary key default gen_random_uuid(),
+  room_id text not null references public.syncpad_rooms(room_id) on delete cascade,
+  token text unique not null,
+  created_at timestamptz not null default now(),
+  last_used_at timestamptz,
+  disabled boolean not null default false
+);
+
+create unique index if not exists idx_syncpad_share_links_room_id
+  on public.syncpad_share_links(room_id);
+create unique index if not exists idx_syncpad_share_links_token
+  on public.syncpad_share_links(token);
+
+drop policy if exists "anon no direct share-link reads" on public.syncpad_share_links;
+drop policy if exists "anon no direct share-link writes" on public.syncpad_share_links;
+
+create policy "anon no direct share-link reads"
+  on public.syncpad_share_links for select to anon using (false);
+create policy "anon no direct share-link writes"
+  on public.syncpad_share_links for all to anon using (false) with check (false);
+
+create or replace function public.get_or_create_readonly_share_link(p_room_id text)
+returns table(token text)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_token text;
+begin
+  if p_room_id is null or btrim(p_room_id) = '' then
+    return;
+  end if;
+
+  select sl.token into v_token
+    from public.syncpad_share_links sl
+   where sl.room_id = p_room_id and sl.disabled = false
+   limit 1;
+
+  if v_token is null then
+    v_token := encode(gen_random_bytes(18), 'hex');
+    insert into public.syncpad_share_links(room_id, token)
+    values (p_room_id, v_token)
+    on conflict (room_id) do update set disabled = false
+    returning syncpad_share_links.token into v_token;
+  end if;
+
+  return query select v_token;
+end;
+$$;
+
+create or replace function public.resolve_readonly_share_link(p_token text)
+returns table(room_id text, content text, updated_at timestamptz, encryption_enabled boolean, encryption_salt text, passcode_hash text, passcode_salt text, view_once boolean, viewed boolean, editing_locked boolean, cleared_reason text, expires_at timestamptz)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if p_token is null or btrim(p_token) = '' then
+    return;
+  end if;
+
+  update public.syncpad_share_links
+     set last_used_at = now()
+   where token = p_token and disabled = false;
+
+  return query
+  select r.room_id, r.content, r.updated_at, r.encryption_enabled, r.encryption_salt, r.passcode_hash, r.passcode_salt, r.view_once, r.viewed, r.editing_locked, r.cleared_reason, r.expires_at
+    from public.syncpad_share_links sl
+    join public.syncpad_rooms r on r.room_id = sl.room_id
+   where sl.token = p_token and sl.disabled = false
+   limit 1;
+end;
+$$;
+
+grant execute on function public.get_or_create_readonly_share_link(text) to anon, authenticated;
+grant execute on function public.resolve_readonly_share_link(text) to anon, authenticated;
 
 -- Drop-and-recreate makes this script idempotent without needing
 -- "create policy if not exists" (which is not supported in all PG versions).

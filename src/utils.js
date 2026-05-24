@@ -291,8 +291,8 @@ export function buildRoomUrl(basePath, roomId) {
  * @param {string} roomId
  * @returns {string}
  */
-export function buildReadOnlyUrl(basePath, roomId) {
-  return `${location.origin}${basePath}/${roomId}?mode=read`;
+export function buildReadOnlyUrl(basePath, tokenOrRoomId) {
+  return `${location.origin}${basePath}/share/${encodeURIComponent(tokenOrRoomId)}`;
 }
 
 /**

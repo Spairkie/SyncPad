@@ -9,7 +9,7 @@ import {
   buildRoomUrl, buildReadOnlyUrl, getUrlMode,
 } from './utils.js';
 
-import { loadRoom, createRoom, clearRoomContent, subscribeToRoom } from './rooms.js';
+import { loadRoom, createRoom, clearRoomContent, subscribeToRoom, getOrCreateReadOnlyShareLink, resolveReadOnlyShareLink } from './rooms.js';
 
 import {
   initBroadcast, destroyBroadcast,
@@ -73,7 +73,8 @@ let _expTimer      = null;
 let _monospace     = false;
 let _eventsWired   = false;  // v1: guard against double-wiring
 let _consumingViewOnce = false; // v1: short-circuit own view-once clear echo
-let _isReadOnly    = false;  // v1: ?mode=read
+let _isReadOnly    = false;  // v1: ?mode=read or /share/:token
+let _shareToken    = null;
 let _markdownMode  = 'write'; // 'write' | 'preview' | 'split'
 let _showPreview   = false;  // derived: _markdownMode !== 'write'
 let _previewObserverWired = false;
@@ -98,14 +99,8 @@ function _parseRoute() {
   if (cleaned === 'privacy') return { type: 'info', title: 'Privacy', message: 'Privacy page route is reserved for a future full-page experience.' };
   if (cleaned === 'terms') return { type: 'info', title: 'Terms', message: 'Terms page route is reserved for a future full-page experience.' };
 
-  const shareMatch = cleaned.match(/^share\/(.+)$/);
-  if (shareMatch) {
-    return {
-      type: 'info',
-      title: 'Share link not implemented yet',
-      message: 'This hidden share-link route is reserved for a future read-only share flow.',
-    };
-  }
+  const shareMatch = cleaned.match(/^share\/([^/]+)$/);
+  if (shareMatch) return { type: 'share', token: shareMatch[1] };
 
   return { type: 'room', roomId: cleaned };
 }
@@ -134,6 +129,13 @@ async function boot() {
 
   const route = _parseRoute();
 
+  if (route.type === 'share') {
+    _isReadOnly = true;
+    _shareToken = route.token;
+    await joinReadOnlyShareRoute(route.token);
+    return;
+  }
+
   if (route.type === 'landing' && !redirectRoom) {
     UI.showScreen('landing');
     wireLandingEvents();
@@ -160,6 +162,23 @@ async function boot() {
 }
 
 // ── Landing screen ────────────────────────────────────────────────────────────
+
+async function _openShareModal() {
+  let readOnlyUrl = '';
+  try {
+    const share = await getOrCreateReadOnlyShareLink(_roomId);
+    readOnlyUrl = buildReadOnlyUrl(BASE, share?.token || '');
+  } catch {
+    UI.showToast('Could not create read-only link.', 'error');
+  }
+  UI.populateShareModal({
+    editableUrl: buildRoomUrl(BASE, _roomId),
+    readOnlyUrl,
+    hasPasscode: !!_room?.passcode_hash,
+    hasEncryption: !!_room?.encryption_enabled,
+  });
+  UI.openModal('share-modal');
+}
 
 function wireLandingEvents() {
   const createBtn = document.getElementById('landing-create-btn');
@@ -202,6 +221,28 @@ async function _emptyContentForCurrentEncryption() {
 }
 
 // ── Join flow ─────────────────────────────────────────────────────────────────
+
+async function joinReadOnlyShareRoute(token) {
+  UI.setLoadingMessage('Opening read-only share link…');
+  try {
+    const resolved = await resolveReadOnlyShareLink(token);
+    if (!resolved?.room_id) {
+      UI.setInfoScreen({
+        title: 'Share link unavailable',
+        message: 'This read-only link is invalid, disabled, or the room no longer exists.',
+      });
+      UI.showScreen('info');
+      return;
+    }
+    await joinRoom(resolved.room_id);
+  } catch {
+    UI.setInfoScreen({
+      title: 'Share link unavailable',
+      message: 'This read-only link is invalid, disabled, or the room no longer exists.',
+    });
+    UI.showScreen('info');
+  }
+}
 
 async function joinRoom(roomId) {
   _roomId = roomId;
@@ -766,13 +807,7 @@ function wireEvents() {
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeMoreDropdown(); UI.closeAllPanels(); UI.closeAllModals(); } });
 
   document.getElementById('btn-share')?.addEventListener('click', () => {
-    UI.populateShareModal({
-      editableUrl: buildRoomUrl(BASE, _roomId),
-      readOnlyUrl: buildReadOnlyUrl(BASE, _roomId),
-      hasPasscode: !!_room?.passcode_hash,
-      hasEncryption: !!_room?.encryption_enabled,
-    });
-    UI.openModal('share-modal');
+    _openShareModal();
   });
 
   document.getElementById('room-name')?.addEventListener('click', () => {
@@ -794,13 +829,7 @@ function wireEvents() {
 
   // ── Mobile action bar ──────────────────────────────────────────────────────
   document.getElementById('mob-btn-share')?.addEventListener('click', () => {
-    UI.populateShareModal({
-      editableUrl: buildRoomUrl(BASE, _roomId),
-      readOnlyUrl: buildReadOnlyUrl(BASE, _roomId),
-      hasPasscode: !!_room?.passcode_hash,
-      hasEncryption: !!_room?.encryption_enabled,
-    });
-    UI.openModal('share-modal');
+    _openShareModal();
   });
   document.getElementById('mob-btn-files')?.addEventListener('click',    () => UI.togglePanel('files-panel'));
   document.getElementById('mob-btn-tools')?.addEventListener('click',    () => UI.togglePanel('tools-panel'));
@@ -842,15 +871,7 @@ function wireEvents() {
       catch { UI.showToast('Clipboard access denied.', 'error'); }
     },
 
-    'tool-share': () => {
-      UI.populateShareModal({
-        editableUrl: buildRoomUrl(BASE, _roomId),
-        readOnlyUrl: buildReadOnlyUrl(BASE, _roomId),
-        hasPasscode: !!_room?.passcode_hash,
-        hasEncryption: !!_room?.encryption_enabled,
-      });
-      UI.openModal('share-modal');
-    },
+    'tool-share': () => { _openShareModal(); },
 
     'tool-clear': () => {
       if (!canClearNote()) { UI.showToast(editBlockedReason() || 'Clear is disabled.', 'warning'); return; }
@@ -1312,7 +1333,7 @@ function _openAdminDashboard() {
         .catch(() => UI.showToast('Could not copy.', 'error'));
     },
     onCopyReadOnlyLink: () => {
-      copyToClipboard(buildReadOnlyUrl(BASE, _roomId))
+      (async () => copyToClipboard(buildReadOnlyUrl(BASE, (await getOrCreateReadOnlyShareLink(_roomId))?.token || '')))()
         .then(() => UI.showToast('Read-only link copied!', 'success'))
         .catch(() => UI.showToast('Could not copy.', 'error'));
     },
