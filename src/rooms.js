@@ -101,14 +101,14 @@ export async function getOrCreateReadOnlyShareLink(roomId) {
   const sb = getSupabaseClient();
   const { data, error } = await sb.rpc('get_or_create_readonly_share_link', { p_room_id: roomId });
   if (error) { logSupabaseError('getOrCreateReadOnlyShareLink', error, { room_id: roomId }); throw error; }
-  return data;
+  return Array.isArray(data) ? data[0] || null : data;
 }
 
 export async function resolveReadOnlyShareLink(token) {
   const sb = getSupabaseClient();
   const { data, error } = await sb.rpc('resolve_readonly_share_link', { p_token: token });
   if (error) { logSupabaseError('resolveReadOnlyShareLink', error, { token }); throw error; }
-  return data;
+  return Array.isArray(data) ? data[0] || null : data;
 }
 
 // ── Realtime subscription ─────────────────────────────────────────────────────
