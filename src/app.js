@@ -1099,7 +1099,6 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
   // ── Search panel ───────────────────────────────────────────────────────────
   const searchInput = document.getElementById('search-input');
   const searchCount = document.getElementById('search-count');
-  const editor      = document.getElementById('note-editor');
 
   const _runSearch = () => {
     _searchTerm = (searchInput?.value || '').toLowerCase();
