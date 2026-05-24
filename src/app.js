@@ -142,13 +142,13 @@ async function boot() {
     return;
   }
 
-  if ((route.type === 'contact' || route.type === 'privacy' || route.type === 'terms') && !redirectRoom) {
+  if (route.type === 'contact' || route.type === 'privacy' || route.type === 'terms') {
     if (route.type === 'contact') wireContactEvents();
     UI.showScreen(route.type);
     return;
   }
 
-  if (route.type === 'info' && !redirectRoom) {
+  if (route.type === 'info') {
     UI.setInfoScreen({ title: route.title, message: route.message });
     UI.showScreen('info');
     return;
@@ -216,6 +216,11 @@ function wireLandingEvents() {
     }
     id = sanitizeRoomId(id);
     if (!id) { joinInput.focus(); return; }
+    if (RESERVED_ROOM_PATHS.has(id.toLowerCase())) {
+      UI.showToast('That room name is reserved. Choose a different room ID.', 'warning');
+      joinInput.focus();
+      return;
+    }
     history.pushState(null, '', `${BASE}/${id}`);
     UI.showScreen('loading');
     joinRoom(id);
