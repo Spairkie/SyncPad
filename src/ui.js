@@ -116,8 +116,11 @@ export function showRemoteNotice({ onApply, onKeep, onCopy, onDismiss, localText
 
 function _relativeTime(ts) {
   if (!ts) return '';
-  const diffMs = Date.now() - ts;
-  if (diffMs < 0) return 'just now';
+  // ts may be a Unix ms number (from live-broadcast) or an ISO string (from DB
+  // updated_at). Coerce to ms so arithmetic doesn't produce NaN.
+  const msTs  = typeof ts === 'number' ? ts : new Date(ts).getTime();
+  const diffMs = Date.now() - msTs;
+  if (!isFinite(diffMs) || diffMs < 0) return 'just now';
   if (diffMs < 60_000) return 'just now';
   if (diffMs < 3_600_000) return `${Math.floor(diffMs / 60_000)}m ago`;
   return `${Math.floor(diffMs / 3_600_000)}h ago`;
@@ -685,7 +688,9 @@ export function renderSettingsPanel(room) {
 
   if (pcBtn)   pcBtn.textContent   = room.passcode_hash      ? 'Remove'  : 'Set';
   if (encBtn)  encBtn.textContent  = room.encryption_enabled ? 'Disable' : 'Enable';
-  if (expBtn)  expBtn.textContent  = room.expires_at         ? 'Remove'  : 'Set';
+  // 'Modify' when an expiration is already set — the actual Remove button is
+  // inside the collapsible controls section (setting-exp-remove-btn).
+  if (expBtn)  expBtn.textContent  = room.expires_at         ? 'Modify'  : 'Set';
   if (voBtn)   voBtn.textContent   = room.view_once          ? 'Disable' : 'Enable';
   if (lockBtn) lockBtn.textContent = room.editing_locked     ? 'Unlock'  : 'Lock';
 }

@@ -551,8 +551,9 @@ async function startApp() {
       onApply:   () => { applyPendingRemote();   UI.hideRemoteNotice(); },
       onKeep:    () => { dismissPendingRemote(); UI.hideRemoteNotice(); },
       onCopy:    async () => {
-        try { await copyToClipboard(remoteText ?? getPendingRemote() ?? ''); UI.showToast('Remote content copied.', 'success'); }
-        catch { UI.showToast('Could not copy.', 'error'); }
+        const ok = await copyToClipboard(remoteText ?? getPendingRemote() ?? '');
+        if (ok) UI.showToast('Remote content copied.', 'success');
+        else    UI.showToast('Could not copy.', 'error');
       },
       onDismiss: () => { UI.hideRemoteNotice(); },
       localText:  UI.getEditorValue(),
@@ -1094,7 +1095,9 @@ function wireEvents() {
 
   document.getElementById('room-name')?.addEventListener('click', () => {
     copyToClipboard(buildRoomUrl(BASE, _roomId))
-      .then(() => UI.showToast('Room link copied!', 'success'));
+      .then(ok => ok
+        ? UI.showToast('Room link copied!', 'success')
+        : UI.showToast('Could not copy link.', 'error'));
   });
 
   document.getElementById('room-title-edit-btn')?.addEventListener('click', () => {
@@ -1145,7 +1148,10 @@ function wireEvents() {
 
   // ── Footer quick buttons ───────────────────────────────────────────────────
   document.getElementById('btn-copy-footer')?.addEventListener('click', () => {
-    copyToClipboard(UI.getEditorValue()).then(() => UI.showToast('Copied to clipboard.', 'success'));
+    copyToClipboard(UI.getEditorValue())
+      .then(ok => ok
+        ? UI.showToast('Copied to clipboard.', 'success')
+        : UI.showToast('Could not copy.', 'error'));
   });
   document.getElementById('btn-insert-ts')?.addEventListener('click', () => {
     if (!canEdit()) { UI.showToast(editBlockedReason() || 'Editing is disabled.', 'warning'); return; }
@@ -1228,11 +1234,16 @@ function wireEvents() {
   // ── Tools ──────────────────────────────────────────────────────────────────
   const toolActions = {
     'tool-copy': () =>
-      copyToClipboard(UI.getEditorValue()).then(() => UI.showToast('Note copied.', 'success')),
+      copyToClipboard(UI.getEditorValue())
+        .then(ok => ok
+          ? UI.showToast('Note copied.', 'success')
+          : UI.showToast('Could not copy.', 'error')),
 
     'tool-copy-link': () =>
       copyToClipboard(buildRoomUrl(BASE, _roomId))
-        .then(() => UI.showToast('Link copied.', 'success')),
+        .then(ok => ok
+          ? UI.showToast('Link copied.', 'success')
+          : UI.showToast('Could not copy link.', 'error')),
 
     'tool-paste': async () => {
       if (!canPaste()) { UI.showToast(editBlockedReason() || 'Paste is disabled.', 'warning'); return; }
@@ -1403,7 +1414,15 @@ function wireEvents() {
     }
   });
 
-  document.getElementById('setting-exp-btn')?.addEventListener('click', _updateExpirationPreview);
+  // Toggle the expiration controls panel open/closed. The button label is
+  // 'Set' (no expiration) or 'Modify' (expiration exists). The actual removal
+  // is handled by setting-exp-remove-btn inside the controls section.
+  document.getElementById('setting-exp-btn')?.addEventListener('click', () => {
+    const controls = document.getElementById('setting-exp-controls');
+    if (!controls) return;
+    const isHidden = controls.classList.toggle('hidden');
+    if (!isHidden) _updateExpirationPreview(); // refresh preview when expanding
+  });
   document.querySelectorAll('[data-exp-preset]').forEach((el) => el.addEventListener('click', () => _selectExpirationPreset(el.dataset.expPreset || '30s')));
   document.getElementById('exp-custom-value')?.addEventListener('input', _updateExpirationPreview);
   document.getElementById('exp-custom-unit')?.addEventListener('change', _updateExpirationPreview);
@@ -1509,12 +1528,15 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
     UI.showToast('Downloaded .html', 'success');
   });
   document.getElementById('export-copy-text')?.addEventListener('click', async () => {
-    await copyToClipboard(UI.getEditorValue());
-    UI.showToast('Copied plain text.', 'success');
+    const ok = await copyToClipboard(UI.getEditorValue());
+    if (ok) UI.showToast('Copied plain text.', 'success');
+    else    UI.showToast('Could not copy.', 'error');
   });
   document.getElementById('export-copy-md')?.addEventListener('click', async () => {
-    await copyToClipboard(UI.getEditorValue());
-    UI.showToast('Copied Markdown.', 'success');
+    // Copy rendered HTML so users can paste into rich-text editors, email, docs, etc.
+    const ok = await copyToClipboard(renderMarkdown(UI.getEditorValue()));
+    if (ok) UI.showToast('Copied as HTML.', 'success');
+    else    UI.showToast('Could not copy.', 'error');
   });
 
   // ── Keyboard shortcuts modal ───────────────────────────────────────────────
@@ -1646,7 +1668,9 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
     },
     onCopyNote: () => {
       copyToClipboard(UI.getEditorValue())
-        .then(() => UI.showToast('Copied to clipboard.', 'success'));
+        .then(ok => ok
+          ? UI.showToast('Copied to clipboard.', 'success')
+          : UI.showToast('Could not copy.', 'error'));
     },
   });
 }
