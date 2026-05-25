@@ -362,8 +362,10 @@ export function populateShareModal({
   const titleEl = document.getElementById('share-modal-title');
   const displayTitle = (roomDisplayTitle || '').trim() || (roomPath || '').replace(/^\//, '') || 'room';
   if (titleEl) titleEl.textContent = `Share "${displayTitle}"`;
-  if (roomPathEl) roomPathEl.textContent = roomPath ? `Path: ${roomPath}` : '';
-  _renderShareBadges({ hasPasscode, hasEncryption, hasReadOnlyLink, isEditingLocked, hasViewOnce, hasExpiration: !!expiresAt });
+  if (roomPathEl) {
+    const normalizedPath = (roomPath || '').replace(/^\//, '');
+    roomPathEl.textContent = normalizedPath && normalizedPath !== displayTitle ? `Path: /${normalizedPath}` : '';
+  }
 
   _wireShareRow({ fieldId: 'share-editable-text', copyBtnId: 'share-editable-copy', openId: 'share-editable-open', nativeBtnId: 'share-editable-native-btn', errorId: 'share-editable-error', url: editableUrl });
   _renderQr('share-editable-qr', editableUrl);
@@ -375,23 +377,6 @@ export function populateShareModal({
   _wireQrToggle('share-readonly-qr-toggle', 'share-readonly-qr-wrap', !!readOnlyUrl);
   _wireQrDownload('share-editable-qr-download', 'share-editable-qr', 'syncpad-editable-qr.png');
   _wireQrDownload('share-readonly-qr-download', 'share-readonly-qr', 'syncpad-readonly-qr.png', !readOnlyUrl);
-}
-
-function _renderShareBadges({ hasPasscode, hasEncryption, hasViewOnce, hasExpiration }) {
-  const badgesEl = document.getElementById('share-room-badges');
-  if (!badgesEl) return;
-  badgesEl.innerHTML = '';
-  const badges = [];
-  if (hasEncryption) badges.push('Encrypted');
-  if (hasPasscode) badges.push('Passcode protected');
-  if (hasViewOnce) badges.push('View-once');
-  if (hasExpiration) badges.push('Expires');
-  badges.forEach((label) => {
-    const badge = document.createElement('span');
-    badge.className = 'share-room-badge';
-    badge.textContent = label;
-    badgesEl.appendChild(badge);
-  });
 }
 
 function _wireShareRow({ fieldId, copyBtnId, openId, nativeBtnId, errorId, url, displayValue = url }) {
@@ -434,20 +419,40 @@ function _wireQrToggle(toggleId, wrapId, enabled) {
   const toggleBtn = document.getElementById(toggleId);
   const wrap = document.getElementById(wrapId);
   if (!toggleBtn || !wrap) return;
+  const allToggles = ['share-editable-qr-toggle', 'share-readonly-qr-toggle'];
+  const allWraps = ['share-editable-qr-wrap', 'share-readonly-qr-wrap'];
   if (!enabled) {
     toggleBtn.classList.add('hidden');
     wrap.classList.add('hidden');
+    toggleBtn.classList.remove('is-active');
     toggleBtn.setAttribute('aria-expanded', 'false');
     return;
   }
   toggleBtn.classList.remove('hidden');
-  toggleBtn.textContent = '⌁ Show QR';
+  toggleBtn.classList.remove('is-active');
   toggleBtn.setAttribute('aria-expanded', 'false');
+  toggleBtn.title = 'Show QR code';
+  toggleBtn.setAttribute('aria-label', toggleBtn.id.includes('editable') ? 'Show QR for editable link' : 'Show QR for read-only link');
   wrap.classList.add('hidden');
   toggleBtn.onclick = () => {
     const willShow = wrap.classList.contains('hidden');
+    if (willShow) {
+      allWraps.forEach((id) => document.getElementById(id)?.classList.add('hidden'));
+      allToggles.forEach((id) => {
+        const btn = document.getElementById(id);
+        if (!btn) return;
+        btn.classList.remove('is-active');
+        btn.setAttribute('aria-expanded', 'false');
+        btn.title = id.includes('editable') ? 'Show QR for editable link' : 'Show QR for read-only link';
+        btn.setAttribute('aria-label', btn.title);
+      });
+    }
     wrap.classList.toggle('hidden', !willShow);
-    toggleBtn.textContent = willShow ? '⌁ Hide QR' : '⌁ Show QR';
+    toggleBtn.classList.toggle('is-active', willShow);
+    toggleBtn.title = willShow
+      ? (toggleBtn.id.includes('editable') ? 'Hide QR for editable link' : 'Hide QR for read-only link')
+      : (toggleBtn.id.includes('editable') ? 'Show QR for editable link' : 'Show QR for read-only link');
+    toggleBtn.setAttribute('aria-label', toggleBtn.title);
     toggleBtn.setAttribute('aria-expanded', willShow ? 'true' : 'false');
   };
 }
