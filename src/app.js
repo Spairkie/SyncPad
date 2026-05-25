@@ -272,18 +272,22 @@ function wireContactEvents() {
     return;
   }
 
+  const sentFlag = new URLSearchParams(location.search).get('sent');
+  if (sentFlag === '1') {
+    status.textContent = 'Thanks! Your message was sent successfully.';
+    status.className = 'contact-status success';
+  }
+
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     submit.disabled = true;
     status.textContent = 'Sending message…';
     status.className = 'contact-status';
-    const payload = {
-      access_key: key,
-      subject: 'SyncPad contact form submission',
-      from_name: `${document.getElementById('contact-first-name')?.value || ''} ${document.getElementById('contact-last-name')?.value || ''}`.trim(),
-      email: document.getElementById('contact-email')?.value || '',
-      message: document.getElementById('contact-message')?.value || '',
-    };
+
+    const formData = new FormData(form);
+    const payload = Object.fromEntries(formData.entries());
+    payload.access_key = key;
+
     try {
       const res = await fetch('https://api.web3forms.com/submit', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
@@ -293,10 +297,10 @@ function wireContactEvents() {
       status.textContent = 'Message sent successfully.';
       status.className = 'contact-status success';
       form.reset();
+      history.replaceState(null, '', `${BASE}/contact?sent=1`);
     } catch (err) {
       status.textContent = 'Could not send message right now. Please try again later.';
       status.className = 'contact-status error';
-    } finally {
       submit.disabled = false;
     }
   });
