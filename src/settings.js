@@ -34,11 +34,11 @@ export async function enableEncryption(roomId, plaintextContent, passphrase) {
   const salt      = generateSalt();
   const key       = await deriveKey(passphrase, salt);
   const encrypted = await encryptContent(plaintextContent ?? '', key);
+  // syncpad_rooms.updated_at is DB-owned; clients should not send it.
   await updateRoom(roomId, {
     encryption_enabled: true,
     encryption_salt:    salt,
     content:            encrypted,
-    updated_at:         new Date().toISOString(),
     updated_by_device:  getDeviceId(),
   });
   return { salt, key };
@@ -81,7 +81,6 @@ export async function disableEncryption(
     encryption_enabled: false,
     encryption_salt:    null,
     content:            plaintextContent,
-    updated_at:         new Date().toISOString(),
     updated_by_device:  getDeviceId(),
   });
 }
@@ -124,7 +123,6 @@ export async function handleExpiration(roomId, room, replacementContent = '') {
 
   await updateRoom(roomId, {
     content:           replacementContent,
-    updated_at:        new Date().toISOString(),
     updated_by_device: getDeviceId(),
     cleared_reason:    'expired',
     expires_at:        null,
@@ -169,7 +167,6 @@ export async function consumeViewOnce(roomId, room, isCreator, replacementConten
   await updateRoom(roomId, {
     viewed:            true,
     content:           replacementContent,
-    updated_at:        new Date().toISOString(),
     updated_by_device: getDeviceId(),
     cleared_reason:    'view_once',
   });
@@ -182,7 +179,6 @@ export async function resetViewOnceNote(roomId, replacementContent = '', keepVie
     view_once:         !!keepViewOnce,
     viewed:            false,
     cleared_reason:    null,
-    updated_at:        new Date().toISOString(),
     updated_by_device: getDeviceId(),
   });
 }
