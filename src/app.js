@@ -1018,7 +1018,58 @@ function _updateExpirationPreview() {
 // ── Event wiring (guarded against double-wire) ────────────────────────────────
 
 function wireEvents() {
-  if (_eventsWired) return; // v1: guard against double-wiring
+  // Shortcuts are always re-wired: they were destroyed in teardownRealtimeSession()
+  // and their callbacks reference module-level state, not captured room locals.
+  initShortcuts({
+    onTogglePreview:    () => {
+      const next = _markdownMode === 'preview' ? 'write' : 'preview';
+      _markdownMode = next; _showPreview = next !== 'write';
+      UI.setMarkdownMode(next, () => renderMarkdown(UI.getEditorValue()));
+      if (_showPreview) _wirePreviewClickOnce();
+    },
+    onToggleSplit: () => {
+      const next = _markdownMode === 'split' ? 'write' : 'split';
+      _markdownMode = next; _showPreview = next !== 'write';
+      UI.setMarkdownMode(next, () => renderMarkdown(UI.getEditorValue()));
+      if (_showPreview) _wirePreviewClickOnce();
+    },
+    onToggleMonospace: () => {
+      _monospace = !_monospace;
+      UI.setMonospace(_monospace);
+      try { localStorage.setItem('syncpad_monospace', _monospace ? '1' : '0'); } catch {}
+      UI.showToast(_monospace ? 'Monospace on.' : 'Monospace off.');
+    },
+    onOpenSearch: () => {
+      UI.openPanel('search-panel');
+      document.getElementById('search-input')?.focus();
+    },
+    onForceClose: () => {
+      document.getElementById('more-dropdown')?.classList.remove('open');
+      document.getElementById('btn-more')?.setAttribute('aria-expanded', 'false');
+      UI.closeAllPanels();
+      UI.closeAllModals();
+    },
+    onOpenShortcuts: () => UI.openModal('shortcuts-modal'),
+    onOpenShare: () => {
+      _openShareModal();
+      UI.showToast('Share opened.', 'success');
+    },
+    onInsertTimestamp: () => {
+      if (!canEdit()) { UI.showToast(editBlockedReason() || 'Editing is disabled.', 'warning'); return; }
+      UI.insertAtCursor(insertTimestamp());
+      UI.showToast('Timestamp inserted.', 'success');
+    },
+    onCopyNote: () => {
+      copyToClipboard(UI.getEditorValue())
+        .then(ok => ok
+          ? UI.showToast('Copied to clipboard.', 'success')
+          : UI.showToast('Could not copy.', 'error'));
+    },
+  });
+
+  // All DOM element listeners below are one-time-only. On multi-room navigation
+  // shortcuts are re-wired above, but these must not accumulate.
+  if (_eventsWired) return;
   _eventsWired = true;
 
   const editor = document.getElementById('note-editor');
@@ -1627,52 +1678,6 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
     _jumpToMatch(_searchIndex);
   });
 
-  // ── Keyboard shortcuts init ────────────────────────────────────────────────
-  initShortcuts({
-    onTogglePreview:    () => {
-      const next = _markdownMode === 'preview' ? 'write' : 'preview';
-      _markdownMode = next; _showPreview = next !== 'write';
-      UI.setMarkdownMode(next, () => renderMarkdown(UI.getEditorValue()));
-      if (_showPreview) _wirePreviewClickOnce();
-    },
-    onToggleSplit: () => {
-      const next = _markdownMode === 'split' ? 'write' : 'split';
-      _markdownMode = next; _showPreview = next !== 'write';
-      UI.setMarkdownMode(next, () => renderMarkdown(UI.getEditorValue()));
-      if (_showPreview) _wirePreviewClickOnce();
-    },
-    onToggleMonospace: () => {
-      _monospace = !_monospace;
-      UI.setMonospace(_monospace);
-      try { localStorage.setItem('syncpad_monospace', _monospace ? '1' : '0'); } catch {}
-      UI.showToast(_monospace ? 'Monospace on.' : 'Monospace off.');
-    },
-    onOpenSearch: () => {
-      UI.openPanel('search-panel');
-      searchInput?.focus();
-    },
-    onForceClose: () => {
-      closeMoreDropdown();
-      UI.closeAllPanels();
-      UI.closeAllModals();
-    },
-    onOpenShortcuts: () => UI.openModal('shortcuts-modal'),
-    onOpenShare: () => {
-      _openShareModal();
-      UI.showToast('Share opened.', 'success');
-    },
-    onInsertTimestamp: () => {
-      if (!canEdit()) { UI.showToast(editBlockedReason() || 'Editing is disabled.', 'warning'); return; }
-      UI.insertAtCursor(insertTimestamp());
-      UI.showToast('Timestamp inserted.', 'success');
-    },
-    onCopyNote: () => {
-      copyToClipboard(UI.getEditorValue())
-        .then(ok => ok
-          ? UI.showToast('Copied to clipboard.', 'success')
-          : UI.showToast('Could not copy.', 'error'));
-    },
-  });
 }
 
 function teardownRealtimeSession() {
@@ -1683,12 +1688,13 @@ function teardownRealtimeSession() {
   destroyPresence();
   destroyBroadcast();
   destroySync();
+  // Remove the keydown handler so wireEvents() can install fresh callbacks
+  // on the next room join. DOM element listeners (editor, buttons, etc.) are
+  // protected by the _eventsWired guard and must NOT be reset here — resetting
+  // _eventsWired would cause them to accumulate on multi-room navigation.
   destroyShortcuts();
   cancelPendingTypingBroadcast();
   cancelPendingLiveContentBroadcast();
-  // Allow wireEvents() to re-attach if startApp() is called again in the
-  // same page session (e.g. future multi-room navigation).
-  _eventsWired = false;
 }
 
 // ── Templates handler ─────────────────────────────────────────────────────────
@@ -1750,27 +1756,6 @@ function _wirePreviewClickOnce() {
   });
 }
 
-
-/** Snapshot the current presence device list. */
-function _getPresenceDevices() {
-  // Presence devices are tracked in presence.js; expose via the rendered list
-  // by reading the devices-list DOM. This is a lightweight approach that avoids
-  // coupling presence.js state to app.js.
-  const listEl = document.getElementById('devices-list');
-  if (!listEl) return [];
-  const items = listEl.querySelectorAll('.device-item');
-  const devices = [];
-  items.forEach(el => {
-    devices.push({
-      device_id:   el.dataset.deviceId || '',
-      device_name: el.querySelector('.device-name')?.textContent?.trim() || 'Unknown',
-      read_only:   el.classList.contains('viewer'),
-      typing:      el.classList.contains('typing'),
-      cursor_line: null,
-    });
-  });
-  return devices;
-}
 
 
 

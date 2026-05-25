@@ -175,9 +175,12 @@ function _renderInline(raw) {
   text = text.replace(/_([^_\n]+?)_/g,       '<em>$1</em>');
 
   // 4. Links — http/https/mailto only.
+  // NOTE: `url` here comes from step-2-escaped text, so special chars like &
+  // are already encoded as &amp;. Do NOT call escapeHtml() again — that would
+  // produce double-encoded hrefs like &amp;amp; for URLs with query params.
   text = text.replace(/\[([^\]\n]+)\]\(([^)\s]+)\)/g, (full, label, url) => {
     if (!/^(?:https?:|mailto:)/i.test(url)) return full;
-    return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+    return `<a href="${url}" target="_blank" rel="noopener noreferrer">${label}</a>`;
   });
 
   // 5. Hard line breaks
