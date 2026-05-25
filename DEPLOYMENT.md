@@ -148,7 +148,14 @@ Delete orphaned objects via the Dashboard UI or the Storage REST API.
 
 > ⚠️ **Always verify before deleting.** There is no undo for deleted storage objects.
 
-Full automated cleanup (listing all bucket objects and deleting orphans programmatically) requires a Supabase Edge Function with the service role key. This is a future roadmap item — see README.md.
+Deleting expired room/file metadata does not automatically remove physical objects from Supabase Storage. Before enabling public file uploads at scale, configure a storage cleanup process (scheduled Edge Function or manual bucket pruning job).
+
+Future storage cleanup design (recommended):
+- Run a scheduled Supabase Edge Function daily.
+- Enumerate objects in `syncpad-files`, then match against `syncpad_files` rows and active/non-expired rooms.
+- Delete only confirmed orphaned objects.
+- Log only aggregate counts (no file contents).
+- Start with a dry-run mode for first execution.
 
 ---
 
@@ -164,7 +171,7 @@ Recommended Web3Forms dashboard settings:
 - **from_name:** `SyncPad Contact Form`
 - **hCaptcha:** keep **off** unless the frontend adds an hCaptcha widget and verification flow
 
-Operational note: add botcheck/honeypot or a comparable anti-spam strategy in a later app/dashboard hardening pass.
+Operational note: keep the botcheck honeypot enabled and verify report-table DB constraints (reason allowlist + details length) and RLS posture before each public release.
 
 ## Troubleshooting
 

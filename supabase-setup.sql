@@ -111,6 +111,13 @@ create table if not exists syncpad_files (
 create index if not exists idx_syncpad_files_room_id
   on syncpad_files(room_id);
 
+create index if not exists idx_syncpad_room_reports_created_at
+  on public.syncpad_room_reports(created_at);
+create index if not exists idx_syncpad_room_reports_room_id
+  on public.syncpad_room_reports(room_id);
+create index if not exists idx_syncpad_room_reports_status
+  on public.syncpad_room_reports(status);
+
 
 -- Database owns syncpad_rooms.updated_at on every UPDATE to prevent
 -- client clocks or client-supplied timestamps from skewing reconciliation.
@@ -195,6 +202,8 @@ create unique index if not exists idx_syncpad_share_links_room_id
   on public.syncpad_share_links(room_id);
 create unique index if not exists idx_syncpad_share_links_token
   on public.syncpad_share_links(token);
+create index if not exists idx_syncpad_share_links_created_at
+  on public.syncpad_share_links(created_at);
 
 drop policy if exists "anon no direct share-link reads" on public.syncpad_share_links;
 drop policy if exists "anon no direct share-link writes" on public.syncpad_share_links;
