@@ -194,6 +194,8 @@ async function _openShareModal() {
     hasEncryption: !!_room?.encryption_enabled,
     hasReadOnlyLink: !!readOnlyUrl,
     isEditingLocked: !!_room?.editing_locked,
+    hasViewOnce: !!_room?.view_once,
+    expiresAt: _room?.expires_at || null,
   });
   UI.openModal('share-modal');
 }
