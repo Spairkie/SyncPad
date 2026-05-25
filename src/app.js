@@ -865,7 +865,7 @@ function _updateViewOnceConsumedUI() {
         _refreshPreviewIfActive();
         _updatePermissionContext();
         _renderRoomHeader();
-  UI.renderSettingsPanel(_room);
+        UI.renderSettingsPanel(_room);
         UI.setViewOnceBadge(!!_room.view_once);
         broadcastSettingsChange();
         broadcastClear();
@@ -1340,7 +1340,7 @@ function wireEvents() {
         _room = await loadRoom(_roomId);
         _updatePermissionContext();
         _renderRoomHeader();
-  UI.renderSettingsPanel(_room);
+        UI.renderSettingsPanel(_room);
         broadcastSettingsChange();
         UI.showToast('Passcode removed.', 'success');
       } catch { UI.showToast('Could not remove passcode.', 'error'); }
@@ -1352,7 +1352,7 @@ function wireEvents() {
         _room = await loadRoom(_roomId);
         _updatePermissionContext();
         _renderRoomHeader();
-  UI.renderSettingsPanel(_room);
+        UI.renderSettingsPanel(_room);
         broadcastSettingsChange();
         UI.showToast('Passcode set.', 'success');
       } catch { UI.showToast('Could not set passcode.', 'error'); }
@@ -1378,7 +1378,7 @@ function wireEvents() {
         clearDraft(_roomId);
         _updatePermissionContext();
         _renderRoomHeader();
-  UI.renderSettingsPanel(_room);
+        UI.renderSettingsPanel(_room);
         UI.setEncryptionBadge(false);
         UI.showEncryptionLockedBanner(false);
         broadcastSettingsChange();
@@ -1406,7 +1406,7 @@ function wireEvents() {
         clearDraft(_roomId);
         _updatePermissionContext();
         _renderRoomHeader();
-  UI.renderSettingsPanel(_room);
+        UI.renderSettingsPanel(_room);
         UI.setEncryptionBadge(true);
         broadcastSettingsChange();
         UI.showToast('Encryption enabled.', 'success');
@@ -1472,7 +1472,7 @@ function wireEvents() {
       }
       _room = await loadRoom(_roomId);
       _renderRoomHeader();
-  UI.renderSettingsPanel(_room);
+      UI.renderSettingsPanel(_room);
       broadcastSettingsChange();
     } catch { UI.showToast('Could not update view-once setting.', 'error'); }
   });
@@ -1487,7 +1487,7 @@ function wireEvents() {
       _room = await loadRoom(_roomId);
       _updatePermissionContext();
       _renderRoomHeader();
-  UI.renderSettingsPanel(_room);
+      UI.renderSettingsPanel(_room);
       UI.setLockedMode(!!_room.editing_locked);
       broadcastSettingsChange();
       UI.showToast(target ? 'Editing locked.' : 'Editing unlocked.', 'success');
@@ -1683,8 +1683,12 @@ function teardownRealtimeSession() {
   destroyPresence();
   destroyBroadcast();
   destroySync();
+  destroyShortcuts();
   cancelPendingTypingBroadcast();
   cancelPendingLiveContentBroadcast();
+  // Allow wireEvents() to re-attach if startApp() is called again in the
+  // same page session (e.g. future multi-room navigation).
+  _eventsWired = false;
 }
 
 // ── Templates handler ─────────────────────────────────────────────────────────
@@ -1827,13 +1831,15 @@ if ('serviceWorker' in navigator) {
     .catch(() => {});
 }
 
+const INSTALL_DISMISSED_KEY = 'syncpad_install_dismissed';
 let _deferredInstall = null;
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   _deferredInstall = e;
+  if (localStorage.getItem(INSTALL_DISMISSED_KEY) === '1') return;
   UI.showInstallBar(
     async () => { _deferredInstall?.prompt(); await _deferredInstall?.userChoice; _deferredInstall = null; },
-    () => {}
+    () => { localStorage.setItem(INSTALL_DISMISSED_KEY, '1'); }
   );
 });
 

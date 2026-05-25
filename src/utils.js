@@ -207,7 +207,19 @@ export function fileEmoji(mime, filename) {
 export function formatTimestamp(date) {
   const d = date instanceof Date ? date : new Date(date);
   if (isNaN(d)) return '';
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  if (sameDay) {
+    // Today: show time only — "3:45 PM"
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+  const sameYear = d.getFullYear() === now.getFullYear();
+  if (sameYear) {
+    // This year, different day: "Jan 12, 3:45 PM"
+    return d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }
+  // Different year: "Jan 12, 2023"
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 export function insertTimestamp() {
