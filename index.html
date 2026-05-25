@@ -613,54 +613,57 @@
       <h3 id="share-modal-title">Share room</h3>
       <p class="share-subtitle">Choose who can access this room.</p>
       <div class="share-room-path" id="share-room-path"></div>
-      <div class="share-room-badges" id="share-room-badges"></div>
     </div>
 
-    <div class="share-card share-card--edit">
-      <div class="share-card-header">
-        <h4 class="share-card-title"><span aria-hidden="true">✏️</span> Editable link</h4>
+    <div class="share-section">
+      <div class="share-section-header">
+        <h4 class="share-section-title">
+          <span class="share-section-icon" aria-hidden="true">✎</span>
+          Editable link
+        </h4>
       </div>
-      <p class="share-section-desc">Can edit this room.</p>
+      <p class="share-section-desc">Anyone with this link can open and edit this room.</p>
       <div class="share-url-row">
         <input class="share-url-field" id="share-editable-text" type="text" readonly aria-label="Editable room URL" />
         <button class="share-copy-inline" id="share-editable-copy" aria-label="Copy editable room link">Copy</button>
       </div>
-      <div class="share-card-actions">
-        <a class="share-action-btn" id="share-editable-open" href="#" target="_blank" rel="noopener noreferrer" aria-label="Open editable room link">↗ Open</a>
-        <button class="share-action-btn hidden" id="share-editable-native-btn" aria-label="Share editable room link">⤴ Share</button>
-        <button class="share-action-btn" id="share-editable-qr-toggle" aria-expanded="false" aria-controls="share-editable-qr-wrap">⌁ Show QR</button>
-      </div>
       <div class="share-inline-error hidden" id="share-editable-error" role="status" aria-live="polite"></div>
+      <div class="share-icon-actions">
+        <button class="share-icon-btn" id="share-editable-qr-toggle" aria-expanded="false" aria-controls="share-editable-qr-wrap" title="Show QR for editable link" aria-label="Show QR for editable link">⌁</button>
+        <a class="share-icon-btn" id="share-editable-open" href="#" target="_blank" rel="noopener noreferrer" title="Open editable link" aria-label="Open editable link">↗</a>
+        <button class="share-icon-btn hidden" id="share-editable-native-btn" title="Share editable link" aria-label="Share editable link">⤴</button>
+      </div>
       <div class="share-qr-wrap hidden" id="share-editable-qr-wrap">
-        <div class="share-qr-title">Editable link QR</div>
         <div class="share-qr" id="share-editable-qr"></div>
         <button class="share-qr-download" id="share-editable-qr-download" aria-label="Download editable link QR">Download QR</button>
       </div>
     </div>
 
-    <div class="share-card share-card--view">
-      <div class="share-card-header">
-        <h4 class="share-card-title"><span aria-hidden="true">👁</span> Read-only link</h4>
+    <div class="share-section">
+      <div class="share-section-header">
+        <h4 class="share-section-title">
+          <span class="share-section-icon" aria-hidden="true">◉</span>
+          Read-only link
+        </h4>
       </div>
-      <p class="share-section-desc">Can only view this note.</p>
+      <p class="share-section-desc">Anyone with this link can view the note but cannot edit it.</p>
       <div class="share-url-row">
         <input class="share-url-field" id="share-readonly-text" type="text" readonly aria-label="Read-only share URL" />
         <button class="share-copy-inline" id="share-readonly-copy" aria-label="Copy read-only share link">Copy</button>
       </div>
-      <div class="share-card-actions">
-        <a class="share-action-btn" id="share-readonly-open" href="#" target="_blank" rel="noopener noreferrer" aria-label="Open read-only share link">↗ Open</a>
-        <button class="share-action-btn hidden" id="share-readonly-native-btn" aria-label="Share read-only share link">⤴ Share</button>
-        <button class="share-action-btn" id="share-readonly-qr-toggle" aria-expanded="false" aria-controls="share-readonly-qr-wrap">⌁ Show QR</button>
-      </div>
       <div class="share-inline-error hidden" id="share-readonly-error" role="status" aria-live="polite"></div>
+      <div class="share-icon-actions">
+        <button class="share-icon-btn" id="share-readonly-qr-toggle" aria-expanded="false" aria-controls="share-readonly-qr-wrap" title="Show QR for read-only link" aria-label="Show QR for read-only link">⌁</button>
+        <a class="share-icon-btn" id="share-readonly-open" href="#" target="_blank" rel="noopener noreferrer" title="Open read-only link" aria-label="Open read-only link">↗</a>
+        <button class="share-icon-btn hidden" id="share-readonly-native-btn" title="Share read-only link" aria-label="Share read-only link">⤴</button>
+      </div>
       <div class="share-qr-wrap hidden" id="share-readonly-qr-wrap">
-        <div class="share-qr-title">Read-only link QR</div>
         <div class="share-qr" id="share-readonly-qr"></div>
         <button class="share-qr-download" id="share-readonly-qr-download" aria-label="Download read-only link QR">Download QR</button>
       </div>
     </div>
 
-    <div class="modal-actions">
+    <div class="modal-actions share-modal-footer">
       <button class="modal-btn-cancel" id="share-modal-close" aria-label="Close share modal">Close</button>
     </div>
   </div>
