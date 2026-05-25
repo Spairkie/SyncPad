@@ -3,7 +3,8 @@
 import { getSupabaseClient } from './supabase.js';
 import { getDeviceId, getDeviceName, throttle } from './utils.js';
 
-const THROTTLE_MS = 250;
+export const LIVE_CONTENT_BROADCAST_MAX_CHARS = 32000;
+export const LIVE_CONTENT_BROADCAST_THROTTLE_MS = 250;
 
 let _channel  = null;
 let _roomId   = null;
@@ -19,6 +20,7 @@ export function initBroadcast(roomId, handlers) {
 
   _channel = sb.channel(`room:${roomId}`, { config: { broadcast: { self: false } } })
     .on('broadcast', { event: 'typing' },           (m) => { const p = m.payload; if (!p || p.device_id === deviceId) return; _handlers.onRemoteTyping?.(p); })
+    .on('broadcast', { event: 'content_live' },     (m) => { const p = m.payload; if (!p || p.device_id === deviceId) return; _handlers.onRemoteLiveContent?.(p); })
     .on('broadcast', { event: 'settings' },         (m) => { const p = m.payload; if (!p || p.device_id === deviceId) return; _handlers.onRemoteSettings?.(p); })
     .on('broadcast', { event: 'files' },            (m) => { const p = m.payload; if (!p || p.device_id === deviceId) return; _handlers.onRemoteFiles?.(p); })
     .on('broadcast', { event: 'clear' },            (m) => { const p = m.payload; if (!p || p.device_id === deviceId) return; _handlers.onRemoteClear?.(p); })
@@ -49,14 +51,36 @@ const _throttledTyping = throttle(function (seq) {
   _channel.send({
     type:    'broadcast',
     event:   'typing',
-    // Typing/activity messages are metadata-only by design.
-    // Note content syncs through the debounced DB save lane + postgres_changes.
+    // Typing/activity lane is metadata-only.
     payload: { room_id: _roomId, device_id: getDeviceId(), device_name: getDeviceName(), isTyping: true, ts: Date.now(), seq },
   });
-}, THROTTLE_MS);
+}, LIVE_CONTENT_BROADCAST_THROTTLE_MS);
 
 export function broadcastTyping(seq) { _throttledTyping(seq); }
 export function cancelPendingTypingBroadcast() { _throttledTyping.cancel?.(); }
+
+const _throttledLiveContent = throttle(function (seq, content) {
+  if (!_channel || !_roomId) return;
+  const text = String(content ?? '');
+  if (text.length > LIVE_CONTENT_BROADCAST_MAX_CHARS) return;
+  _channel.send({
+    type: 'broadcast',
+    event: 'content_live',
+    payload: {
+      type: 'content_live',
+      room_id: _roomId,
+      device_id: getDeviceId(),
+      device_name: getDeviceName(),
+      ts: Date.now(),
+      seq,
+      content: text,
+      content_chars: text.length,
+    },
+  });
+}, LIVE_CONTENT_BROADCAST_THROTTLE_MS);
+
+export function broadcastLiveContent(seq, content) { _throttledLiveContent(seq, content); }
+export function cancelPendingLiveContentBroadcast() { _throttledLiveContent.cancel?.(); }
 
 // ── Event broadcasts ──────────────────────────────────────────────────────────
 

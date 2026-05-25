@@ -79,7 +79,7 @@
 
 ### Security & Privacy (all frontend/convenience — see Known Limitations)
 - **Passcode gate** — PBKDF2-hashed passcode; convenience only
-- **Text encryption** — AES-256-GCM + PBKDF2 in-browser; Broadcast payloads also encrypted; files are NOT encrypted
+- **Text encryption** — AES-256-GCM + PBKDF2 in-browser; encrypted rooms use DB-only content sync (no plaintext live snapshots); files are NOT encrypted
 - **Auto-expiration** — rooms cleared at open after expiry; pg_cron backend cleanup optional
 - **View-once** — note cleared server-side after first non-creator editable viewer
 

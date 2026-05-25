@@ -48,6 +48,11 @@ export function canBroadcastTyping() {
   return !_anyEditBlock();
 }
 
+/** Can this client broadcast live note snapshots over Realtime? */
+export function canBroadcastLiveContent() {
+  return !_anyEditBlock() && !_ctx.isEncryptionEnabled;
+}
+
 /** Can this client toggle passcode / encryption / expiration / view-once? */
 export function canChangeSettings() {
   // Read-only and lock both disable settings UI.
