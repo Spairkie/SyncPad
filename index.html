@@ -609,31 +609,28 @@
 <!-- Share modal -->
 <div class="modal-backdrop" id="share-modal">
   <div class="modal share-modal">
-    <div class="share-modal-header">
-      <h3>Share this room</h3>
-      <p class="share-subtitle">Choose whether others can edit or only view this room.</p>
-    </div>
-
-    <div class="share-room-summary" aria-live="polite">
-      <div class="share-summary-label">Room</div>
-      <div class="share-room-title" id="share-room-title"></div>
+    <div class="share-modal-header" aria-live="polite">
+      <h3 id="share-modal-title">Share room</h3>
+      <p class="share-subtitle">Choose who can access this room.</p>
       <div class="share-room-path" id="share-room-path"></div>
       <div class="share-room-badges" id="share-room-badges"></div>
     </div>
 
     <div class="share-card share-card--edit">
       <div class="share-card-header">
-        <h4 class="share-card-title">Editable room link</h4>
+        <h4 class="share-card-title"><span aria-hidden="true">✏️</span> Editable link</h4>
       </div>
-      <p class="share-section-desc">Anyone with this link can open and edit this room.</p>
-      <textarea class="share-url-field" id="share-editable-text" rows="2" readonly aria-label="Editable room URL"></textarea>
+      <p class="share-section-desc">Can edit this room.</p>
+      <div class="share-url-row">
+        <input class="share-url-field" id="share-editable-text" type="text" readonly aria-label="Editable room URL" />
+        <button class="share-copy-inline" id="share-editable-copy" aria-label="Copy editable room link">Copy</button>
+      </div>
       <div class="share-card-actions">
-        <button class="share-action-btn" id="share-editable-copy" aria-label="Copy editable room link">Copy</button>
-        <a class="share-action-btn" id="share-editable-open" href="#" target="_blank" rel="noopener noreferrer" aria-label="Open editable room link">Open</a>
-        <button class="share-action-btn hidden" id="share-editable-native-btn" aria-label="Share editable room link">Share</button>
+        <a class="share-action-btn" id="share-editable-open" href="#" target="_blank" rel="noopener noreferrer" aria-label="Open editable room link">↗ Open</a>
+        <button class="share-action-btn hidden" id="share-editable-native-btn" aria-label="Share editable room link">⤴ Share</button>
+        <button class="share-action-btn" id="share-editable-qr-toggle" aria-expanded="false" aria-controls="share-editable-qr-wrap">⌁ Show QR</button>
       </div>
       <div class="share-inline-error hidden" id="share-editable-error" role="status" aria-live="polite"></div>
-      <button class="share-qr-toggle" id="share-editable-qr-toggle" aria-expanded="false" aria-controls="share-editable-qr-wrap">Show QR</button>
       <div class="share-qr-wrap hidden" id="share-editable-qr-wrap">
         <div class="share-qr-title">Editable link QR</div>
         <div class="share-qr" id="share-editable-qr"></div>
@@ -643,31 +640,24 @@
 
     <div class="share-card share-card--view">
       <div class="share-card-header">
-        <h4 class="share-card-title">Read-only share link</h4>
+        <h4 class="share-card-title"><span aria-hidden="true">👁</span> Read-only link</h4>
       </div>
-      <p class="share-section-desc">Anyone with this link can view the note but cannot edit it.</p>
-      <textarea class="share-url-field" id="share-readonly-text" rows="2" readonly aria-label="Read-only share URL"></textarea>
+      <p class="share-section-desc">Can only view this note.</p>
+      <div class="share-url-row">
+        <input class="share-url-field" id="share-readonly-text" type="text" readonly aria-label="Read-only share URL" />
+        <button class="share-copy-inline" id="share-readonly-copy" aria-label="Copy read-only share link">Copy</button>
+      </div>
       <div class="share-card-actions">
-        <button class="share-action-btn" id="share-readonly-copy" aria-label="Copy read-only share link">Copy</button>
-        <a class="share-action-btn" id="share-readonly-open" href="#" target="_blank" rel="noopener noreferrer" aria-label="Open read-only share link">Open</a>
-        <button class="share-action-btn hidden" id="share-readonly-native-btn" aria-label="Share read-only share link">Share</button>
+        <a class="share-action-btn" id="share-readonly-open" href="#" target="_blank" rel="noopener noreferrer" aria-label="Open read-only share link">↗ Open</a>
+        <button class="share-action-btn hidden" id="share-readonly-native-btn" aria-label="Share read-only share link">⤴ Share</button>
+        <button class="share-action-btn" id="share-readonly-qr-toggle" aria-expanded="false" aria-controls="share-readonly-qr-wrap">⌁ Show QR</button>
       </div>
       <div class="share-inline-error hidden" id="share-readonly-error" role="status" aria-live="polite"></div>
-      <button class="share-qr-toggle" id="share-readonly-qr-toggle" aria-expanded="false" aria-controls="share-readonly-qr-wrap">Show QR</button>
       <div class="share-qr-wrap hidden" id="share-readonly-qr-wrap">
         <div class="share-qr-title">Read-only link QR</div>
         <div class="share-qr" id="share-readonly-qr"></div>
         <button class="share-qr-download" id="share-readonly-qr-download" aria-label="Download read-only link QR">Download QR</button>
       </div>
-    </div>
-
-    <div class="share-warning-list" aria-label="Share warnings">
-      <div class="share-warning-item">The editable link lets others change this room.</div>
-      <div class="share-warning-item">The read-only link hides the room path but anyone with the link can view it.</div>
-      <div class="share-warning-item hidden" id="share-passcode-notice">This room is passcode protected. Viewers will need the passcode.</div>
-      <div class="share-warning-item hidden" id="share-encryption-notice">This room is encrypted. Viewers will need the passphrase for note text.</div>
-      <div class="share-warning-item hidden" id="share-viewonce-notice">View-once is enabled. The note may clear after first eligible view.</div>
-      <div class="share-warning-item hidden" id="share-expiration-notice">This room has link expiration enabled.</div>
     </div>
 
     <div class="modal-actions">

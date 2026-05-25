@@ -1570,3 +1570,36 @@ kbd {
   .share-card-actions { flex-direction: column; }
   .share-action-btn { width: 100%; }
 }
+
+/* Share modal compact polish */
+.share-modal { max-width: 460px; max-height: 88vh; padding: 18px; }
+.share-modal-header { margin-bottom: 10px; }
+.share-modal-header h3 { margin: 0 0 4px; font-size: 18px; }
+.share-subtitle { margin: 0 0 4px; font-size: 12px; }
+.share-room-path { font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.share-room-badges { display:flex; flex-wrap:wrap; gap:6px; margin-bottom: 2px; }
+.share-room-badge { font-size: 10px; padding: 2px 8px; }
+.share-card { background: color-mix(in srgb, var(--bg-elevated) 60%, transparent); border-color: var(--border-soft); padding: 12px; margin-bottom: 10px; }
+.share-card-header { margin-bottom: 6px; }
+.share-card-title { display:flex; align-items:center; gap:6px; font-size: 13px; }
+.share-section-desc { margin: 0 0 8px; font-size: 11px; }
+.share-url-row { display:flex; align-items:center; gap:8px; margin-bottom: 8px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 10px; padding: 6px 8px 6px 10px; }
+.share-url-field { min-height: auto; margin:0; padding:0; border:0; background:transparent; flex:1; font-size:12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.share-url-field:focus { outline:none; }
+.share-copy-inline { border:1px solid var(--border); background: var(--bg-elevated); color: var(--text-primary); font-size: 11px; font-weight: 600; border-radius: 8px; padding: 5px 9px; min-height: 30px; }
+.share-copy-inline:hover { background: var(--bg-base); }
+.share-copy-inline:disabled { opacity:.45; cursor:not-allowed; }
+.share-card-actions { gap: 6px; margin-bottom: 6px; }
+.share-action-btn { min-height: 30px; padding: 5px 10px; font-size: 11px; font-weight: 500; color: var(--text-secondary); background: transparent; border-color: var(--border-soft); }
+.share-action-btn:hover { color: var(--text-primary); border-color: var(--border); background: var(--bg-elevated); }
+.share-inline-error { font-size: 11px; margin-bottom: 6px; }
+.share-qr-wrap { margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--border-soft); }
+.share-qr-title { font-size: 10px; margin-bottom: 4px; }
+.share-qr { margin: 8px 0 6px; }
+.share-qr-download { font-size: 11px; padding: 6px; }
+#share-modal .modal-actions { margin-top: 14px; }
+#share-modal .modal-btn-cancel { width:100%; }
+@media (max-width:680px){
+  .share-modal { max-width: min(96vw, 460px); padding: 14px; }
+  .share-card-actions { flex-wrap: wrap; }
+}
