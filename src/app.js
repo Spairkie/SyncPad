@@ -36,7 +36,7 @@ import {
   checkPasscode, setPasscode, removePasscode,
   enableEncryption, disableEncryption, unlockEncryption,
   setExpiration, clearExpiration, handleExpiration,
-  enableViewOnce, disableViewOnce, consumeViewOnce,
+  enableViewOnce, disableViewOnce, consumeViewOnce, resetViewOnceNote,
   setEditingLocked,
 } from './settings.js';
 
@@ -464,6 +464,7 @@ async function startApp() {
   UI.showScreen('app');
   UI.setRoomName(_roomId);
   UI.setEncryptionBadge(!!_room.encryption_enabled);
+  UI.setViewOnceBadge(!!_room.view_once);
   UI.renderSettingsPanel(_room);
   UI.setStatus('connected');
   UI.setMonospace(_monospace);
@@ -580,6 +581,7 @@ async function startApp() {
       const consumed = await consumeViewOnce(_roomId, _room, false, await _emptyContentForCurrentEncryption());
       if (consumed) {
         _room = await loadRoom(_roomId);
+        clearDraft(_roomId);
         _updatePermissionContext();
         broadcastViewOnceCleared();
         UI.showToast(
@@ -692,6 +694,7 @@ async function _handleRoomStateTransition(prev, newRoom) {
 
   UI.renderSettingsPanel(_room);
   UI.setEncryptionBadge(!!_room.encryption_enabled);
+  UI.setViewOnceBadge(!!_room.view_once);
   UI.setLockedMode(!!_room.editing_locked);
 
   // ── Clear/expired/view-once toasts ─────────────────────────────────────────
@@ -704,6 +707,7 @@ async function _handleRoomStateTransition(prev, newRoom) {
   }
 
   if (newRoom.cleared_reason === 'view_once' && prev?.cleared_reason !== 'view_once') {
+    clearDraft(_roomId);
     // v1: do not clear the local editor if WE were the consumer, but lock it so
     // the consumed note never gets saved back to the server.
     if (_consumingViewOnce || isOwnWrite) {
@@ -721,6 +725,7 @@ async function _handleRoomStateTransition(prev, newRoom) {
   else UI.hideExpirationBar();
 
   _refreshPreviewIfActive();
+  _updateViewOnceConsumedUI();
 }
 
 function _updatePermissionContext() {
@@ -734,6 +739,34 @@ function _updatePermissionContext() {
   });
   UI.setEditorEditable(canEdit());
   UI.setEditBlockedReason(editBlockedReason());
+  _updateViewOnceConsumedUI();
+}
+
+function _updateViewOnceConsumedUI() {
+  const consumed = _room?.view_once && _room?.cleared_reason === 'view_once' && !!_room?.viewed;
+  UI.setViewOnceConsumedPanel({
+    visible: !!consumed,
+    readOnly: !!_isReadOnly,
+    onStartNew: async () => {
+      if (_isReadOnly || !canChangeSettings()) return;
+      try {
+        await resetViewOnceNote(_roomId, await _emptyContentForCurrentEncryption(), true);
+        clearDraft(_roomId);
+        _room = await loadRoom(_roomId);
+        setContentNoSave('');
+        UI.updateWordCount('');
+        _refreshPreviewIfActive();
+        _updatePermissionContext();
+        UI.renderSettingsPanel(_room);
+        UI.setViewOnceBadge(!!_room.view_once);
+        broadcastSettingsChange();
+        broadcastClear();
+        UI.showToast('Started a new view-once note.', 'success');
+      } catch {
+        UI.showToast('Could not reset this view-once note.', 'error');
+      }
+    },
+  });
 }
 
 // ── Expiration timer ──────────────────────────────────────────────────────────
