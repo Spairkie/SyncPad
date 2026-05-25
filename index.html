@@ -156,7 +156,7 @@
     <h1>Privacy</h1>
     <p class="legal-lead">SyncPad is anonymous by default, but not private by default.</p>
     <ul class="legal-list">
-      <li>Normal rooms do not require accounts.</li><li>Editable room links are anonymous room paths.</li><li>Anyone with the editable room path can edit that room.</li><li>Read-only share links hide the room name but are still secret bearer links.</li><li>Room text and file metadata are stored in Supabase.</li><li>Uploaded files are stored in Supabase Storage.</li><li>Browser localStorage may store drafts, preferences, theme, device name, and similar local data.</li><li>Encrypted room text requires the passphrase.</li><li>If the passphrase is forgotten, encrypted room text cannot be recovered.</li><li>Uploaded files are not encrypted unless file encryption is actually implemented.</li><li>The site owner/admin may access unencrypted rooms/files for maintenance, troubleshooting, and abuse handling.</li><li>Contact form submissions go through Web3Forms only if configured.</li><li>No analytics or ad cookies are used unless actually added to the app.</li>
+      <li>Normal rooms do not require accounts.</li><li>Editable room links are anonymous room paths.</li><li>Anyone with the editable room path can edit that room.</li><li>Read-only share links hide the room name but are still secret bearer links.</li><li>Room text and file metadata are stored in Supabase.</li><li>Uploaded files are stored in Supabase Storage.</li><li>Browser localStorage may store drafts, preferences, theme, device name, and similar local data.</li><li>Encrypted room text requires the passphrase.</li><li>If the passphrase is forgotten, encrypted room text cannot be recovered.</li><li>Uploaded files are not encrypted unless file encryption is actually implemented.</li><li>The site owner/admin may access unencrypted rooms/files for maintenance, troubleshooting, and abuse handling.</li><li>Contact form submissions go through Web3Forms only if configured.</li><li>Web3Forms `access_key` is a public frontend key, not a private server secret.</li><li>View-once is a convenience feature, not a secure destruction guarantee. A viewer may copy, screenshot, save, or otherwise preserve content before it clears.</li><li>No analytics or ad cookies are used unless actually added to the app.</li>
     </ul>
     <div class="legal-links"><a href="/SyncPad/">Back to SyncPad</a><a href="/SyncPad/contact">Contact</a><a href="/SyncPad/terms">Terms</a></div>
   </div>
@@ -167,7 +167,7 @@
     <h1>Terms</h1>
     <p class="legal-lead">By using SyncPad, you agree to these simple terms.</p>
     <ul class="legal-list">
-      <li>SyncPad is a personal/portfolio project.</li><li>There is no guarantee, warranty, uptime promise, or SLA.</li><li>Do not store sensitive information, passwords, classified information, HIPAA/PII, or anything important.</li><li>Anyone with an editable room URL can edit that room.</li><li>Anyone with a read-only share URL can read that room.</li><li>Content may be changed or deleted by other users with access, expiration, view-once behavior, manual clear, admin cleanup, bugs, or maintenance.</li><li>Encrypted room text depends on remembering the passphrase.</li><li>Files are not encrypted unless file encryption is actually implemented.</li><li>The site owner/admin may remove rooms/files/reports for maintenance, security, abuse prevention, or testing.</li><li>The app may change or be discontinued at any time.</li>
+      <li>SyncPad is a personal/portfolio project.</li><li>There is no guarantee, warranty, uptime promise, or SLA.</li><li>Do not store sensitive information, passwords, classified information, HIPAA/PII, or anything important.</li><li>Anyone with an editable room URL can edit that room.</li><li>Anyone with a read-only share URL can read that room.</li><li>View-once is a convenience feature, not a secure destruction guarantee. A viewer may copy, screenshot, save, or otherwise preserve content before it clears.</li><li>Content may be changed or deleted by other users with access, expiration, view-once behavior, manual clear, admin cleanup, bugs, or maintenance.</li><li>Encrypted room text depends on remembering the passphrase.</li><li>Files are not encrypted unless file encryption is actually implemented.</li><li>The site owner/admin may remove rooms/files/reports for maintenance, security, abuse prevention, or testing.</li><li>The app may change or be discontinued at any time.</li>
     </ul>
     <div class="legal-links"><a href="/SyncPad/">Back to SyncPad</a><a href="/SyncPad/contact">Contact</a><a href="/SyncPad/privacy">Privacy</a></div>
   </div>
@@ -885,7 +885,7 @@
       <li>File handoff</li>
       <li>Report room option</li>
     </ul>
-    <p class="about-security-note"><strong>Security note:</strong> SyncPad is link-based. Anyone with an editable room link can edit that room. Read-only links hide the room path but still act like bearer links.</p>
+    <p class="about-security-note"><strong>Security note:</strong> SyncPad is link-based. Anyone with an editable room link can edit that room. Read-only links hide the room path but still act like bearer links. View-once is convenience-only and not a secure destruction guarantee.</p>
     <div class="about-links">
       <a href="/SyncPad/privacy">Privacy</a>
       <a href="/SyncPad/terms">Terms</a>
