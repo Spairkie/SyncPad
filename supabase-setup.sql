@@ -43,6 +43,53 @@ alter table syncpad_rooms
 alter table syncpad_rooms
   add column if not exists passcode_salt text;
 
+
+create table if not exists public.syncpad_room_reports (
+  id uuid primary key default gen_random_uuid(),
+  room_id text not null,
+  share_token text,
+  report_reason text not null,
+  report_details text,
+  reporter_device_id text,
+  reporter_mode text not null default 'editable' check (reporter_mode in ('editable', 'readonly')),
+  page_url text,
+  user_agent text,
+  created_at timestamptz not null default now(),
+  status text not null default 'new'
+);
+
+
+-- DB-side validation for anonymous room reports (keep in sync with frontend).
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'syncpad_room_reports_reason_check'
+  ) then
+    alter table public.syncpad_room_reports
+      add constraint syncpad_room_reports_reason_check
+      check (report_reason in ('Spam', 'Abuse or harassment', 'Illegal or harmful content', 'Private information', 'Other'));
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'syncpad_room_reports_mode_check'
+  ) then
+    alter table public.syncpad_room_reports
+      add constraint syncpad_room_reports_mode_check
+      check (reporter_mode in ('editable', 'readonly'));
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'syncpad_room_reports_details_len_check'
+  ) then
+    alter table public.syncpad_room_reports
+      add constraint syncpad_room_reports_details_len_check
+      check (report_details is null or length(report_details) <= 1000);
+  end if;
+end $$;
+
 create table if not exists syncpad_files (
   id                   uuid        primary key default gen_random_uuid(),
   room_id              text        not null references syncpad_rooms(room_id) on delete cascade,
@@ -72,6 +119,7 @@ create index if not exists idx_syncpad_rooms_expires
 
 alter table syncpad_rooms enable row level security;
 alter table syncpad_files enable row level security;
+alter table if exists public.syncpad_room_reports enable row level security;
 alter table if exists public.syncpad_share_links enable row level security;
 
 
@@ -226,6 +274,18 @@ drop policy if exists "admin delete files" on syncpad_files;
 create policy "admin read files" on syncpad_files for select to authenticated using (public.is_syncpad_admin());
 create policy "admin update files" on syncpad_files for update to authenticated using (public.is_syncpad_admin()) with check (public.is_syncpad_admin());
 create policy "admin delete files" on syncpad_files for delete to authenticated using (public.is_syncpad_admin());
+
+drop policy if exists "anon insert room reports" on public.syncpad_room_reports;
+create policy "anon insert room reports"
+  on public.syncpad_room_reports for insert to anon with check (true);
+
+-- Future-only admin review access for reported rooms.
+drop policy if exists "admin read room reports" on public.syncpad_room_reports;
+drop policy if exists "admin update room reports" on public.syncpad_room_reports;
+drop policy if exists "admin delete room reports" on public.syncpad_room_reports;
+create policy "admin read room reports" on public.syncpad_room_reports for select to authenticated using (public.is_syncpad_admin());
+create policy "admin update room reports" on public.syncpad_room_reports for update to authenticated using (public.is_syncpad_admin()) with check (public.is_syncpad_admin());
+create policy "admin delete room reports" on public.syncpad_room_reports for delete to authenticated using (public.is_syncpad_admin());
 
 drop policy if exists "admin read share-links" on public.syncpad_share_links;
 drop policy if exists "admin update share-links" on public.syncpad_share_links;

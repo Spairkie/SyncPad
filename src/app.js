@@ -9,7 +9,7 @@ import {
   buildRoomUrl, buildReadOnlyUrl, getUrlMode,
 } from './utils.js';
 
-import { loadRoom, createRoom, clearRoomContent, subscribeToRoom, getOrCreateReadOnlyShareLink, resolveReadOnlyShareLink, updateRoomDisplayName, normalizeRoomDisplayName } from './rooms.js';
+import { loadRoom, createRoom, clearRoomContent, subscribeToRoom, getOrCreateReadOnlyShareLink, resolveReadOnlyShareLink, updateRoomDisplayName, normalizeRoomDisplayName, submitRoomReport } from './rooms.js';
 
 import {
   initBroadcast, destroyBroadcast,
@@ -86,6 +86,24 @@ let _searchTerm    = '';
 
 
 const BASE = '/SyncPad';
+
+
+const REPORT_REASON_OPTIONS = new Set(['Spam', 'Abuse or harassment', 'Illegal or harmful content', 'Private information', 'Other']);
+
+function _resetReportRoomModal() {
+  const reasonEl = document.getElementById('report-room-reason');
+  const detailsEl = document.getElementById('report-room-details');
+  const errEl = document.getElementById('report-room-error');
+  const okEl = document.getElementById('report-room-success');
+  const submitEl = document.getElementById('report-room-submit');
+  const charEl = document.getElementById('report-room-charcount');
+  if (reasonEl) reasonEl.value = '';
+  if (detailsEl) detailsEl.value = '';
+  if (charEl) charEl.textContent = '0 / 1000';
+  errEl?.classList.add('hidden');
+  okEl?.classList.add('hidden');
+  if (submitEl) { submitEl.disabled = false; submitEl.textContent = 'Submit report'; }
+}
 
 const RESERVED_ROOM_PATHS = new Set(['admin', 'contact', 'privacy', 'terms', 'share', 'assets', 'src', 'styles', 'docs']);
 
@@ -1033,6 +1051,66 @@ function wireEvents() {
     backdrop.addEventListener('click', (e) => { if (e.target === backdrop) UI.closeAllModals(); })
   );
   document.getElementById('share-modal-close')?.addEventListener('click', () => UI.closeModal('share-modal'));
+
+  document.getElementById('btn-report-room')?.addEventListener('click', () => {
+    closeMoreDropdown();
+    _resetReportRoomModal();
+    UI.openModal('report-room-modal');
+  });
+  document.getElementById('report-room-cancel')?.addEventListener('click', () => UI.closeModal('report-room-modal'));
+  document.getElementById('report-room-details')?.addEventListener('input', (e) => {
+    const details = e.target;
+    if (!details) return;
+    if (details.value.length > 1000) details.value = details.value.slice(0, 1000);
+    const charEl = document.getElementById('report-room-charcount');
+    if (charEl) charEl.textContent = `${details.value.length} / 1000`;
+  });
+  document.getElementById('report-room-submit')?.addEventListener('click', async () => {
+    const reasonEl = document.getElementById('report-room-reason');
+    const detailsEl = document.getElementById('report-room-details');
+    const errEl = document.getElementById('report-room-error');
+    const okEl = document.getElementById('report-room-success');
+    const submitEl = document.getElementById('report-room-submit');
+    const reason = (reasonEl?.value || '').trim();
+    const details = (detailsEl?.value || '').trim();
+
+    errEl?.classList.add('hidden');
+    if (okEl) okEl.classList.add('hidden');
+
+    if (!REPORT_REASON_OPTIONS.has(reason)) {
+      if (errEl) { errEl.textContent = 'Please select a valid reason.'; errEl.classList.remove('hidden'); }
+      return;
+    }
+
+    if (details.length > 1000) {
+      if (errEl) { errEl.textContent = 'Details must be 1000 characters or fewer.'; errEl.classList.remove('hidden'); }
+      return;
+    }
+
+    try {
+      if (submitEl) { submitEl.disabled = true; submitEl.textContent = 'Submitting…'; }
+      await submitRoomReport({
+        roomId: _roomId,
+        shareToken: _isReadOnly ? _shareToken : null,
+        reason,
+        details,
+        mode: _isReadOnly ? 'readonly' : 'editable',
+        pageUrl: location.href,
+        userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
+        reporterDeviceId: getDeviceId(),
+      });
+      if (okEl) okEl.classList.remove('hidden');
+      UI.showToast('Report submitted. Thank you.', 'success');
+      setTimeout(() => UI.closeModal('report-room-modal'), 900);
+    } catch {
+      if (errEl) {
+        errEl.textContent = 'Could not submit report right now. Please try again.';
+        errEl.classList.remove('hidden');
+      }
+      if (submitEl) { submitEl.disabled = false; submitEl.textContent = 'Submit report'; }
+    }
+  });
+
 
   // ── Tools ──────────────────────────────────────────────────────────────────
   const toolActions = {

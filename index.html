@@ -296,6 +296,11 @@
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             <span class="more-item-label">Export</span>
           </button>
+          <div class="more-separator"></div>
+          <button class="more-item" id="btn-report-room" role="menuitem">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9l-6.2 11a2 2 0 0 0 1.7 3h12.4a2 2 0 0 0 1.7-3l-6.2-11a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <span class="more-item-label">Report room</span>
+          </button>
         </div>
       </div>
     </div>
@@ -671,6 +676,33 @@
 
     <div class="modal-actions share-modal-footer">
       <button class="modal-btn-cancel" id="share-modal-close" aria-label="Close share modal">Close</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- Report room modal -->
+<div class="modal-backdrop" id="report-room-modal">
+  <div class="modal report-room-modal" role="dialog" aria-modal="true" aria-labelledby="report-room-title">
+    <h3 id="report-room-title">Report this room</h3>
+    <p>Tell us what is wrong with this room. Reports help keep SyncPad safer.</p>
+    <label class="report-field-label" for="report-room-reason">Reason</label>
+    <select id="report-room-reason" class="settings-input report-room-input">
+      <option value="">Select a reason</option>
+      <option value="Spam">Spam</option>
+      <option value="Abuse or harassment">Abuse or harassment</option>
+      <option value="Illegal or harmful content">Illegal or harmful content</option>
+      <option value="Private information">Private information</option>
+      <option value="Other">Other</option>
+    </select>
+    <label class="report-field-label" for="report-room-details">Optional details</label>
+    <textarea id="report-room-details" class="settings-input report-room-textarea" rows="4" maxlength="1000" placeholder="Add context (optional, max 1000 characters)"></textarea>
+    <div class="report-room-charcount" id="report-room-charcount">0 / 1000</div>
+    <div class="report-room-error hidden" id="report-room-error" aria-live="polite"></div>
+    <div class="report-room-success hidden" id="report-room-success" aria-live="polite">Thank you. Your report was submitted successfully.</div>
+    <div class="modal-actions">
+      <button class="modal-btn-confirm" id="report-room-submit">Submit report</button>
+      <button class="modal-btn-cancel" id="report-room-cancel">Cancel</button>
     </div>
   </div>
 </div>
