@@ -3,10 +3,9 @@
 //   • Live Typing Lane  – Supabase Broadcast ~250 ms throttle, ephemeral
 //   • Save Lane         – Postgres, 1000 ms debounce + flush on blur/unload
 //
-// Encryption contract:
-//   If _encryptFn is set, ALL broadcast payloads are encrypted before sending.
-//   Receivers decrypt via _decryptFn before applying. Plaintext never leaves
-//   this device over Supabase Realtime when encryption is enabled.
+// Realtime payload contract:
+//   Typing/activity broadcasts are metadata-only and intentionally never carry
+//   note content. Content sync is handled by DB saves + postgres_changes.
 //
 // Conflict contract:
 //   Active typing (< 3 s) → queue remote updates, show notice.
@@ -95,26 +94,10 @@ export async function onLocalInput() {
   _onStatusChange('saving');
   _debouncedSave();
 
-  // Broadcast typing — encrypted if the room has encryption enabled.
+  // Broadcast metadata-only typing activity (no note text/ciphertext payload).
   // Skip broadcasting in read-only mode (canBroadcastTyping is false).
   if (canBroadcastTyping()) {
-    _encryptAndBroadcast(plaintext, ++_seqNum);
-  }
-}
-
-/**
- * Encrypt the content if needed, then broadcast it.
- * Plaintext is NEVER sent over Broadcast when encryption is enabled.
- * If encryption throws (e.g. Web Crypto not ready), we skip this broadcast
- * tick silently — the DB save still completes on its debounce cycle.
- */
-async function _encryptAndBroadcast(plaintext, seq) {
-  try {
-    const encrypted = !!_encryptFn;
-    const payload = encrypted ? await _encryptFn(plaintext) : plaintext;
-    broadcastTyping(payload, seq, { encrypted });
-  } catch {
-    // Skip this broadcast tick; no plaintext leaks
+    broadcastTyping(++_seqNum);
   }
 }
 
@@ -152,24 +135,9 @@ const _debouncedSave = debounce(async () => {
 export async function handleRemoteTyping(payload) {
   if (_applyingRemote) return;
   if (_mustIgnoreEncryptedRemote()) return;
-  if (payload?.encrypted && !_decryptFn) return;
 
-  let remoteText = payload.content;
-
-  // Decrypt if the room has encryption — if decryption fails the payload is
-  // either corrupted or from a client with a different key; discard silently.
-  if (_decryptFn && remoteText) {
-    try { remoteText = await _decryptFn(remoteText); }
-    catch { return; }
-  }
-
-  if (_isLocallyActive()) {
-    _pendingRemoteContent   = remoteText;
-    _pendingRemoteTimestamp = payload.ts;
-    _onPendingRemote(remoteText, 'broadcast');
-  } else {
-    _applyContentSafe(remoteText);
-  }
+  // Realtime typing is metadata-only. Remote content must arrive via DB changes.
+  if (payload?.ts) _pendingRemoteTimestamp = payload.ts;
 }
 
 // ── Remote: Postgres DB change ────────────────────────────────────────────────
