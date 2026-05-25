@@ -1636,3 +1636,139 @@ kbd {
 .report-room-error { margin-top: 8px; font-size: 13px; color: var(--red); }
 .report-room-success { margin-top: 8px; font-size: 13px; color: #34d399; }
 #report-room-submit:disabled { opacity: .6; cursor: not-allowed; }
+
+/* ── UI modernization pass (visual-only) ───────────────────────────────────── */
+.app-header {
+  gap: 14px;
+  padding: 10px 14px;
+  border-bottom-color: color-mix(in srgb, var(--border) 80%, transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-surface) 92%, transparent), var(--bg-surface));
+}
+.header-logo { letter-spacing: 0.01em; }
+.header-room { gap: 4px; }
+.room-name-row { gap: 8px; align-items: center; }
+.room-name { font-weight: 600; }
+.room-path-label { font-size: 11px; color: var(--text-muted); }
+.status-row { gap: 8px; color: var(--text-secondary); }
+.status-text { font-size: 12px; }
+.device-count-badge {
+  margin-left: 0;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+.device-count-badge:hover { border-color: var(--border); background: var(--bg-elevated); }
+.header-actions { gap: 8px; }
+
+.header-btn, .header-btn--icon {
+  min-height: 38px;
+  border-radius: 10px;
+}
+.header-btn:focus-visible,
+.room-title-edit-btn:focus-visible,
+.more-item:focus-visible,
+.md-seg-btn:focus-visible,
+#note-editor:focus-visible,
+.modal-actions button:focus-visible,
+.report-room-input:focus-visible,
+.report-room-textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+#more-dropdown {
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+  box-shadow: var(--shadow-lg);
+  padding: 8px;
+  min-width: 232px;
+}
+.more-item {
+  border-radius: 10px;
+  min-height: 40px;
+  padding: 10px 11px;
+}
+.more-item svg { opacity: 0.9; }
+.more-item:hover { background: color-mix(in srgb, var(--bg-elevated) 88%, var(--accent-dim)); }
+
+.editor-toolbar {
+  padding: 8px 16px;
+  border-bottom-color: color-mix(in srgb, var(--border) 80%, transparent);
+}
+.md-segmented {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  padding: 3px;
+  border-radius: 12px;
+}
+.md-seg-btn { min-height: 34px; }
+
+.editor-area { padding: 14px 0 0; }
+.editor-wrap {
+  width: min(1100px, 100% - 20px);
+  margin: 0 auto;
+  border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
+  border-radius: 16px 16px 0 0;
+  background: color-mix(in srgb, var(--bg-surface) 94%, var(--bg-base));
+  overflow: hidden;
+}
+#note-editor {
+  line-height: 1.7;
+  letter-spacing: 0.01em;
+  color: var(--text-primary);
+}
+#note-editor::placeholder {
+  color: color-mix(in srgb, var(--text-secondary) 70%, transparent);
+  font-style: italic;
+}
+@media (min-width: 901px) {
+  #note-editor { max-width: 920px; padding: 36px 36px 120px; }
+}
+
+.empty-state {
+  border: 1px dashed color-mix(in srgb, var(--border) 75%, transparent);
+  background: color-mix(in srgb, var(--bg-elevated) 70%, transparent);
+  border-radius: 12px;
+  padding: 18px 14px;
+}
+
+.modal,
+.auth-card,
+.view-once-consumed-panel .auth-card {
+  border-radius: 16px;
+  border-color: color-mix(in srgb, var(--border) 85%, transparent);
+}
+.modal-actions button { min-height: 40px; }
+.report-room-modal { max-width: 460px; }
+.report-room-input,
+.report-room-textarea { border-radius: 10px; }
+
+@media (max-width: 900px) {
+  .app-header {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: start;
+    gap: 8px;
+  }
+  .header-room { min-width: 0; }
+  .room-name { max-width: min(56vw, 320px); }
+  .status-row { overflow-x: auto; scrollbar-width: thin; }
+  .header-btn { padding-inline: 10px; }
+  .header-btn span { display: none; }
+
+  .editor-toolbar { padding: 8px 10px; }
+  .editor-area { padding-top: 10px; }
+  .editor-wrap {
+    width: calc(100% - 14px);
+    border-radius: 12px 12px 0 0;
+  }
+  #note-editor {
+    max-width: none;
+    margin: 0;
+    padding: 18px 14px 120px;
+    font-size: 15px;
+  }
+
+  .modal { width: min(96vw, 540px); max-height: 90vh; }
+  #more-dropdown { right: -2px; min-width: min(86vw, 280px); }
+}
