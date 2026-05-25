@@ -1590,28 +1590,39 @@ kbd {
 #share-modal .share-section { padding: 24px 24px 0; display: flex; flex-direction: column; gap: 12px; }
 #share-modal .share-section + .share-section { margin-top: 16px; }
 #share-modal .share-section-title { margin: 0; display:flex; align-items:center; gap:8px; font-size: .95rem; font-weight: 500; color: #f4f4f5; }
-#share-modal .share-section-icon { color: #a1a1aa; font-size: 16px; line-height: 1; }
+#share-modal .share-section-icon { color: #a1a1aa; width: 18px; height: 18px; flex-shrink: 0; }
 #share-modal .share-section-desc { margin: 0; font-size: .85rem; color: #a1a1aa; line-height: 1.4; }
 #share-modal .share-url-row { display:flex; align-items:center; background:#27272a; border:1px solid #3f3f46; border-radius:8px; padding:4px 4px 4px 12px; gap:10px; }
 #share-modal .share-url-field { flex:1; min-width: 0; margin:0; border:0; background:transparent; padding:0; font-size:.875rem; font-family:var(--font-mono); color:#f4f4f5; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 #share-modal .share-url-field:focus { outline: none; }
 #share-modal .share-copy-inline { flex-shrink:0; display:inline-flex; align-items:center; gap:6px; min-height:32px; padding:6px 12px; border-radius:6px; border:none; background:#f4f4f5; color:#09090b; font-size:.82rem; font-weight:600; }
-#share-modal .share-copy-inline::before { content: "⧉"; font-size: 12px; }
+#share-modal .share-copy-inline .share-copy-icon { width:14px; height:14px; flex-shrink:0; }
 #share-modal .share-copy-inline:hover { opacity: .92; }
 #share-modal .share-copy-inline:disabled { opacity:.45; cursor:not-allowed; }
 #share-modal .share-icon-actions { display:flex; gap:8px; flex-wrap:wrap; }
-#share-modal .share-icon-btn { width:36px; height:36px; border-radius:6px; border:1px solid #3f3f46; background:transparent; color:#a1a1aa; display:inline-flex; align-items:center; justify-content:center; text-decoration:none; font-size:14px; }
+#share-modal .share-icon-btn { width:36px; height:36px; border-radius:6px; border:1px solid #3f3f46; background:transparent; color:#a1a1aa; display:inline-flex; align-items:center; justify-content:center; text-decoration:none; }
+#share-modal .share-icon-btn svg { width:16px; height:16px; }
 #share-modal .share-icon-btn:hover { background:#3f3f46; color:#f4f4f5; }
 #share-modal .share-icon-btn.is-disabled { opacity:.45; pointer-events:none; }
+#share-modal .share-icon-btn.is-active { background:#3f3f46; border-color:#71717a; color:#f4f4f5; }
 #share-modal .share-inline-error { margin-top: -4px; font-size: 11px; color: var(--red); }
-#share-modal .share-qr-wrap { margin-top: 4px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,.08); }
-#share-modal .share-qr { margin: 0 0 8px; text-align:left; }
+#share-modal .share-qr-wrap { margin-top: 6px; padding: 10px 10px 12px; border:1px solid rgba(255,255,255,.08); border-radius:10px; background: rgba(39,39,42,.55); display:flex; flex-direction:column; align-items:center; }
+#share-modal .share-qr-title { margin: 0 0 8px; font-size: 11px; color: #a1a1aa; text-align: center; }
+#share-modal .share-qr { margin: 0 0 8px; text-align:center; width:100%; display:flex; justify-content:center; }
+#share-modal .share-qr canvas, #share-modal .share-qr img { width: 140px !important; height: 140px !important; max-width: 100%; }
 #share-modal .share-qr-download { width:auto; min-width:110px; padding:7px 10px; font-size:11px; }
 #share-modal .share-modal-footer { padding: 16px 24px 24px; margin: 0; }
 #share-modal .share-modal-footer .modal-btn-cancel { width:100%; background: transparent; border:1px solid #3f3f46; color:#f4f4f5; }
 #share-modal .share-modal-footer .modal-btn-cancel:hover { background:#3f3f46; }
+#share-modal .share-copy-inline:focus-visible,
+#share-modal .share-icon-btn:focus-visible,
+#share-modal .share-modal-footer .modal-btn-cancel:focus-visible {
+  outline: 2px solid #a78bfa;
+  outline-offset: 2px;
+}
 @media (max-width: 680px) {
   #share-modal .share-modal-header { padding: 20px 18px 14px; }
   #share-modal .share-section { padding: 20px 18px 0; }
   #share-modal .share-modal-footer { padding: 14px 18px 18px; }
+  #share-modal .share-qr canvas, #share-modal .share-qr img { width: 126px !important; height: 126px !important; }
 }

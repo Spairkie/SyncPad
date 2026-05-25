@@ -419,21 +419,40 @@ function _wireQrToggle(toggleId, wrapId, enabled) {
   const toggleBtn = document.getElementById(toggleId);
   const wrap = document.getElementById(wrapId);
   if (!toggleBtn || !wrap) return;
+  const allToggles = ['share-editable-qr-toggle', 'share-readonly-qr-toggle'];
+  const allWraps = ['share-editable-qr-wrap', 'share-readonly-qr-wrap'];
   if (!enabled) {
     toggleBtn.classList.add('hidden');
     wrap.classList.add('hidden');
+    toggleBtn.classList.remove('is-active');
     toggleBtn.setAttribute('aria-expanded', 'false');
     return;
   }
   toggleBtn.classList.remove('hidden');
-  toggleBtn.textContent = '⌁';
+  toggleBtn.classList.remove('is-active');
   toggleBtn.setAttribute('aria-expanded', 'false');
   toggleBtn.title = 'Show QR code';
+  toggleBtn.setAttribute('aria-label', toggleBtn.id.includes('editable') ? 'Show QR for editable link' : 'Show QR for read-only link');
   wrap.classList.add('hidden');
   toggleBtn.onclick = () => {
     const willShow = wrap.classList.contains('hidden');
+    if (willShow) {
+      allWraps.forEach((id) => document.getElementById(id)?.classList.add('hidden'));
+      allToggles.forEach((id) => {
+        const btn = document.getElementById(id);
+        if (!btn) return;
+        btn.classList.remove('is-active');
+        btn.setAttribute('aria-expanded', 'false');
+        btn.title = id.includes('editable') ? 'Show QR for editable link' : 'Show QR for read-only link';
+        btn.setAttribute('aria-label', btn.title);
+      });
+    }
     wrap.classList.toggle('hidden', !willShow);
-    toggleBtn.title = willShow ? 'Hide QR code' : 'Show QR code';
+    toggleBtn.classList.toggle('is-active', willShow);
+    toggleBtn.title = willShow
+      ? (toggleBtn.id.includes('editable') ? 'Hide QR for editable link' : 'Hide QR for read-only link')
+      : (toggleBtn.id.includes('editable') ? 'Show QR for editable link' : 'Show QR for read-only link');
+    toggleBtn.setAttribute('aria-label', toggleBtn.title);
     toggleBtn.setAttribute('aria-expanded', willShow ? 'true' : 'false');
   };
 }
