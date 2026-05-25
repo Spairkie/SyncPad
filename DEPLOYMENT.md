@@ -1,7 +1,7 @@
 # SyncPad — Deployment Guide
 
 > ⚠️ **Personal / demo project.**  
-> Read-only links, room locks, and Admin / Room Tools are frontend/convenience controls, not backend-enforced security boundaries.  
+> Read-only links and room locks are frontend/convenience controls, not backend-enforced security boundaries.  
 > Do **not** deploy SyncPad for use with passwords, HIPAA/PII, classified data, or anything sensitive.
 
 ---
@@ -183,7 +183,7 @@ The service worker uses a named cache (`syncpad-v2` as of this release). To forc
 |---|---|
 | Read-only links | Frontend JS only |
 | Room lock | Frontend JS only |
-| Admin / Room Tools | Frontend JS only |
+| `/admin` route | Placeholder page only (dashboard shelved) |
 | Passcode | Client-side hash check |
 | Text encryption | In-browser (AES-256-GCM) |
 | File access | Signed URLs (1 h TTL) — no end-to-end encryption |

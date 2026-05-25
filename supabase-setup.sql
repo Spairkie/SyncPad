@@ -76,6 +76,8 @@ alter table if exists public.syncpad_share_links enable row level security;
 
 
 
+-- Optional/future admin support only: current frontend `/admin` route is a placeholder.
+-- Keep these objects for possible future authenticated maintenance tooling.
 create table if not exists public.syncpad_admins (
   user_id uuid primary key references auth.users(id) on delete cascade,
   email text,

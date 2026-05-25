@@ -300,7 +300,7 @@ export function setUploadingState(uploading) {
 
 // ── Panels ────────────────────────────────────────────────────────────────────
 
-const PANEL_IDS = ['tools-panel', 'files-panel', 'presence-panel', 'settings-panel', 'search-panel', 'admin-panel'];
+const PANEL_IDS = ['tools-panel', 'files-panel', 'presence-panel', 'settings-panel', 'search-panel'];
 
 export function openPanel(id) {
   closeAllPanels();
