@@ -605,17 +605,6 @@ async function startApp() {
       _refreshPreviewIfActive();
       UI.showToast('Note was cleared by another device.', 'warning');
     },
-    onRemoteExpired: async () => {
-      cancelPendingSave();
-      cancelPendingTypingBroadcast();
-      cancelPendingLiveContentBroadcast();
-      clearDraft(_roomId);
-      setContentNoSave('');
-      UI.updateWordCount('');
-      UI.hideExpirationBar();
-      _refreshPreviewIfActive();
-      UI.showToast('This note expired and was cleared.', 'warning', 5000);
-    },
     onRemoteViewOnce: async () => {
       cancelPendingSave();
       cancelPendingTypingBroadcast();
@@ -1695,6 +1684,14 @@ function teardownRealtimeSession() {
   destroyShortcuts();
   cancelPendingTypingBroadcast();
   cancelPendingLiveContentBroadcast();
+  // Clear stale search state so the next room starts with a clean search panel.
+  _searchMatches = [];
+  _searchIndex   = -1;
+  _searchTerm    = '';
+  const _scEl = document.getElementById('search-count');
+  if (_scEl) _scEl.textContent = '';
+  const _siEl = document.getElementById('search-input');
+  if (_siEl) _siEl.value = '';
 }
 
 // ── Templates handler ─────────────────────────────────────────────────────────

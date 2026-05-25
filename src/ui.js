@@ -2,7 +2,7 @@
 // All DOM manipulation lives here. No business logic.
 import {
   countWords, countChars, formatFileSize, fileEmoji, formatTimestamp,
-  escapeHtml,
+  escapeHtml, copyToClipboard,
 } from './utils.js';
 import { getIcon } from './icons.js';
 
@@ -430,15 +430,13 @@ function _wireShareRow({ fieldId, copyBtnId, openId, nativeBtnId, errorId, url, 
     copyBtn.textContent = 'Copy';
     copyBtn.onclick = async () => {
       if (!url) return;
-      try {
-        await navigator.clipboard.writeText(url || '');
+      const ok = await copyToClipboard(url);
+      if (ok) {
         copyBtn.textContent = 'Copied!';
         setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1200);
-      } catch {
-        if (errorEl) {
-          errorEl.textContent = 'Copy failed. Select the URL and copy manually.';
-          errorEl.classList.remove('hidden');
-        }
+      } else if (errorEl) {
+        errorEl.textContent = 'Copy failed. Select the URL and copy manually.';
+        errorEl.classList.remove('hidden');
       }
     };
   }
