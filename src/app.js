@@ -725,8 +725,8 @@ async function _handleRoomStateTransition(prev, newRoom) {
   _updatePermissionContext();
 
   // ── Apply remote DB content after encryption state is current ──────────────
-  // Settings-only writes stamp updated_at/updated_by_device, but they do not
-  // change content. Avoid treating those as stale remote text updates.
+  // Settings-only writes still change updated_by_device and DB-managed updated_at,
+  // but they do not change content. Avoid treating those as stale remote text updates.
   if (shouldApplyRemoteContent) {
     await handleRemoteDatabaseChange(newRoom);
   }

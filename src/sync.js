@@ -37,7 +37,6 @@ let _onPendingRemote  = null;
 let _onDismissPending = null;
 
 let _localLastEditAt           = 0;
-let _lastSuccessfulLocalSaveAt = 0;
 let _pendingRemoteContent      = null;
 let _pendingRemoteTimestamp    = null;
 let _applyingRemote            = false;
@@ -56,7 +55,6 @@ export function initSync(opts) {
   _onDismissPending = opts.onDismissPending || (() => {});
 
   _localLastEditAt           = 0;
-  _lastSuccessfulLocalSaveAt = 0;
   _pendingRemoteContent      = null;
   _applyingRemote            = false;
   _seqNum                    = 0;
@@ -142,7 +140,6 @@ const _debouncedSave = debounce(async () => {
     let content = _getEditorVal();
     if (_encryptFn) content = await _encryptFn(content);
     await saveContent(_roomId, content);
-    _lastSuccessfulLocalSaveAt = Date.now();
     clearDraft(_roomId);
     _onStatusChange('saved');
   } catch {
@@ -189,12 +186,12 @@ export async function handleRemoteDatabaseChange(newRoom) {
     catch { return; }
   }
 
-  const remoteTs = new Date(newRoom.updated_at).getTime();
-  if (_lastSuccessfulLocalSaveAt && remoteTs < _lastSuccessfulLocalSaveAt) return;
+  // Do not reject DB updates by comparing server updated_at to local Date.now().
+  // Client clocks can drift; we only ignore our own writes via updated_by_device.
 
   if (_isLocallyActive()) {
     _pendingRemoteContent   = remoteText;
-    _pendingRemoteTimestamp = remoteTs;
+    _pendingRemoteTimestamp = newRoom.updated_at || null;
     _onPendingRemote(remoteText, 'db');
   } else {
     _applyContentSafe(remoteText);

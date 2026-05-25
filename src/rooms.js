@@ -50,7 +50,6 @@ export async function saveContent(roomId, content) {
   const sb = getSupabaseClient();
   const { error } = await sb.from(TABLE).update({
     content,
-    updated_at:        new Date().toISOString(),
     updated_by_device: getDeviceId(),
     cleared_reason:    null,
   }).eq('room_id', roomId);
@@ -68,7 +67,6 @@ export async function updateRoomDisplayName(roomId, title) {
   const roomName = normalizeRoomDisplayName(title);
   const { error } = await sb.from(TABLE).update({
     room_name: roomName,
-    updated_at: new Date().toISOString(),
     updated_by_device: getDeviceId(),
   }).eq('room_id', roomId);
   if (error) { logSupabaseError('updateRoomDisplayName', error, { room_id: roomId }); throw error; }
@@ -82,10 +80,7 @@ export async function updateRoomSettings(roomId, settings) {
   delete safe.content;
   delete safe.room_id;
 
-  // Settings-only writes still need a fresh stamp so remote clients can tell
-  // who changed lock/passcode/expiration/view-once state and avoid treating
-  // stale content metadata as the latest writer.
-  safe.updated_at = new Date().toISOString();
+  // DB owns updated_at via trigger; client should not stamp it with local time.
   safe.updated_by_device = getDeviceId();
 
   const { error } = await sb.from(TABLE).update(safe).eq('room_id', roomId);
@@ -108,7 +103,6 @@ export async function clearRoomContent(roomId, reason, replacementContent = '') 
   const sb = getSupabaseClient();
   const { error } = await sb.from(TABLE).update({
     content:           replacementContent,
-    updated_at:        new Date().toISOString(),
     updated_by_device: getDeviceId(),
     cleared_reason:    reason || 'manual',
   }).eq('room_id', roomId);
