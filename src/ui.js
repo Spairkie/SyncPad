@@ -359,9 +359,10 @@ export function populateShareModal({
   hasViewOnce = false, expiresAt = null,
 } = {}) {
   const roomPathEl = document.getElementById('share-room-path');
-  const roomTitleEl = document.getElementById('share-room-title');
-  if (roomPathEl) roomPathEl.textContent = roomPath || '';
-  if (roomTitleEl) roomTitleEl.textContent = roomDisplayTitle || '';
+  const titleEl = document.getElementById('share-modal-title');
+  const displayTitle = (roomDisplayTitle || '').trim() || (roomPath || '').replace(/^\//, '') || 'room';
+  if (titleEl) titleEl.textContent = `Share "${displayTitle}"`;
+  if (roomPathEl) roomPathEl.textContent = roomPath ? `Path: ${roomPath}` : '';
   _renderShareBadges({ hasPasscode, hasEncryption, hasReadOnlyLink, isEditingLocked, hasViewOnce, hasExpiration: !!expiresAt });
 
   _wireShareRow({ fieldId: 'share-editable-text', copyBtnId: 'share-editable-copy', openId: 'share-editable-open', nativeBtnId: 'share-editable-native-btn', errorId: 'share-editable-error', url: editableUrl });
@@ -372,17 +373,11 @@ export function populateShareModal({
   _wireShareRow({ fieldId: 'share-readonly-text', copyBtnId: 'share-readonly-copy', openId: 'share-readonly-open', nativeBtnId: 'share-readonly-native-btn', errorId: 'share-readonly-error', url: readOnlyUrl, displayValue: readOnlyDisplay });
   _renderQr('share-readonly-qr', readOnlyUrl);
   _wireQrToggle('share-readonly-qr-toggle', 'share-readonly-qr-wrap', !!readOnlyUrl);
-
-  document.getElementById('share-passcode-notice')?.classList.toggle('hidden', !hasPasscode);
-  document.getElementById('share-encryption-notice')?.classList.toggle('hidden', !hasEncryption);
-  document.getElementById('share-viewonce-notice')?.classList.toggle('hidden', !hasViewOnce);
-  document.getElementById('share-expiration-notice')?.classList.toggle('hidden', !expiresAt);
-
   _wireQrDownload('share-editable-qr-download', 'share-editable-qr', 'syncpad-editable-qr.png');
   _wireQrDownload('share-readonly-qr-download', 'share-readonly-qr', 'syncpad-readonly-qr.png', !readOnlyUrl);
 }
 
-function _renderShareBadges({ hasPasscode, hasEncryption, hasReadOnlyLink, isEditingLocked, hasViewOnce, hasExpiration }) {
+function _renderShareBadges({ hasPasscode, hasEncryption, hasViewOnce, hasExpiration }) {
   const badgesEl = document.getElementById('share-room-badges');
   if (!badgesEl) return;
   badgesEl.innerHTML = '';
@@ -390,9 +385,7 @@ function _renderShareBadges({ hasPasscode, hasEncryption, hasReadOnlyLink, isEdi
   if (hasEncryption) badges.push('Encrypted');
   if (hasPasscode) badges.push('Passcode protected');
   if (hasViewOnce) badges.push('View-once');
-  if (hasReadOnlyLink) badges.push('Read-only link ready');
-  if (hasExpiration) badges.push('Link expires');
-  if (isEditingLocked) badges.push('Editing locked');
+  if (hasExpiration) badges.push('Expires');
   badges.forEach((label) => {
     const badge = document.createElement('span');
     badge.className = 'share-room-badge';
@@ -403,7 +396,7 @@ function _renderShareBadges({ hasPasscode, hasEncryption, hasReadOnlyLink, isEdi
 
 function _wireShareRow({ fieldId, copyBtnId, openId, nativeBtnId, errorId, url, displayValue = url }) {
   const fieldEl = document.getElementById(fieldId);
-  if (fieldEl) fieldEl.value = displayValue || '';
+  if (fieldEl) { fieldEl.value = displayValue || ''; fieldEl.title = displayValue || ''; }
   const errorEl = document.getElementById(errorId);
   if (errorEl) { errorEl.textContent = ''; errorEl.classList.add('hidden'); }
 
@@ -424,7 +417,7 @@ function _wireShareRow({ fieldId, copyBtnId, openId, nativeBtnId, errorId, url, 
       try {
         await navigator.clipboard.writeText(url || '');
         copyBtn.textContent = 'Copied!';
-        setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1500);
+        setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1200);
       } catch {
         if (errorEl) {
           errorEl.textContent = 'Copy failed. Select the URL and copy manually.';
@@ -448,13 +441,13 @@ function _wireQrToggle(toggleId, wrapId, enabled) {
     return;
   }
   toggleBtn.classList.remove('hidden');
-  toggleBtn.textContent = 'Show QR';
+  toggleBtn.textContent = '⌁ Show QR';
   toggleBtn.setAttribute('aria-expanded', 'false');
   wrap.classList.add('hidden');
   toggleBtn.onclick = () => {
     const willShow = wrap.classList.contains('hidden');
     wrap.classList.toggle('hidden', !willShow);
-    toggleBtn.textContent = willShow ? 'Hide QR' : 'Show QR';
+    toggleBtn.textContent = willShow ? '⌁ Hide QR' : '⌁ Show QR';
     toggleBtn.setAttribute('aria-expanded', willShow ? 'true' : 'false');
   };
 }
