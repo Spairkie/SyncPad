@@ -20,7 +20,7 @@ import { saveContent }           from './rooms.js';
 import { broadcastTyping, broadcastLiveContent, LIVE_CONTENT_BROADCAST_MAX_CHARS } from './live-broadcast.js';
 import { saveDraft, clearDraft } from './offline.js';
 import { debounce, getDeviceId } from './utils.js';
-import { canEdit, canBroadcastTyping, canBroadcastLiveContent, getPermissionContext } from './permissions.js';
+import { canEdit, canBroadcastTyping, canBroadcastLiveContent, canReceiveLiveContent, getPermissionContext } from './permissions.js';
 
 const IDLE_THRESHOLD_MS = 3000;
 const SAVE_DEBOUNCE_MS  = 1000;
@@ -152,7 +152,7 @@ export async function handleRemoteTyping(payload) {
 export function handleRemoteLiveContent(payload) {
   if (_applyingRemote) return;
   if (_mustIgnoreEncryptedRemote()) return;
-  if (!canEdit()) return;
+  if (!canReceiveLiveContent()) return;
   if (!payload || payload.type !== 'content_live') return;
   if (typeof payload.content !== 'string') return;
   if (payload.content.length > LIVE_CONTENT_BROADCAST_MAX_CHARS) return;
