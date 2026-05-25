@@ -1523,3 +1523,13 @@ kbd {
 .footer-links a { color:var(--text-muted); text-decoration:none; font-size:12px; }
 .footer-links a:hover { color:var(--text-primary); text-decoration:underline; }
 @media (max-width: 700px){ .contact-grid{grid-template-columns:1fr;} .footer-links{display:none;} .legal-card{padding:20px;} }
+
+.room-name-display { display:flex; align-items:center; min-width:0; gap:6px; }
+.room-title-edit-btn { color: var(--text-muted); font-size: 12px; }
+.room-title-edit-btn:hover { color: var(--accent); }
+.room-title-editor { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.room-title-editor input { background: var(--bg-input); border:1px solid var(--border); color:var(--text-primary); border-radius:6px; padding:4px 8px; font-size:12px; }
+.room-title-btn { font-size:11px; padding:4px 8px; border:1px solid var(--border); border-radius:6px; color:var(--text-primary); background:var(--bg-elevated); }
+.room-title-btn.subtle { color: var(--text-secondary); }
+.room-path-label { font-size:10px; color: var(--text-muted); }
+.share-room-title { font-size: 13px; color: var(--text-primary); margin-bottom: 2px; }

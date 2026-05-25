@@ -230,7 +230,16 @@
     <!-- Center: Room info -->
     <div class="header-room">
       <div class="room-name-row">
-        <span class="room-name" id="room-name" title="Click to copy room link"></span>
+        <div id="room-name-display" class="room-name-display">
+          <span class="room-name" id="room-name" title="Click to copy room link"></span>
+          <button class="room-title-edit-btn hidden" id="room-title-edit-btn" aria-label="Edit room title" title="Edit room title">✎</button>
+        </div>
+        <div id="room-title-editor" class="room-title-editor hidden">
+          <input id="room-title-input" maxlength="80" placeholder="Room title" aria-label="Room title" />
+          <button id="room-title-save-btn" class="room-title-btn">Save title</button>
+          <button id="room-title-cancel-btn" class="room-title-btn subtle">Cancel</button>
+        </div>
+        <div id="room-path-label" class="room-path-label hidden"></div>
         <span class="encryption-badge hidden" id="encryption-badge">Encrypted</span>
         <span class="view-once-badge hidden"  id="view-once-badge">View-once</span>
         <span class="readonly-badge hidden"   id="readonly-badge">Read-only</span>
@@ -607,6 +616,7 @@
 
     <div class="share-room-summary" aria-live="polite">
       <div class="share-summary-label">Room</div>
+      <div class="share-room-title" id="share-room-title"></div>
       <div class="share-room-path" id="share-room-path"></div>
       <div class="share-room-badges" id="share-room-badges"></div>
     </div>
