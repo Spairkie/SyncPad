@@ -9,7 +9,7 @@
 
 > ⚠️ **Personal / demo project.**  
 > SyncPad is a personal project built for learning and portfolio purposes.  
-> **Read-only links, room locks, and Admin / Room Tools are frontend/convenience controls, not backend-enforced security boundaries.**  
+> **Read-only links and room locks are frontend/convenience controls, not backend-enforced security boundaries.**  
 > Anyone with the Supabase anon key can call the API directly.  
 > **Do not use SyncPad for passwords, HIPAA/PII, classified information, or any sensitive data.**
 
@@ -23,9 +23,9 @@
 |---------|--------|-------------|
 | `docs/screenshots/landing.png` | `docs/screenshots/editor.png` | `docs/screenshots/share-modal.png` |
 
-| File Preview | Admin / Room Tools | Mobile |
+| File Preview | Admin placeholder | Mobile |
 |---|---|---|
-| `docs/screenshots/file-preview.png` | `docs/screenshots/admin-tools.png` | `docs/screenshots/mobile.png` |
+| `docs/screenshots/file-preview.png` | `docs/screenshots/admin-placeholder.png` | `docs/screenshots/mobile.png` |
 
 ---
 
@@ -93,15 +93,6 @@
 - **Mobile layout** — bottom action bar with one-thumb access to all major features
 - **PWA** — installable on desktop and mobile; offline-capable for cached assets
 
-### Admin / Room Tools
-- **Room info** — ID, timestamps, lock/encryption/passcode/view-once status
-- **Room actions** — copy links, lock/unlock editing, clear note
-- **File stats** — count, total size, filename list
-- **Presence diagnostics** — device names, roles, typing state
-- **App diagnostics** — Supabase config, Realtime status, theme, device info
-- **Maintenance guidance** — storage orphan cleanup and expired room docs
-
----
 
 ## Keyboard Shortcuts
 
@@ -143,23 +134,6 @@ Close the preview modal with the ✕ button, clicking the backdrop, or pressing 
 
 ---
 
-## Admin / Room Tools
-
-Open from **More (⋯) → Admin / Room Tools**.
-
-This is a **frontend-only convenience panel** for the demo/personal use case. It is not secure admin authentication.
-
-The dashboard shows:
-1. **Room info** — all room metadata at a glance
-2. **Room actions** — copy editable/read-only links, lock/unlock editing, clear note
-3. **File stats** — file count, total size, filename list
-4. **Presence diagnostics** — connected devices, editor/viewer status, typing state
-5. **App diagnostics** — Supabase config, Realtime connection, theme, device ID
-6. **Maintenance guidance** — storage orphan cleanup and expired room cleanup docs
-
-> Room tools are frontend convenience controls for this personal/demo project. They are not backend-enforced admin permissions.
-
----
 
 ## Storage Orphan Cleanup
 
@@ -200,7 +174,7 @@ Full automated cleanup (listing bucket objects and deleting orphans programmatic
 | No user accounts or authentication | Rooms are shared by URL; anyone with the URL can join |
 | Read-only mode is frontend-only | Not a security boundary |
 | Room lock is frontend-only | Not a security boundary |
-| Admin / Room Tools are frontend-only | Not authenticated admin controls |
+| `/admin` route is a placeholder only | Admin dashboard is intentionally shelved |
 | Files are not end-to-end encrypted | Text encryption covers note content only |
 | Passcode is a convenience gate | Hash is checked client-side; not server-enforced |
 | Storage orphan cleanup is manual | No automatic deletion of orphaned storage objects |
@@ -222,7 +196,6 @@ Browser UI (HTML/CSS/JS)
             ├── live-broadcast.js — Supabase Broadcast events
             ├── files.js        — upload, download, delete
             ├── file-preview.js — in-app preview modal
-            ├── dashboard.js    — Admin / Room Tools panel
             ├── markdown.js     — safe custom Markdown renderer
             ├── encryption.js   — AES-256-GCM + PBKDF2 (Web Crypto)
             ├── permissions.js  — frontend permission context
@@ -265,7 +238,7 @@ Supabase Backend
 ## Roadmap
 
 - [ ] Backend-enforced permissions (Supabase RLS + per-room session tokens)
-- [ ] True admin authentication (JWT-based room owner verification)
+- [ ] Optional future admin dashboard (currently shelved)
 - [ ] End-to-end encrypted file attachments
 - [ ] Automated storage orphan cleanup (Supabase Edge Function)
 - [ ] Version history (note diffs in Postgres)
