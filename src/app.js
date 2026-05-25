@@ -72,6 +72,7 @@ let _expTimer      = null;
 let _monospace     = false;
 let _eventsWired   = false;  // v1: guard against double-wiring
 let _consumingViewOnce = false; // v1: short-circuit own view-once clear echo
+let _viewOnceConsumedByThisSession = false; // session-local allowlist for first consumer view
 let _isReadOnly    = false;  // v1: ?mode=read or /share/:token
 let _shareToken    = null;
 let _markdownMode  = 'write'; // 'write' | 'preview' | 'split'
@@ -329,6 +330,7 @@ async function joinReadOnlyShareRoute(token) {
 async function joinRoom(roomId) {
   teardownRealtimeSession();
   _roomId = roomId;
+  _viewOnceConsumedByThisSession = false;
   UI.setLoadingMessage('Loading room…');
 
   try {
@@ -452,7 +454,6 @@ async function startApp() {
   const shouldConsumeViewOnce = (
     _room.view_once &&
     !isCreator &&
-    !_isReadOnly &&
     !_room.viewed &&
     _room.cleared_reason !== 'view_once'
   );
@@ -581,6 +582,7 @@ async function startApp() {
       const consumed = await consumeViewOnce(_roomId, _room, false, await _emptyContentForCurrentEncryption());
       if (consumed) {
         _room = await loadRoom(_roomId);
+        _viewOnceConsumedByThisSession = true;
         clearDraft(_roomId);
         _updatePermissionContext();
         broadcastViewOnceCleared();
@@ -710,7 +712,7 @@ async function _handleRoomStateTransition(prev, newRoom) {
     clearDraft(_roomId);
     // v1: do not clear the local editor if WE were the consumer, but lock it so
     // the consumed note never gets saved back to the server.
-    if (_consumingViewOnce || isOwnWrite) {
+    if (_consumingViewOnce || _viewOnceConsumedByThisSession || isOwnWrite) {
       _consumingViewOnce = false;
       _updatePermissionContext();
     } else {
@@ -735,7 +737,7 @@ function _updatePermissionContext() {
     isEncryptedNoKey: !!_room?.encryption_enabled && !_encKey,
     isEncryptionEnabled: !!_room?.encryption_enabled,
     isCleared:        !!_room?.cleared_reason,
-    isViewOnceConsumed: _room?.cleared_reason === 'view_once' && !!_room?.viewed,
+    isViewOnceConsumed: (_room?.cleared_reason === 'view_once' && !!_room?.viewed && !_viewOnceConsumedByThisSession),
   });
   UI.setEditorEditable(canEdit());
   UI.setEditBlockedReason(editBlockedReason());
@@ -743,16 +745,17 @@ function _updatePermissionContext() {
 }
 
 function _updateViewOnceConsumedUI() {
-  const consumed = _room?.view_once && _room?.cleared_reason === 'view_once' && !!_room?.viewed;
+  const consumed = _room?.view_once && _room?.cleared_reason === 'view_once' && !!_room?.viewed && !_viewOnceConsumedByThisSession;
   UI.setViewOnceConsumedPanel({
     visible: !!consumed,
     readOnly: !!_isReadOnly,
     onStartNew: async () => {
-      if (_isReadOnly || !canChangeSettings()) return;
+      if (_isReadOnly) return;
       try {
         await resetViewOnceNote(_roomId, await _emptyContentForCurrentEncryption(), true);
         clearDraft(_roomId);
         _room = await loadRoom(_roomId);
+        _viewOnceConsumedByThisSession = false;
         setContentNoSave('');
         UI.updateWordCount('');
         _refreshPreviewIfActive();
