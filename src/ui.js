@@ -6,6 +6,9 @@ import {
 } from './utils.js';
 import { getIcon } from './icons.js';
 
+let _footerClockTimer = null;
+const _footerTimeFormatter = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
+
 // ── Screen management ─────────────────────────────────────────────────────────
 
 export function showScreen(name) {
@@ -225,6 +228,23 @@ export function updateWordCount(text) {
 export function updateDeviceCount(n) {
   const el = document.getElementById('device-count');
   if (el) el.textContent = `${n} connected`;
+}
+
+export function updateFooterClock() {
+  const btn = document.getElementById('btn-insert-ts');
+  const timeEl = document.getElementById('footer-current-time');
+  if (!btn || !timeEl) return;
+  const currentTime = _footerTimeFormatter.format(new Date());
+  timeEl.textContent = currentTime;
+  const label = `Insert timestamp, current time ${currentTime}`;
+  btn.title = label;
+  btn.setAttribute('aria-label', label);
+}
+
+export function initFooterClock() {
+  updateFooterClock();
+  if (_footerClockTimer) return;
+  _footerClockTimer = window.setInterval(updateFooterClock, 60_000);
 }
 
 // ── Devices list (presence panel) ─────────────────────────────────────────────

@@ -958,6 +958,7 @@ function wireEvents() {
   document.getElementById('btn-files')?.addEventListener('click', () => { closeMoreDropdown(); UI.togglePanel('files-panel'); });
   document.getElementById('btn-presence')?.addEventListener('click', () => { closeMoreDropdown(); UI.togglePanel('presence-panel'); });
   document.getElementById('btn-settings')?.addEventListener('click', () => { closeMoreDropdown(); UI.togglePanel('settings-panel'); });
+  document.getElementById('btn-about')?.addEventListener('click', () => { closeMoreDropdown(); UI.openModal('about-modal'); });
   document.getElementById('device-count-btn')?.addEventListener('click', () => UI.togglePanel('presence-panel'));
 
   // More dropdown toggle
@@ -1040,6 +1041,7 @@ function wireEvents() {
     if (!canEdit()) { UI.showToast(editBlockedReason() || 'Editing is disabled.', 'warning'); return; }
     UI.insertAtCursor(insertTimestamp());
   });
+  UI.initFooterClock();
 
   // ── Panels / modals ────────────────────────────────────────────────────────
   document.querySelectorAll('.panel-close').forEach(btn =>
@@ -1051,6 +1053,7 @@ function wireEvents() {
     backdrop.addEventListener('click', (e) => { if (e.target === backdrop) UI.closeAllModals(); })
   );
   document.getElementById('share-modal-close')?.addEventListener('click', () => UI.closeModal('share-modal'));
+  document.getElementById('about-modal-close')?.addEventListener('click', () => UI.closeModal('about-modal'));
 
   document.getElementById('btn-report-room')?.addEventListener('click', () => {
     closeMoreDropdown();
@@ -1510,6 +1513,19 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
       UI.closeAllModals();
     },
     onOpenShortcuts: () => UI.openModal('shortcuts-modal'),
+    onOpenShare: () => {
+      _openShareModal();
+      UI.showToast('Share opened.', 'success');
+    },
+    onInsertTimestamp: () => {
+      if (!canEdit()) { UI.showToast(editBlockedReason() || 'Editing is disabled.', 'warning'); return; }
+      UI.insertAtCursor(insertTimestamp());
+      UI.showToast('Timestamp inserted.', 'success');
+    },
+    onCopyNote: () => {
+      copyToClipboard(UI.getEditorValue())
+        .then(() => UI.showToast('Copied to clipboard.', 'success'));
+    },
   });
 }
 

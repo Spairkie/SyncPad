@@ -233,7 +233,12 @@
       <div class="room-name-row">
         <div id="room-name-display" class="room-name-display">
           <span class="room-name" id="room-name" title="Click to copy room link"></span>
-          <button class="room-title-edit-btn hidden" id="room-title-edit-btn" aria-label="Edit room title" title="Edit room title">✎</button>
+          <button class="room-title-edit-btn hidden" id="room-title-edit-btn" aria-label="Edit room title" title="Edit room title">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 20h9"/>
+              <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4z"/>
+            </svg>
+          </button>
         </div>
         <div id="room-title-editor" class="room-title-editor hidden">
           <input id="room-title-input" maxlength="80" placeholder="Room title" aria-label="Room title" />
@@ -291,6 +296,10 @@
           <button class="more-item" id="btn-shortcuts" role="menuitem">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8"/></svg>
             <span class="more-item-label">Keyboard Shortcuts</span>
+          </button>
+          <button class="more-item" id="btn-about" role="menuitem">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            <span class="more-item-label">About SyncPad</span>
           </button>
           <button class="more-item" id="btn-export" role="menuitem">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -375,9 +384,9 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
         Copy
       </button>
-      <button class="footer-tool-btn" id="btn-insert-ts" data-readonly-hide title="Insert timestamp">
+      <button class="footer-tool-btn" id="btn-insert-ts" data-readonly-hide title="Insert timestamp" aria-label="Insert timestamp">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-        Time
+        <span id="footer-current-time">Time</span>
       </button>
     </div>
     <div class="footer-links"><a href="/SyncPad/contact">Contact</a><a href="/SyncPad/privacy">Privacy</a><a href="/SyncPad/terms">Terms</a></div>
@@ -828,21 +837,24 @@
     <div class="shortcuts-list">
       <div class="shortcuts-group">
         <div class="shortcuts-group-title">View</div>
+        <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>S</kbd> <span>Save note</span></div>
+        <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>F</kbd> <span>Find in note</span></div>
         <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>P</kbd> <span>Toggle Preview</span></div>
         <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>S</kbd> <span>Split view</span></div>
         <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>M</kbd> <span>Toggle Monospace</span></div>
-        <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>F</kbd> <span>Find in note</span></div>
       </div>
       <div class="shortcuts-group">
         <div class="shortcuts-group-title">Edit</div>
-        <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>S</kbd> <span>Force save</span></div>
         <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>B</kbd> <span>Bold selection</span></div>
         <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>I</kbd> <span>Italic selection</span></div>
-        <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>K</kbd> <span>Insert link</span></div>
+        <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>K</kbd> <span>Insert markdown link</span></div>
+        <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>K</kbd> <span>Share room</span></div>
+        <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>T</kbd> <span>Insert timestamp</span></div>
+        <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>C</kbd> <span>Copy note</span></div>
       </div>
       <div class="shortcuts-group">
         <div class="shortcuts-group-title">Navigation</div>
-        <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>/</kbd> <span>This modal</span></div>
+        <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>/</kbd> <span>Keyboard shortcuts</span></div>
         <div class="shortcut-row"><kbd>Esc</kbd> <span>Close panel / modal</span></div>
       </div>
       <p class="shortcuts-note">Mac users: replace <kbd>Ctrl</kbd> with <kbd>⌘</kbd>.</p>
@@ -857,6 +869,32 @@
       <a href="/SyncPad/privacy">Privacy</a>
       <a href="/SyncPad/terms">Terms</a>
     </div>
+</div>
+
+<!-- About modal -->
+<div class="modal-backdrop" id="about-modal">
+  <div class="modal about-modal" role="dialog" aria-modal="true" aria-labelledby="about-modal-title">
+    <h3 id="about-modal-title">About SyncPad</h3>
+    <p>SyncPad is a simple anonymous shared notepad for quick collaboration. Create a room, share the editable link, or generate a hidden read-only share link.</p>
+    <ul class="about-list">
+      <li>Anonymous rooms</li>
+      <li>Live syncing</li>
+      <li>Editable room links</li>
+      <li>Hidden read-only share links</li>
+      <li>Optional passcode, encryption, expiration, and view-once settings</li>
+      <li>File handoff</li>
+      <li>Report room option</li>
+    </ul>
+    <p class="about-security-note"><strong>Security note:</strong> SyncPad is link-based. Anyone with an editable room link can edit that room. Read-only links hide the room path but still act like bearer links.</p>
+    <div class="about-links">
+      <a href="/SyncPad/privacy">Privacy</a>
+      <a href="/SyncPad/terms">Terms</a>
+      <a href="/SyncPad/contact">Contact</a>
+    </div>
+    <div class="modal-actions">
+      <button class="modal-btn-cancel" id="about-modal-close">Close</button>
+    </div>
+  </div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════
