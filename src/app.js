@@ -59,7 +59,6 @@ import { initShortcuts, destroyShortcuts }     from './shortcuts.js';
 
 import * as UI from './ui.js';
 import { openFilePreview } from './file-preview.js';
-import { openDashboard }   from './dashboard.js';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
@@ -78,7 +77,6 @@ let _shareToken    = null;
 let _markdownMode  = 'write'; // 'write' | 'preview' | 'split'
 let _showPreview   = false;  // derived: _markdownMode !== 'write'
 let _previewObserverWired = false;
-let _currentFiles  = [];     // v2: live file list for admin dashboard
 
 // ── Search state ──────────────────────────────────────────────────────────────
 let _searchMatches = []; // [{start,end}]
@@ -820,8 +818,6 @@ async function refreshFiles() {
       },
     }
   );
-  // Keep a live reference for the admin dashboard
-  _currentFiles = files;
 }
 
 // ── Event wiring (guarded against double-wire) ────────────────────────────────
@@ -879,7 +875,6 @@ function wireEvents() {
   document.getElementById('btn-presence')?.addEventListener('click', () => { closeMoreDropdown(); UI.togglePanel('presence-panel'); });
   document.getElementById('btn-settings')?.addEventListener('click', () => { closeMoreDropdown(); UI.togglePanel('settings-panel'); });
   document.getElementById('device-count-btn')?.addEventListener('click', () => UI.togglePanel('presence-panel'));
-  document.getElementById('btn-admin')?.addEventListener('click', () => { closeMoreDropdown(); _openAdminDashboard(); });
 
   // More dropdown toggle
   const moreBtn      = document.getElementById('btn-more');
@@ -1411,60 +1406,6 @@ function _wirePreviewClickOnce() {
   });
 }
 
-// ── Admin / Room Tools dashboard ──────────────────────────────────────────────
-
-function _openAdminDashboard() {
-  const deviceId   = getDeviceId();
-  const deviceName = getDeviceName ? getDeviceName() : '';
-  const devices    = _getPresenceDevices();
-
-  openDashboard({
-    room:               _room,
-    roomId:             _roomId,
-    BASE,
-    files:              _currentFiles,
-    devices,
-    myDeviceId:         deviceId,
-    myDeviceName:       deviceName,
-    isReadOnly:         _isReadOnly,
-    encKeyActive:       !!_room?.encryption_enabled && !!_encKey,
-    supabaseConfigured: !!(window.SYNCPAD_CONFIG?.supabaseUrl && window.SYNCPAD_CONFIG?.supabaseAnonKey),
-
-    onCopyEditableLink: () => {
-      copyToClipboard(buildRoomUrl(BASE, _roomId))
-        .then(() => UI.showToast('Editable link copied!', 'success'))
-        .catch(() => UI.showToast('Could not copy.', 'error'));
-    },
-    onCopyReadOnlyLink: () => {
-      (async () => copyToClipboard(buildReadOnlyUrl(BASE, (await getOrCreateReadOnlyShareLink(_roomId))?.token || '')))()
-        .then(() => UI.showToast('Read-only link copied!', 'success'))
-        .catch(() => UI.showToast('Could not copy.', 'error'));
-    },
-    onLock: async () => {
-      if (!canToggleLock()) { UI.showToast(editBlockedReason() || 'Lock controls are disabled.', 'warning'); return; }
-      const target = !_room?.editing_locked;
-      try {
-        if (target) { await flushSave(); cancelPendingTypingBroadcast(); }
-        await setEditingLocked(_roomId, target);
-        _room = await loadRoom(_roomId);
-        _updatePermissionContext();
-        UI.renderSettingsPanel(_room);
-        UI.setLockedMode(!!_room.editing_locked);
-        broadcastSettingsChange();
-        UI.showToast(target ? 'Editing locked.' : 'Editing unlocked.', 'success');
-      } catch { UI.showToast('Could not update editing lock.', 'error'); }
-    },
-    onClear: async () => {
-      if (!canClearNote()) { UI.showToast(editBlockedReason() || 'Clear is disabled.', 'warning'); return; }
-      if (!confirm('Clear the note for everyone? This cannot be undone.')) return;
-      await doClearNote();
-      // Re-open dashboard with updated state
-      setTimeout(_openAdminDashboard, 400);
-    },
-    onOpenFiles: () => UI.openPanel('files-panel'),
-    onClose: () => UI.closeAllPanels(),
-  });
-}
 
 /** Snapshot the current presence device list. */
 function _getPresenceDevices() {
