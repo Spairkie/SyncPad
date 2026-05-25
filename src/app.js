@@ -13,7 +13,7 @@ import { loadRoom, createRoom, clearRoomContent, subscribeToRoom, getOrCreateRea
 
 import {
   initBroadcast, destroyBroadcast,
-  broadcastSettingsChange, broadcastFilesChange, cancelPendingTypingBroadcast,
+  broadcastSettingsChange, broadcastFilesChange, cancelPendingTypingBroadcast, cancelPendingLiveContentBroadcast,
   broadcastClear, broadcastViewOnceCleared,
 } from './live-broadcast.js';
 
@@ -25,7 +25,7 @@ import {
 import {
   initSync, destroySync,
   onLocalInput, onEditorBlur, flushSave, cancelPendingSave,
-  handleRemoteTyping, handleRemoteDatabaseChange,
+  handleRemoteTyping, handleRemoteLiveContent, handleRemoteDatabaseChange,
   setContentNoSave, applyPendingRemote, dismissPendingRemote, getPendingRemote, getPendingRemoteTs,
   setEncryption,
 } from './sync.js';
@@ -515,7 +515,7 @@ async function startApp() {
     encryptFn:        _encKey ? (pt) => encryptContent(pt, _encKey) : null,
     decryptFn:        _encKey ? (ct) => decryptContent(ct, _encKey) : null,
     getEditorVal:     UI.getEditorValue,
-    setEditorVal:     (text) => { UI.setEditorValue(text); _refreshPreviewIfActive(); },
+    setEditorVal:     (text) => { UI.setEditorValue(text); UI.updateWordCount(text); _refreshPreviewIfActive(); },
     onStatusChange:   UI.setStatus,
     onPendingRemote:  (remoteText) => UI.showRemoteNotice({
       onApply:   () => { applyPendingRemote();   UI.hideRemoteNotice(); },
@@ -551,6 +551,10 @@ async function startApp() {
       UI.showTypingIndicator(payload.device_name || 'Someone');
       await handleRemoteTyping(payload);
       _refreshPreviewIfActive();
+    },
+    onRemoteLiveContent: async (payload) => {
+      if (_isEncryptedWithoutKey()) return;
+      await handleRemoteLiveContent(payload);
     },
     onRemoteSettings: async () => {
       // Another device changed settings — reload and re-render. Do NOT
@@ -665,6 +669,7 @@ function _isEncryptedWithoutKey(room = _room) {
 function _enterEncryptedNoKeyMode(newRoom, { showToast = false } = {}) {
   cancelPendingSave();
   cancelPendingTypingBroadcast();
+  cancelPendingLiveContentBroadcast();
   _encKey = null;
   _encSalt = newRoom?.encryption_salt || null;
   setEncryption(null, null);
@@ -707,6 +712,7 @@ async function _handleRoomStateTransition(prev, newRoom) {
     // Encryption just got turned off. Switch sync.js back to plaintext BEFORE
     // applying the new room content, because newRoom.content is now plaintext.
     cancelPendingTypingBroadcast();
+    cancelPendingLiveContentBroadcast();
     _encKey = null;
     _encSalt = null;
     setEncryption(null, null);
@@ -1244,6 +1250,7 @@ function wireEvents() {
       if (!confirm('Disable encryption? Content will be stored in plaintext.')) return;
       await flushSave();
       cancelPendingTypingBroadcast();
+      cancelPendingLiveContentBroadcast();
       const pp = prompt('Enter the current encryption passphrase to confirm:');
       if (!pp) return;
       try {
@@ -1267,6 +1274,7 @@ function wireEvents() {
     } else {
       await flushSave();
       cancelPendingTypingBroadcast();
+      cancelPendingLiveContentBroadcast();
       const existingFiles = await listFiles(_roomId);
       if (existingFiles.length && !confirm('This room has file attachments. SyncPad v1 encrypts note text only, not files. Continue enabling text encryption?')) return;
       const pp = prompt('Set an encryption passphrase (share it with anyone who needs to read this note):');
@@ -1341,7 +1349,7 @@ function wireEvents() {
     if (!canToggleLock()) { UI.showToast(editBlockedReason() || 'Lock controls are disabled.', 'warning'); return; }
     const target = !_room.editing_locked;
     try {
-      if (target) { await flushSave(); cancelPendingTypingBroadcast(); }
+      if (target) { await flushSave(); cancelPendingTypingBroadcast(); cancelPendingLiveContentBroadcast(); }
       await setEditingLocked(_roomId, target);
       _room = await loadRoom(_roomId);
       _updatePermissionContext();
@@ -1538,6 +1546,7 @@ function teardownRealtimeSession() {
   destroyBroadcast();
   destroySync();
   cancelPendingTypingBroadcast();
+  cancelPendingLiveContentBroadcast();
 }
 
 // ── Templates handler ─────────────────────────────────────────────────────────

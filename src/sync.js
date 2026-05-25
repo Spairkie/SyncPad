@@ -4,8 +4,9 @@
 //   • Save Lane         – Postgres, 1000 ms debounce + flush on blur/unload
 //
 // Realtime payload contract:
-//   Typing/activity broadcasts are metadata-only and intentionally never carry
-//   note content. Content sync is handled by DB saves + postgres_changes.
+//   Typing/activity lane is metadata-only.
+//   Live snapshot lane may carry small unencrypted note content for fast UI
+//   responsiveness. Encrypted rooms stay on DB-only content sync.
 //
 // Conflict contract:
 //   Active typing (< 3 s) → queue remote updates, show notice.
@@ -16,10 +17,10 @@
 //   Read-only / locked clients never trigger saves or typing broadcasts.
 
 import { saveContent }           from './rooms.js';
-import { broadcastTyping }       from './live-broadcast.js';
+import { broadcastTyping, broadcastLiveContent, LIVE_CONTENT_BROADCAST_MAX_CHARS } from './live-broadcast.js';
 import { saveDraft, clearDraft } from './offline.js';
 import { debounce, getDeviceId } from './utils.js';
-import { canEdit, canBroadcastTyping, getPermissionContext } from './permissions.js';
+import { canEdit, canBroadcastTyping, canBroadcastLiveContent, getPermissionContext } from './permissions.js';
 
 const IDLE_THRESHOLD_MS = 3000;
 const SAVE_DEBOUNCE_MS  = 1000;
@@ -99,6 +100,14 @@ export async function onLocalInput() {
   if (canBroadcastTyping()) {
     broadcastTyping(++_seqNum);
   }
+
+  // Live snapshots are best-effort responsiveness only. Supabase DB saves
+  // remain the durable source of truth.
+  // Encrypted rooms intentionally use DB-only content sync in v1 to avoid
+  // plaintext live broadcast and repeated ciphertext payloads.
+  if (canBroadcastLiveContent() && plaintext.length <= LIVE_CONTENT_BROADCAST_MAX_CHARS) {
+    broadcastLiveContent(_seqNum, plaintext);
+  }
 }
 
 export function onEditorBlur() { return _debouncedSave.flush?.(); }
@@ -138,6 +147,23 @@ export async function handleRemoteTyping(payload) {
 
   // Realtime typing is metadata-only. Remote content must arrive via DB changes.
   if (payload?.ts) _pendingRemoteTimestamp = payload.ts;
+}
+
+export function handleRemoteLiveContent(payload) {
+  if (_applyingRemote) return;
+  if (_mustIgnoreEncryptedRemote()) return;
+  if (!canEdit()) return;
+  if (!payload || payload.type !== 'content_live') return;
+  if (typeof payload.content !== 'string') return;
+  if (payload.content.length > LIVE_CONTENT_BROADCAST_MAX_CHARS) return;
+  if (_isLocallyActive()) {
+    _pendingRemoteContent = payload.content;
+    _pendingRemoteTimestamp = payload.ts || null;
+    _onPendingRemote(payload.content, 'live');
+    return;
+  }
+  _applyContentSafe(payload.content);
+  _onDismissPending();
 }
 
 // ── Remote: Postgres DB change ────────────────────────────────────────────────
