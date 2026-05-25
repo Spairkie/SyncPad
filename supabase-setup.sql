@@ -58,6 +58,38 @@ create table if not exists public.syncpad_room_reports (
   status text not null default 'new'
 );
 
+
+-- DB-side validation for anonymous room reports (keep in sync with frontend).
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'syncpad_room_reports_reason_check'
+  ) then
+    alter table public.syncpad_room_reports
+      add constraint syncpad_room_reports_reason_check
+      check (report_reason in ('Spam', 'Abuse or harassment', 'Illegal or harmful content', 'Private information', 'Other'));
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'syncpad_room_reports_mode_check'
+  ) then
+    alter table public.syncpad_room_reports
+      add constraint syncpad_room_reports_mode_check
+      check (reporter_mode in ('editable', 'readonly'));
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'syncpad_room_reports_details_len_check'
+  ) then
+    alter table public.syncpad_room_reports
+      add constraint syncpad_room_reports_details_len_check
+      check (report_details is null or length(report_details) <= 1000);
+  end if;
+end $$;
+
 create table if not exists syncpad_files (
   id                   uuid        primary key default gen_random_uuid(),
   room_id              text        not null references syncpad_rooms(room_id) on delete cascade,
