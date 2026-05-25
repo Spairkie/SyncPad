@@ -355,43 +355,43 @@ export function closeAllModals() {
 
 export function populateShareModal({
   editableUrl, readOnlyUrl, readOnlyError = false, hasPasscode, hasEncryption,
-  roomPath = '', roomDisplayTitle = '', hasReadOnlyLink = false, isEditingLocked = false
+  roomPath = '', roomDisplayTitle = '', hasReadOnlyLink = false, isEditingLocked = false,
+  hasViewOnce = false, expiresAt = null,
 } = {}) {
   const roomPathEl = document.getElementById('share-room-path');
   const roomTitleEl = document.getElementById('share-room-title');
   if (roomPathEl) roomPathEl.textContent = roomPath || '';
   if (roomTitleEl) roomTitleEl.textContent = roomDisplayTitle || '';
-  _renderShareBadges({ hasPasscode, hasEncryption, hasReadOnlyLink, isEditingLocked });
+  _renderShareBadges({ hasPasscode, hasEncryption, hasReadOnlyLink, isEditingLocked, hasViewOnce, hasExpiration: !!expiresAt });
 
-  // Editable URL row
-  _wireShareRow('share-editable-text', 'share-editable-copy', editableUrl);
+  _wireShareRow({ fieldId: 'share-editable-text', copyBtnId: 'share-editable-copy', openId: 'share-editable-open', nativeBtnId: 'share-editable-native-btn', errorId: 'share-editable-error', url: editableUrl });
   _renderQr('share-editable-qr', editableUrl);
+  _wireQrToggle('share-editable-qr-toggle', 'share-editable-qr-wrap', !!editableUrl);
 
-  // Read-only URL row
-  const readOnlyDisplay = readOnlyUrl || (readOnlyError ? 'Could not create read-only link. Check Supabase setup.' : '');
-  _wireShareRow('share-readonly-text', 'share-readonly-copy', readOnlyUrl, readOnlyDisplay);
+  const readOnlyDisplay = readOnlyUrl || (readOnlyError ? 'Could not create read-only link. Check Supabase setup.' : 'Generating read-only link…');
+  _wireShareRow({ fieldId: 'share-readonly-text', copyBtnId: 'share-readonly-copy', openId: 'share-readonly-open', nativeBtnId: 'share-readonly-native-btn', errorId: 'share-readonly-error', url: readOnlyUrl, displayValue: readOnlyDisplay });
   _renderQr('share-readonly-qr', readOnlyUrl);
+  _wireQrToggle('share-readonly-qr-toggle', 'share-readonly-qr-wrap', !!readOnlyUrl);
 
-  // Warnings
   document.getElementById('share-passcode-notice')?.classList.toggle('hidden', !hasPasscode);
   document.getElementById('share-encryption-notice')?.classList.toggle('hidden', !hasEncryption);
+  document.getElementById('share-viewonce-notice')?.classList.toggle('hidden', !hasViewOnce);
+  document.getElementById('share-expiration-notice')?.classList.toggle('hidden', !expiresAt);
 
-  _wireNativeShare('share-editable-native-btn', editableUrl, 'Share editable link');
-  _wireNativeShare('share-readonly-native-btn', readOnlyUrl, 'Share read-only link');
-
-  // QR-download buttons
   _wireQrDownload('share-editable-qr-download', 'share-editable-qr', 'syncpad-editable-qr.png');
   _wireQrDownload('share-readonly-qr-download', 'share-readonly-qr', 'syncpad-readonly-qr.png', !readOnlyUrl);
 }
 
-function _renderShareBadges({ hasPasscode, hasEncryption, hasReadOnlyLink, isEditingLocked }) {
+function _renderShareBadges({ hasPasscode, hasEncryption, hasReadOnlyLink, isEditingLocked, hasViewOnce, hasExpiration }) {
   const badgesEl = document.getElementById('share-room-badges');
   if (!badgesEl) return;
   badgesEl.innerHTML = '';
   const badges = [];
+  if (hasEncryption) badges.push('Encrypted');
   if (hasPasscode) badges.push('Passcode protected');
-  if (hasEncryption) badges.push('Encrypted note');
-  if (hasReadOnlyLink) badges.push('Read-only link');
+  if (hasViewOnce) badges.push('View-once');
+  if (hasReadOnlyLink) badges.push('Read-only link ready');
+  if (hasExpiration) badges.push('Link expires');
   if (isEditingLocked) badges.push('Editing locked');
   badges.forEach((label) => {
     const badge = document.createElement('span');
@@ -401,22 +401,61 @@ function _renderShareBadges({ hasPasscode, hasEncryption, hasReadOnlyLink, isEdi
   });
 }
 
-function _wireShareRow(textId, btnId, url, displayValue = url) {
-  const textEl = document.getElementById(textId);
-  if (textEl) textEl.textContent = displayValue || '';
-  const btn = document.getElementById(btnId);
-  if (!btn) return;
-  btn.disabled = !url;
-  btn.onclick = async () => {
-    if (!url) return;
-    try {
-      await navigator.clipboard.writeText(url || '');
-      showToast('Link copied to clipboard.', 'success');
-      btn.textContent = 'Copied!';
-      setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
-    } catch {
-      btn.textContent = 'Copy';
-    }
+function _wireShareRow({ fieldId, copyBtnId, openId, nativeBtnId, errorId, url, displayValue = url }) {
+  const fieldEl = document.getElementById(fieldId);
+  if (fieldEl) fieldEl.value = displayValue || '';
+  const errorEl = document.getElementById(errorId);
+  if (errorEl) { errorEl.textContent = ''; errorEl.classList.add('hidden'); }
+
+  const openEl = document.getElementById(openId);
+  if (openEl) {
+    openEl.href = url || '#';
+    openEl.classList.toggle('is-disabled', !url);
+    openEl.setAttribute('aria-disabled', url ? 'false' : 'true');
+    openEl.tabIndex = url ? 0 : -1;
+  }
+
+  const copyBtn = document.getElementById(copyBtnId);
+  if (copyBtn) {
+    copyBtn.disabled = !url;
+    copyBtn.textContent = 'Copy';
+    copyBtn.onclick = async () => {
+      if (!url) return;
+      try {
+        await navigator.clipboard.writeText(url || '');
+        copyBtn.textContent = 'Copied!';
+        setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1500);
+      } catch {
+        if (errorEl) {
+          errorEl.textContent = 'Copy failed. Select the URL and copy manually.';
+          errorEl.classList.remove('hidden');
+        }
+      }
+    };
+  }
+
+  _wireNativeShare(nativeBtnId, url, 'Share link');
+}
+
+function _wireQrToggle(toggleId, wrapId, enabled) {
+  const toggleBtn = document.getElementById(toggleId);
+  const wrap = document.getElementById(wrapId);
+  if (!toggleBtn || !wrap) return;
+  if (!enabled) {
+    toggleBtn.classList.add('hidden');
+    wrap.classList.add('hidden');
+    toggleBtn.setAttribute('aria-expanded', 'false');
+    return;
+  }
+  toggleBtn.classList.remove('hidden');
+  toggleBtn.textContent = 'Show QR';
+  toggleBtn.setAttribute('aria-expanded', 'false');
+  wrap.classList.add('hidden');
+  toggleBtn.onclick = () => {
+    const willShow = wrap.classList.contains('hidden');
+    wrap.classList.toggle('hidden', !willShow);
+    toggleBtn.textContent = willShow ? 'Hide QR' : 'Show QR';
+    toggleBtn.setAttribute('aria-expanded', willShow ? 'true' : 'false');
   };
 }
 
@@ -427,10 +466,10 @@ function _renderQr(containerId, url) {
   if (!url || !window.QRCode) return;
   try {
     new window.QRCode(el, {
-      text:       url,
-      width:      144,
-      height:     144,
-      colorDark:  '#f5a623',
+      text: url,
+      width: 144,
+      height: 144,
+      colorDark: '#f5a623',
       colorLight: '#18181c',
     });
   } catch {}
@@ -457,10 +496,12 @@ function _wireQrDownload(btnId, qrContainerId, filename, disabled = false) {
 function _wireNativeShare(btnId, url, label) {
   const btn = document.getElementById(btnId);
   if (!btn) return;
-  const canShare = !!(navigator.share && url);
-  btn.classList.toggle('hidden', !navigator.share);
+  const hasNativeShare = !!navigator.share;
+  const canShare = !!(hasNativeShare && url);
+  btn.classList.toggle('hidden', !hasNativeShare);
   btn.disabled = !canShare;
   btn.setAttribute('aria-label', label);
+  btn.title = hasNativeShare ? '' : 'Native share is not available on this device.';
   btn.onclick = () => {
     if (!canShare) return;
     navigator.share({ title: 'SyncPad', text: label, url }).catch(() => {});
