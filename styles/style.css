@@ -562,6 +562,17 @@ body.lock-mode .note-preview li.md-task input[type="checkbox"] { cursor: not-all
 .expiration-bar .exp-time { font-family: var(--font-mono); font-weight: 500; }
 .expiration-bar .exp-cancel { margin-left: auto; font-size: 11px; color: var(--text-secondary); transition: color var(--transition); }
 .expiration-bar .exp-cancel:hover { color: var(--text-primary); }
+.setting-stack { display:flex; flex-direction:column; gap:10px; margin-top:10px; }
+.exp-presets { display:flex; flex-wrap:wrap; gap:8px; }
+.setting-chip { padding:6px 10px; border:1px solid var(--border); border-radius:999px; font-size:12px; color:var(--text-secondary); }
+.setting-chip.is-active { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+.exp-custom-row { display:flex; gap:8px; }
+.exp-custom-input { max-width: 120px; }
+.exp-custom-unit { flex:1; }
+.setting-error { font-size: 12px; color: var(--red); }
+.exp-actions { display:flex; gap:8px; flex-wrap:wrap; }
+.share-security-notes { display:flex; flex-wrap:wrap; gap:8px; margin: 8px 0 6px; }
+.share-security-chip { font-size:11px; padding:4px 8px; border-radius:999px; border:1px solid rgba(251,191,36,0.35); background:rgba(251,191,36,0.12); color:var(--yellow); }
 
 /* Footer */
 .app-footer {

@@ -161,7 +161,9 @@ export function subscribeToRoom(roomId, onRoomChange) {
   const sb = getSupabaseClient();
   const ch = sb.channel(`db-room-${roomId}`)
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: TABLE, filter: `room_id=eq.${roomId}` },
-        (payload) => onRoomChange(payload.new))
+        (payload) => onRoomChange({ event: 'UPDATE', room: payload.new }))
+    .on('postgres_changes', { event: 'DELETE', schema: 'public', table: TABLE, filter: `room_id=eq.${roomId}` },
+        () => onRoomChange({ event: 'DELETE', room: null }))
     .subscribe((status) => {
       if (status === 'CHANNEL_ERROR') {
         logSupabaseError('subscribeToRoom', new Error('Channel error'), { room_id: roomId });

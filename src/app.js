@@ -6,7 +6,7 @@ import {
   generateRoomId, sanitizeRoomId,
   copyToClipboard, insertTimestamp,
   isMobile, isOnline, onOnlineChange,
-  buildRoomUrl, buildReadOnlyUrl, getUrlMode,
+  buildRoomUrl, buildReadOnlyUrl, getUrlMode, parseDuration,
 } from './utils.js';
 
 import { loadRoom, createRoom, clearRoomContent, subscribeToRoom, getOrCreateReadOnlyShareLink, resolveReadOnlyShareLink, updateRoomDisplayName, normalizeRoomDisplayName, submitRoomReport } from './rooms.js';
@@ -78,6 +78,7 @@ let _shareToken    = null;
 let _markdownMode  = 'write'; // 'write' | 'preview' | 'split'
 let _showPreview   = false;  // derived: _markdownMode !== 'write'
 let _previewObserverWired = false;
+let _expPreset = '30s';
 
 // ── Search state ──────────────────────────────────────────────────────────────
 let _searchMatches = []; // [{start,end}]
@@ -634,10 +635,20 @@ async function startApp() {
     });
   }, { readOnly: _isReadOnly });
 
-  _unsubRoom = subscribeToRoom(_roomId, async (newRoom) => {
+  _unsubRoom = subscribeToRoom(_roomId, async ({ event, room }) => {
+    if (event === 'DELETE') {
+      cancelPendingSave();
+      cancelPendingTypingBroadcast();
+      cancelPendingLiveContentBroadcast();
+      if (_expTimer) { clearTimeout(_expTimer); _expTimer = null; }
+      UI.setEditorEditable(false);
+      UI.showToast('This room no longer exists.', 'error', 6000);
+      UI.setStatus('offline');
+      return;
+    }
     const prev = _room;
-    _room = newRoom;
-    await _handleRoomStateTransition(prev, newRoom);
+    _room = room;
+    await _handleRoomStateTransition(prev, room);
   });
 
   _unsubFiles = subscribeToFiles(_roomId, () => refreshFiles());
@@ -971,6 +982,37 @@ function _renderRoomHeader() {
     roomName: _room?.room_name || '',
     canEditTitle: canEdit() && !(_room?.view_once && _room?.cleared_reason === 'view_once' && !!_room?.viewed && !_viewOnceConsumedByThisSession),
   });
+}
+
+function _selectExpirationPreset(preset) {
+  _expPreset = preset;
+  document.querySelectorAll('[data-exp-preset]').forEach((el) => el.classList.toggle('is-active', el.dataset.expPreset === preset));
+  document.getElementById('exp-custom-row')?.classList.toggle('hidden', preset !== 'custom');
+  _updateExpirationPreview();
+}
+
+function _buildExpirationDuration() {
+  if (_expPreset !== 'custom') return _expPreset;
+  const value = document.getElementById('exp-custom-value')?.value?.trim();
+  const unit = document.getElementById('exp-custom-unit')?.value?.trim();
+  if (!value) return { error: 'Please enter a number for custom auto-expire.' };
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return { error: 'Custom auto-expire must be a number greater than 0.' };
+  if (!['s', 'm', 'h', 'd'].includes(unit)) return { error: 'Unsupported unit. Use seconds, minutes, hours, or days.' };
+  return `${n}${unit}`;
+}
+
+function _updateExpirationPreview() {
+  const preview = document.getElementById('setting-exp-preview');
+  if (!preview) return;
+  const built = _buildExpirationDuration();
+  if (typeof built === 'object' && built?.error) {
+    preview.textContent = 'Preview: Select a valid duration.';
+    return;
+  }
+  const ms = parseDuration(built);
+  if (!ms) { preview.textContent = 'Preview: Select a valid duration.'; return; }
+  preview.textContent = `Preview: This room will clear around ${new Date(Date.now() + ms).toLocaleString()}.`;
 }
 // ── Event wiring (guarded against double-wire) ────────────────────────────────
 
@@ -1361,33 +1403,43 @@ function wireEvents() {
     }
   });
 
-  document.getElementById('setting-exp-btn')?.addEventListener('click', async () => {
+  document.getElementById('setting-exp-btn')?.addEventListener('click', _updateExpirationPreview);
+  document.querySelectorAll('[data-exp-preset]').forEach((el) => el.addEventListener('click', () => _selectExpirationPreset(el.dataset.expPreset || '30s')));
+  document.getElementById('exp-custom-value')?.addEventListener('input', _updateExpirationPreview);
+  document.getElementById('exp-custom-unit')?.addEventListener('change', _updateExpirationPreview);
+  document.getElementById('setting-exp-apply-btn')?.addEventListener('click', async () => {
     if (!canChangeSettings()) { UI.showToast(editBlockedReason() || 'Settings are disabled.', 'warning'); return; }
-    if (_room.expires_at) {
-      if (!confirm('Remove the expiration?')) return;
-      try {
-        await clearExpiration(_roomId);
-        _room = await loadRoom(_roomId);
-        _renderRoomHeader();
-  UI.renderSettingsPanel(_room);
-        UI.hideExpirationBar();
-        broadcastSettingsChange();
-        UI.showToast('Expiration removed.', 'success');
-      } catch { UI.showToast('Could not remove expiration.', 'error'); }
-    } else {
-      const dur = prompt('Expire after how long? (examples: 30s, 10m, 1h, 2d)');
-      if (!dur?.trim()) return;
-      try {
-        await setExpiration(_roomId, dur.trim());
-        _room = await loadRoom(_roomId);
-        _renderRoomHeader();
-  UI.renderSettingsPanel(_room);
-        setupExpirationTimer();
-        broadcastSettingsChange();
-        UI.showToast('Expiration set.', 'success');
-      } catch { UI.showToast('Invalid duration. Try: 30s, 10m, 1h, 2d.', 'error'); }
+    const errorEl = document.getElementById('setting-exp-error');
+    if (errorEl) { errorEl.textContent = ''; errorEl.classList.add('hidden'); }
+    const built = _buildExpirationDuration();
+    if (typeof built === 'object' && built?.error) {
+      if (errorEl) { errorEl.textContent = built.error; errorEl.classList.remove('hidden'); }
+      return;
     }
+    try {
+      await setExpiration(_roomId, built);
+      _room = await loadRoom(_roomId);
+      _renderRoomHeader();
+      UI.renderSettingsPanel(_room);
+      setupExpirationTimer();
+      broadcastSettingsChange();
+      UI.showToast('Auto-expire set.', 'success');
+    } catch { UI.showToast('Could not set auto-expire.', 'error'); }
   });
+  document.getElementById('setting-exp-remove-btn')?.addEventListener('click', async () => {
+    if (!canChangeSettings()) { UI.showToast(editBlockedReason() || 'Settings are disabled.', 'warning'); return; }
+    if (!_room.expires_at) { UI.showToast('No auto-expire is currently set.', 'warning'); return; }
+    try {
+      await clearExpiration(_roomId);
+      _room = await loadRoom(_roomId);
+      _renderRoomHeader();
+      UI.renderSettingsPanel(_room);
+      UI.hideExpirationBar();
+      broadcastSettingsChange();
+      UI.showToast('Auto-expire removed.', 'success');
+    } catch { UI.showToast('Could not remove auto-expire.', 'error'); }
+  });
+  _selectExpirationPreset('30s');
 
   document.getElementById('setting-vo-btn')?.addEventListener('click', async () => {
     if (!canChangeSettings()) { UI.showToast(editBlockedReason() || 'Settings are disabled.', 'warning'); return; }
