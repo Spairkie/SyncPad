@@ -175,7 +175,8 @@ Full automated cleanup (listing bucket objects and deleting orphans programmatic
 - Recommended **subject**: `New SyncPad Contact Form Submission`.
 - Recommended **from_name**: `SyncPad Contact Form`.
 - Keep **hCaptcha disabled** unless/until a frontend hCaptcha widget is implemented.
-- Plan a later anti-spam pass (botcheck/honeypot or equivalent).
+- Keep Web3Forms `botcheck` honeypot enabled.
+- Room-report abuse controls are DB-enforced via reason allowlist + details max length checks and insert-only anon RLS.
 
 ## Known Limitations
 
@@ -189,7 +190,7 @@ Full automated cleanup (listing bucket objects and deleting orphans programmatic
 | View-once is convenience-only | Not a secure destruction guarantee; viewers can still copy or capture content before it clears |
 | Files are not end-to-end encrypted | Text encryption covers note content only unless file encryption is explicitly added |
 | Passcode is a convenience gate | Hash is checked client-side; not server-enforced |
-| Storage orphan cleanup is manual | No automatic deletion of orphaned storage objects |
+| Storage orphan cleanup is manual | Deleting expired room/file metadata does not remove physical `syncpad-files` objects; use scheduled Edge Function or manual bucket pruning before public upload scale |
 | File upload is one file at a time | Multi-file upload not implemented |
 
 ---

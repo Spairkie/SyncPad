@@ -146,6 +146,8 @@ Use this checklist before publishing a new version or sharing the demo link.
 - [ ] `supabase-setup.sql` applied successfully in Supabase SQL Editor
 - [ ] `syncpad-files` Storage bucket exists and is **private**
 - [ ] Storage policies applied (upload, read, delete for `anon`)
+- [ ] Storage cleanup warning acknowledged: deleting expired room/file metadata does not remove physical `syncpad-files` objects
+- [ ] Before public file uploads at scale, storage cleanup process is defined (scheduled Edge Function or manual bucket pruning job)
 - [ ] GitHub Pages is serving from the correct branch and folder
 - [ ] `service-worker.js` cache name is intentionally bumped when cached assets change (currently `syncpad-v8`)
 - [ ] Hard refresh (`Ctrl+Shift+R`) loads fresh content, no stale cache issues
@@ -165,3 +167,21 @@ Use this checklist before publishing a new version or sharing the demo link.
 - [ ] DEPLOYMENT.md security disclaimer is present
 - [ ] Screenshots added to `docs/screenshots/` or placeholder paths noted in README
 - [ ] `RELEASE_CHECKLIST.md` is present (this file)
+
+## 12. Anti-spam and abuse-control checks
+
+- [ ] Contact form still includes Web3Forms `botcheck` honeypot field
+- [ ] Report reason allowlist enforced (frontend + DB constraint)
+- [ ] Report details max length enforced (frontend + DB constraint)
+- [ ] Supabase RLS allows `anon` insert-only for `syncpad_room_reports`
+- [ ] Supabase RLS blocks `anon` select/update/delete on `syncpad_room_reports`
+- [ ] Share-link table remains RPC-only for `anon` users (no direct select/update/delete)
+
+
+### Future storage cleanup (not implemented in this release)
+
+- Scheduled Supabase Edge Function runs daily
+- Finds objects in `syncpad-files` with no matching `syncpad_files` row or expired/deleted room
+- Deletes orphaned physical objects
+- Logs count-only metrics (no file content)
+- Uses dry-run mode on first execution
