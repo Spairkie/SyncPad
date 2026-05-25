@@ -175,3 +175,14 @@ export async function consumeViewOnce(roomId, room, isCreator, replacementConten
   });
   return true;
 }
+
+export async function resetViewOnceNote(roomId, replacementContent = '', keepViewOnce = true) {
+  await updateRoom(roomId, {
+    content:           replacementContent,
+    view_once:         !!keepViewOnce,
+    viewed:            false,
+    cleared_reason:    null,
+    updated_at:        new Date().toISOString(),
+    updated_by_device: getDeviceId(),
+  });
+}

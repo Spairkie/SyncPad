@@ -314,11 +314,36 @@ svg { display: block; flex-shrink: 0; }
 .device-count-badge:hover { color: var(--text-primary); }
 
 /* Inline header badges */
-.readonly-badge, .locked-badge, .encryption-badge {
+.readonly-badge, .locked-badge, .encryption-badge, .view-once-badge {
   display: inline-flex; align-items: center; gap: 5px;
   font-size: 10px; font-weight: 500; border-radius: 20px; padding: 2px 8px;
   white-space: nowrap; flex-shrink: 0;
   animation: badge-in 0.2s ease;
+}
+.view-once-badge {
+  background: rgba(96,165,250,0.15);
+  color: var(--blue);
+}
+
+.view-once-consumed-panel {
+  position: fixed;
+  inset: 68px 0 0 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 35;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.view-once-consumed-panel.hidden { display: none; }
+.view-once-consumed-actions {
+  display: grid;
+  gap: 10px;
+}
+.view-once-home-btn {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
 }
 @keyframes badge-in { from { opacity:0; transform:scale(0.85); } to { opacity:1; transform:scale(1); } }
 .readonly-badge { color: var(--blue); background: rgba(96,165,250,0.12); border: 1px solid rgba(96,165,250,0.25); }
@@ -1498,4 +1523,3 @@ kbd {
 .footer-links a { color:var(--text-muted); text-decoration:none; font-size:12px; }
 .footer-links a:hover { color:var(--text-primary); text-decoration:underline; }
 @media (max-width: 700px){ .contact-grid{grid-template-columns:1fr;} .footer-links{display:none;} .legal-card{padding:20px;} }
-

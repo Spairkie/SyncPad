@@ -634,6 +634,35 @@ export function setEncryptionBadge(visible) {
   document.getElementById('encryption-badge')?.classList.toggle('hidden', !visible);
 }
 
+export function setViewOnceBadge(visible) {
+  document.getElementById('view-once-badge')?.classList.toggle('hidden', !visible);
+}
+
+export function setViewOnceConsumedPanel({
+  visible = false,
+  readOnly = false,
+  onStartNew = null,
+} = {}) {
+  const panel = document.getElementById('view-once-consumed-panel');
+  const title = document.getElementById('view-once-consumed-title');
+  const msg = document.getElementById('view-once-consumed-message');
+  const startBtn = document.getElementById('view-once-start-new-btn');
+  const homeBtn = document.getElementById('view-once-go-home-btn');
+  if (!panel || !title || !msg || !startBtn || !homeBtn) return;
+
+  panel.classList.toggle('hidden', !visible);
+  if (!visible) return;
+
+  title.textContent = 'View-once note already viewed';
+  msg.textContent = readOnly
+    ? 'This read-only note has already been viewed. Ask the editable room holder to reset it if needed.'
+    : 'This room’s view-once note has already been opened. You can reset this room to start a new note.';
+
+  startBtn.classList.toggle('hidden', !!readOnly);
+  startBtn.onclick = readOnly ? null : onStartNew;
+  homeBtn.onclick = () => { window.location.href = '/SyncPad/'; };
+}
+
 // ── File upload zone ──────────────────────────────────────────────────────────
 
 export function setFileHandlers(onFileSelected) {
