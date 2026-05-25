@@ -74,6 +74,35 @@ alter table syncpad_rooms enable row level security;
 alter table syncpad_files enable row level security;
 alter table if exists public.syncpad_share_links enable row level security;
 
+
+
+create table if not exists public.syncpad_admins (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  email text,
+  created_at timestamptz not null default now()
+);
+
+alter table public.syncpad_admins enable row level security;
+
+drop policy if exists "admins can read own admin row" on public.syncpad_admins;
+create policy "admins can read own admin row"
+  on public.syncpad_admins for select to authenticated
+  using (auth.uid() = user_id);
+
+create or replace function public.is_syncpad_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.syncpad_admins a where a.user_id = auth.uid()
+  );
+$$;
+
+grant execute on function public.is_syncpad_admin() to authenticated;
+
 create table if not exists public.syncpad_share_links (
   id uuid primary key default gen_random_uuid(),
   room_id text not null references public.syncpad_rooms(room_id) on delete cascade,
@@ -181,6 +210,28 @@ create policy "anon insert files"
 
 create policy "anon delete files"
   on syncpad_files for delete to anon using (true);
+
+drop policy if exists "admin read rooms" on syncpad_rooms;
+drop policy if exists "admin update rooms" on syncpad_rooms;
+drop policy if exists "admin delete rooms" on syncpad_rooms;
+create policy "admin read rooms" on syncpad_rooms for select to authenticated using (public.is_syncpad_admin());
+create policy "admin update rooms" on syncpad_rooms for update to authenticated using (public.is_syncpad_admin()) with check (public.is_syncpad_admin());
+create policy "admin delete rooms" on syncpad_rooms for delete to authenticated using (public.is_syncpad_admin());
+
+drop policy if exists "admin read files" on syncpad_files;
+drop policy if exists "admin update files" on syncpad_files;
+drop policy if exists "admin delete files" on syncpad_files;
+create policy "admin read files" on syncpad_files for select to authenticated using (public.is_syncpad_admin());
+create policy "admin update files" on syncpad_files for update to authenticated using (public.is_syncpad_admin()) with check (public.is_syncpad_admin());
+create policy "admin delete files" on syncpad_files for delete to authenticated using (public.is_syncpad_admin());
+
+drop policy if exists "admin read share-links" on public.syncpad_share_links;
+drop policy if exists "admin update share-links" on public.syncpad_share_links;
+drop policy if exists "admin delete share-links" on public.syncpad_share_links;
+create policy "admin read share-links" on public.syncpad_share_links for select to authenticated using (public.is_syncpad_admin());
+create policy "admin update share-links" on public.syncpad_share_links for update to authenticated using (public.is_syncpad_admin()) with check (public.is_syncpad_admin());
+create policy "admin delete share-links" on public.syncpad_share_links for delete to authenticated using (public.is_syncpad_admin());
+
 
 -- ── Backend expired-room cleanup ──────────────────────────────
 -- The browser still clears expired rooms immediately when a user opens one.
@@ -356,3 +407,20 @@ create policy "anon delete syncpad files"
 -- does NOT reliably clean physical objects from the syncpad-files Storage
 -- bucket. Use the Storage admin UI or a service-role Edge Function for
 -- physical Storage cleanup.
+
+
+create or replace function public.run_cleanup_expired_syncpad_rooms_as_admin()
+returns table(cleared_unencrypted integer, deleted_encrypted integer)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_syncpad_admin() then
+    raise exception 'not authorized';
+  end if;
+  return query select * from public.cleanup_expired_syncpad_rooms();
+end;
+$$;
+
+grant execute on function public.run_cleanup_expired_syncpad_rooms_as_admin() to authenticated;

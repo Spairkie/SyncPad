@@ -18,6 +18,7 @@ export function showScreen(name) {
   document.getElementById('contact-screen')?.classList.toggle('hidden',    name !== 'contact');
   document.getElementById('privacy-screen')?.classList.toggle('hidden',    name !== 'privacy');
   document.getElementById('terms-screen')?.classList.toggle('hidden',      name !== 'terms');
+  document.getElementById('admin-screen')?.classList.toggle('hidden',      name !== 'admin');
 }
 
 export function setInfoScreen({ title = '', message = '' } = {}) {
