@@ -4,6 +4,9 @@ import { logSupabaseError, getDeviceId } from './utils.js';
 
 const TABLE = 'syncpad_rooms';
 
+const REPORT_REASONS = new Set(['Spam', 'Abuse or harassment', 'Illegal or harmful content', 'Private information', 'Other']);
+const REPORTS_TABLE = 'syncpad_room_reports';
+
 // ── Read ─────────────────────────────────────────────────────────────────────
 
 export async function loadRoom(roomId) {
@@ -127,6 +130,36 @@ export async function resolveReadOnlyShareLink(token) {
   if (error) { logSupabaseError('resolveReadOnlyShareLink', error, { token }); throw error; }
   return Array.isArray(data) ? data[0] || null : data;
 }
+
+
+export async function submitRoomReport({ roomId, shareToken = null, reason, details = '', mode = 'editable', pageUrl = null, userAgent = null, reporterDeviceId = null } = {}) {
+  const sb = getSupabaseClient();
+  const normalizedRoomId = (roomId || '').trim();
+  const normalizedReason = (reason || '').trim();
+  const normalizedDetails = (details || '').trim().slice(0, 1000);
+  const normalizedMode = mode === 'readonly' ? 'readonly' : 'editable';
+
+  if (!normalizedRoomId) throw new Error('Room ID is required for report submission.');
+  if (!REPORT_REASONS.has(normalizedReason)) throw new Error('Invalid report reason.');
+
+  const payload = {
+    room_id: normalizedRoomId,
+    share_token: shareToken ? String(shareToken).trim() : null,
+    report_reason: normalizedReason,
+    report_details: normalizedDetails || null,
+    reporter_device_id: reporterDeviceId ? String(reporterDeviceId).trim() : null,
+    reporter_mode: normalizedMode,
+    page_url: pageUrl ? String(pageUrl) : null,
+    user_agent: userAgent ? String(userAgent) : null,
+  };
+
+  const { error } = await sb.from(REPORTS_TABLE).insert(payload);
+  if (error) {
+    logSupabaseError('submitRoomReport', error, { room_id: normalizedRoomId, reporter_mode: normalizedMode });
+    throw error;
+  }
+}
+
 
 // ── Realtime subscription ─────────────────────────────────────────────────────
 
