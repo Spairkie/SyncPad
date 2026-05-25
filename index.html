@@ -586,16 +586,42 @@
       </div>
     </div>
 
-    <!-- Expiration -->
+    <!-- Auto-expire -->
     <div class="settings-section">
-      <div class="settings-section-title">Expiration</div>
+      <div class="settings-section-title">Auto-expire</div>
 
       <div class="setting-row">
         <div>
           <div class="setting-label">Auto-expire</div>
           <div class="setting-sub" id="setting-exp-status">Never</div>
         </div>
-        <button class="setting-btn" id="setting-exp-btn">Set</button>
+        <button class="setting-btn" id="setting-exp-btn">Set auto-expire</button>
+      </div>
+      <div class="setting-stack" id="setting-exp-controls">
+        <div class="setting-sub">Clear this room automatically after:</div>
+        <div class="exp-presets" id="exp-presets">
+          <button class="setting-chip is-active" data-exp-preset="30s" type="button">30 sec</button>
+          <button class="setting-chip" data-exp-preset="10m" type="button">10 min</button>
+          <button class="setting-chip" data-exp-preset="1h" type="button">1 hour</button>
+          <button class="setting-chip" data-exp-preset="1d" type="button">1 day</button>
+          <button class="setting-chip" data-exp-preset="7d" type="button">7 days</button>
+          <button class="setting-chip" data-exp-preset="custom" type="button">Custom</button>
+        </div>
+        <div class="exp-custom-row hidden" id="exp-custom-row">
+          <input class="settings-input exp-custom-input" id="exp-custom-value" type="number" min="1" step="1" inputmode="numeric" placeholder="Number" />
+          <select class="settings-input exp-custom-unit" id="exp-custom-unit">
+            <option value="s">seconds</option>
+            <option value="m">minutes</option>
+            <option value="h">hours</option>
+            <option value="d">days</option>
+          </select>
+        </div>
+        <div class="setting-sub" id="setting-exp-preview">Preview: Select a duration.</div>
+        <div class="setting-error hidden" id="setting-exp-error" aria-live="polite"></div>
+        <div class="exp-actions">
+          <button class="setting-btn" id="setting-exp-apply-btn" type="button">Set auto-expire</button>
+          <button class="setting-btn" id="setting-exp-remove-btn" type="button">Remove expiration</button>
+        </div>
       </div>
 
       <div class="setting-row">
@@ -650,6 +676,7 @@
         </h4>
       </div>
       <p class="share-section-desc">Anyone with this link can open and edit this room.</p>
+      <div class="share-security-notes hidden" id="share-security-notes"></div>
       <div class="share-url-row">
         <input class="share-url-field" id="share-editable-text" type="text" readonly aria-label="Editable room URL" />
         <button class="share-copy-inline" id="share-editable-copy" aria-label="Copy editable room link"><svg class="share-copy-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg><span>Copy</span></button>

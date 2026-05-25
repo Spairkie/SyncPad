@@ -386,6 +386,14 @@ export function populateShareModal({
     const normalizedPath = (roomPath || '').replace(/^\//, '');
     roomPathEl.textContent = normalizedPath && normalizedPath !== displayTitle ? `Path: /${normalizedPath}` : '';
   }
+  const securityNotesEl = document.getElementById('share-security-notes');
+  if (securityNotesEl) {
+    const chips = [];
+    if (hasPasscode) chips.push('<span class="share-security-chip">Passcode required</span>');
+    if (hasEncryption) chips.push('<span class="share-security-chip">Encryption passphrase required</span>');
+    securityNotesEl.innerHTML = chips.join('');
+    securityNotesEl.classList.toggle('hidden', chips.length === 0);
+  }
 
   _wireShareRow({ fieldId: 'share-editable-text', copyBtnId: 'share-editable-copy', openId: 'share-editable-open', nativeBtnId: 'share-editable-native-btn', errorId: 'share-editable-error', url: editableUrl });
   _renderQr('share-editable-qr', editableUrl);
