@@ -60,7 +60,6 @@ import { initShortcuts, destroyShortcuts }     from './shortcuts.js';
 import * as UI from './ui.js';
 import { openFilePreview } from './file-preview.js';
 import { openDashboard }   from './dashboard.js';
-import { mountAdminPage }  from './admin-page.js';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
@@ -144,7 +143,6 @@ async function boot() {
   }
 
   if (route.type === 'admin') {
-    await mountAdminPage();
     UI.showScreen('admin');
     return;
   }
