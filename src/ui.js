@@ -362,8 +362,10 @@ export function populateShareModal({
   const titleEl = document.getElementById('share-modal-title');
   const displayTitle = (roomDisplayTitle || '').trim() || (roomPath || '').replace(/^\//, '') || 'room';
   if (titleEl) titleEl.textContent = `Share "${displayTitle}"`;
-  if (roomPathEl) roomPathEl.textContent = roomPath ? `Path: ${roomPath}` : '';
-  _renderShareBadges({ hasPasscode, hasEncryption, hasReadOnlyLink, isEditingLocked, hasViewOnce, hasExpiration: !!expiresAt });
+  if (roomPathEl) {
+    const normalizedPath = (roomPath || '').replace(/^\//, '');
+    roomPathEl.textContent = normalizedPath && normalizedPath !== displayTitle ? `Path: /${normalizedPath}` : '';
+  }
 
   _wireShareRow({ fieldId: 'share-editable-text', copyBtnId: 'share-editable-copy', openId: 'share-editable-open', nativeBtnId: 'share-editable-native-btn', errorId: 'share-editable-error', url: editableUrl });
   _renderQr('share-editable-qr', editableUrl);
@@ -375,23 +377,6 @@ export function populateShareModal({
   _wireQrToggle('share-readonly-qr-toggle', 'share-readonly-qr-wrap', !!readOnlyUrl);
   _wireQrDownload('share-editable-qr-download', 'share-editable-qr', 'syncpad-editable-qr.png');
   _wireQrDownload('share-readonly-qr-download', 'share-readonly-qr', 'syncpad-readonly-qr.png', !readOnlyUrl);
-}
-
-function _renderShareBadges({ hasPasscode, hasEncryption, hasViewOnce, hasExpiration }) {
-  const badgesEl = document.getElementById('share-room-badges');
-  if (!badgesEl) return;
-  badgesEl.innerHTML = '';
-  const badges = [];
-  if (hasEncryption) badges.push('Encrypted');
-  if (hasPasscode) badges.push('Passcode protected');
-  if (hasViewOnce) badges.push('View-once');
-  if (hasExpiration) badges.push('Expires');
-  badges.forEach((label) => {
-    const badge = document.createElement('span');
-    badge.className = 'share-room-badge';
-    badge.textContent = label;
-    badgesEl.appendChild(badge);
-  });
 }
 
 function _wireShareRow({ fieldId, copyBtnId, openId, nativeBtnId, errorId, url, displayValue = url }) {
@@ -441,13 +426,14 @@ function _wireQrToggle(toggleId, wrapId, enabled) {
     return;
   }
   toggleBtn.classList.remove('hidden');
-  toggleBtn.textContent = '⌁ Show QR';
+  toggleBtn.textContent = '⌁';
   toggleBtn.setAttribute('aria-expanded', 'false');
+  toggleBtn.title = 'Show QR code';
   wrap.classList.add('hidden');
   toggleBtn.onclick = () => {
     const willShow = wrap.classList.contains('hidden');
     wrap.classList.toggle('hidden', !willShow);
-    toggleBtn.textContent = willShow ? '⌁ Hide QR' : '⌁ Show QR';
+    toggleBtn.title = willShow ? 'Hide QR code' : 'Show QR code';
     toggleBtn.setAttribute('aria-expanded', willShow ? 'true' : 'false');
   };
 }
