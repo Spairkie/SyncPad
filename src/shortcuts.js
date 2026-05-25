@@ -10,6 +10,9 @@
 //   Ctrl/Cmd + B             Bold selected text
 //   Ctrl/Cmd + I             Italic selected text
 //   Ctrl/Cmd + K             Insert markdown link
+//   Ctrl/Cmd + Shift + K     Open share modal
+//   Ctrl/Cmd + Shift + T     Insert timestamp
+//   Ctrl/Cmd + Shift + C     Copy note
 //   Ctrl/Cmd + /             Open shortcuts modal
 //   Esc                      Close panel / modal / dropdown
 
@@ -23,6 +26,9 @@ let _onToggleMonospace = null;
 let _onOpenSearch     = null;
 let _onForceClose     = null;  // Esc handler
 let _onOpenShortcuts  = null;
+let _onOpenShare      = null;
+let _onInsertTimestamp = null;
+let _onCopyNote       = null;
 
 /** @type {HTMLTextAreaElement|null} */
 let _editor = null;
@@ -44,6 +50,9 @@ export function initShortcuts(handlers) {
   _onOpenSearch      = handlers.onOpenSearch;
   _onForceClose      = handlers.onForceClose;
   _onOpenShortcuts   = handlers.onOpenShortcuts;
+  _onOpenShare       = handlers.onOpenShare;
+  _onInsertTimestamp = handlers.onInsertTimestamp;
+  _onCopyNote        = handlers.onCopyNote;
   _editor = document.getElementById('note-editor');
 
   document.addEventListener('keydown', _handleKeyDown, { capture: false });
@@ -62,6 +71,7 @@ function _handleKeyDown(e) {
   const shift = e.shiftKey;
   const key   = e.key;
   const inEditor = document.activeElement === _editor;
+  const inTypingField = _isTypingField(document.activeElement);
 
   // ── Esc — close any open panel/modal/dropdown ────────────────────────────
   if (key === 'Escape') {
@@ -70,6 +80,7 @@ function _handleKeyDown(e) {
   }
 
   if (!mod) return;
+  if (inTypingField && !inEditor) return;
 
   // ── Ctrl/Cmd shortcuts ───────────────────────────────────────────────────
 
@@ -103,6 +114,9 @@ function _handleKeyDown(e) {
     if (key === 'P' || key === 'p') { e.preventDefault(); _onTogglePreview?.();   return; }
     if (key === 'S' || key === 's') { e.preventDefault(); _onToggleSplit?.();     return; }
     if (key === 'M' || key === 'm') { e.preventDefault(); _onToggleMonospace?.(); return; }
+    if (key === 'K' || key === 'k') { e.preventDefault(); _onOpenShare?.(); return; }
+    if (key === 'T' || key === 't') { e.preventDefault(); if (canEdit()) _onInsertTimestamp?.(); return; }
+    if (key === 'C' || key === 'c') { e.preventDefault(); _onCopyNote?.(); return; }
   }
 
   // ── Markdown formatting (editor only, edit mode only) ───────────────────
@@ -111,6 +125,18 @@ function _handleKeyDown(e) {
   if (key === 'b' && !shift) { e.preventDefault(); _wrapSelection(_editor, '**', '**'); return; }
   if (key === 'i' && !shift) { e.preventDefault(); _wrapSelection(_editor, '_',  '_');  return; }
   if (key === 'k' && !shift) { e.preventDefault(); _insertLink(_editor);                return; }
+}
+
+function _isTypingField(el) {
+  if (!el || !(el instanceof HTMLElement)) return false;
+  if (el.isContentEditable) return true;
+  const tag = el.tagName;
+  if (tag === 'TEXTAREA') return true;
+  if (tag === 'SELECT') return true;
+  if (tag !== 'INPUT') return false;
+  const type = (el.getAttribute('type') || 'text').toLowerCase();
+  const nonTyping = new Set(['button', 'submit', 'checkbox', 'radio', 'range', 'color', 'file', 'image', 'hidden', 'reset']);
+  return !nonTyping.has(type);
 }
 
 /** Wrap the current textarea selection with prefix/suffix markdown markers. */
