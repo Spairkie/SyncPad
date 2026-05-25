@@ -60,6 +60,7 @@ import { initShortcuts, destroyShortcuts }     from './shortcuts.js';
 import * as UI from './ui.js';
 import { openFilePreview } from './file-preview.js';
 import { openDashboard }   from './dashboard.js';
+import { mountAdminPage }  from './admin-page.js';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
@@ -97,7 +98,7 @@ function _parseRoute() {
   if (cleaned === 'contact') return { type: 'contact' };
   if (cleaned === 'privacy') return { type: 'privacy' };
   if (cleaned === 'terms') return { type: 'terms' };
-  if (cleaned === 'admin') return { type: 'info', title: 'Admin page', message: 'Admin page route is reserved for a future private dashboard.' };
+  if (cleaned === 'admin') return { type: 'admin' };
 
   const shareMatch = cleaned.match(/^share\/([^/]+)$/);
   if (shareMatch) return { type: 'share', token: shareMatch[1] };
@@ -139,6 +140,12 @@ async function boot() {
   if (route.type === 'landing' && !redirectRoom) {
     UI.showScreen('landing');
     wireLandingEvents();
+    return;
+  }
+
+  if (route.type === 'admin') {
+    await mountAdminPage();
+    UI.showScreen('admin');
     return;
   }
 
