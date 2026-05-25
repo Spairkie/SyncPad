@@ -16,6 +16,16 @@
   <link rel="icon"             href="/SyncPad/assets/icon-192.png" type="image/png" />
   <link rel="apple-touch-icon" href="/SyncPad/assets/icon-192.png" />
 
+
+  <script>
+    try {
+      var savedTheme = localStorage.getItem('syncpad_theme');
+      if (savedTheme && savedTheme !== 'charcoal-amber') {
+        document.documentElement.setAttribute('data-theme', savedTheme);
+      }
+    } catch {}
+  </script>
+
   <!-- Styles -->
   <link rel="stylesheet" href="/SyncPad/styles/style.css" />
 
