@@ -151,6 +151,20 @@ Full automated cleanup (listing all bucket objects and deleting orphans programm
 
 ---
 
+
+## Web3Forms operations (Contact page)
+
+SyncPad's contact form uses Web3Forms from frontend JavaScript. The Web3Forms access key is a **public frontend key**, not a server secret.
+
+Recommended Web3Forms dashboard settings:
+
+- **Allowed domain:** `spairkie.github.io`
+- **Subject:** `New SyncPad Contact Form Submission`
+- **from_name:** `SyncPad Contact Form`
+- **hCaptcha:** keep **off** unless the frontend adds an hCaptcha widget and verification flow
+
+Operational note: add botcheck/honeypot or a comparable anti-spam strategy in a later app/dashboard hardening pass.
+
 ## Troubleshooting
 
 | Symptom | Likely cause | Fix |
@@ -168,12 +182,13 @@ Full automated cleanup (listing all bucket objects and deleting orphans programm
 
 ## Service worker cache versioning
 
-The service worker uses a named cache (`syncpad-v2` as of this release). To force all clients to download a fresh copy after a significant update:
+The service worker uses a named cache. To force clients to download fresh assets after cached files change:
 
-1. Increment the version constant in `service-worker.js`:  
-   `const CACHE_VERSION = 'syncpad-v3';`
+1. Bump `CACHE_NAME` in `service-worker.js`
 2. Deploy
-3. On next load, the old cache is purged and the new assets are fetched
+3. On next load, old caches are purged and fresh assets are fetched
+
+Current value at the time of this update: `syncpad-v8`.
 
 ---
 

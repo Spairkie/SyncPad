@@ -166,13 +166,23 @@ Full automated cleanup (listing bucket objects and deleting orphans programmatic
 
 ---
 
+
+## Web3Forms operations (Contact page)
+
+- The Web3Forms access key in `index.html` is a **public frontend key**; do not treat it like a private service-role secret.
+- In Web3Forms dashboard, set **Allowed domain** to `spairkie.github.io`.
+- Recommended **subject**: `New SyncPad Contact Form Submission`.
+- Recommended **from_name**: `SyncPad Contact Form`.
+- Keep **hCaptcha disabled** unless/until a frontend hCaptcha widget is implemented.
+- Plan a later anti-spam pass (botcheck/honeypot or equivalent).
+
 ## Known Limitations
 
 | Limitation | Notes |
 |---|---|
 | No backend-enforced permissions | All permission checks are client-side JavaScript |
-| No user accounts or authentication | Rooms are shared by URL; anyone with the URL can join |
-| Read-only mode is frontend-only | Not a security boundary |
+| No user accounts or authentication | SyncPad is anonymous and link-based; anyone with an editable room URL can edit |
+| Read-only share links are bearer-token links | They hide the room path but are still possession-based access, not identity authorization |
 | Room lock is frontend-only | Not a security boundary |
 | `/admin` route is a placeholder only | Admin dashboard is intentionally shelved |
 | Files are not end-to-end encrypted | Text encryption covers note content only |
@@ -237,12 +247,12 @@ Supabase Backend
 
 ## Roadmap
 
-- [ ] Backend-enforced permissions (Supabase RLS + per-room session tokens)
-- [ ] Optional future admin dashboard (currently shelved)
-- [ ] End-to-end encrypted file attachments
-- [ ] Automated storage orphan cleanup (Supabase Edge Function)
-- [ ] Version history (note diffs in Postgres)
-- [ ] Multi-file drag-and-drop upload
+- [ ] Web3Forms cleanup/configuration (allowed domain, subject/from_name, anti-spam pass)
+- [ ] Reliability pass for view-once/share/presence edge cases
+- [ ] Report room button + report storage
+- [ ] UI modernization pass
+- [ ] Rebuild admin later from scratch (current `/SyncPad/admin` route is placeholder-only)
+- [ ] Optional future exploration: stronger backend authorization model (not currently planned)
 
 ---
 

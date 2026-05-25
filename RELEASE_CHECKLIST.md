@@ -107,24 +107,11 @@ Use this checklist before publishing a new version or sharing the demo link.
 
 ---
 
-## 7. Admin / Room Tools
+## 7. Admin route (placeholder)
 
-- [ ] **Open** — More (⋯) → Admin / Room Tools → panel slides in
-- [ ] **Security notice** visible at top of dashboard
-- [ ] **Room info** shows correct ID, lock status, encryption/passcode/view-once status
-- [ ] **Copy editable link** — copies to clipboard; opens in edit mode
-- [ ] **Copy read-only link** — copies to clipboard; opens in read-only mode
-- [ ] **Lock editing** from dashboard — locked badge appears in header; re-opening dashboard shows updated state
-- [ ] **Unlock editing** from dashboard — badge clears
-- [ ] **Clear note** — confirmation dialog; note clears for all tabs
-- [ ] **File stats** show correct count and total size
-- [ ] **Open Files panel** button closes dashboard, opens Files panel
-- [ ] **Presence diagnostics** show current connected devices with correct roles
-- [ ] **App diagnostics** show Supabase configured: Yes, Realtime: Connected
-- [ ] **Maintenance cards** display guidance text correctly (no placeholder text)
-- [ ] **Close via ✕ (panel-close)** — panel slides out
-- [ ] **Close via Esc** — panel closes
-- [ ] **Close via backdrop click** — panel closes
+- [ ] `/SyncPad/admin` opens a placeholder page only
+- [ ] No interactive admin dashboard or room-tools panel is exposed
+- [ ] Placeholder copy indicates admin dashboard is intentionally shelved
 
 ---
 
@@ -147,7 +134,7 @@ Use this checklist before publishing a new version or sharing the demo link.
 - [ ] **Share modal** opens full-width; links and QR codes are visible
 - [ ] **Files panel** is full-width; upload zone visible; file rows are tappable
 - [ ] **File preview modal** fills the viewport; scrollable
-- [ ] **Admin / Room Tools** panel fills the viewport; scrollable
+- [ ] `/SyncPad/admin` placeholder page renders correctly on mobile viewport
 - [ ] **Tap targets** are at least 44×44 px for all buttons
 - [ ] **Orientation change** — layout reflows correctly
 
@@ -159,7 +146,7 @@ Use this checklist before publishing a new version or sharing the demo link.
 - [ ] `syncpad-files` Storage bucket exists and is **private**
 - [ ] Storage policies applied (upload, read, delete for `anon`)
 - [ ] GitHub Pages is serving from the correct branch and folder
-- [ ] `service-worker.js` cache version is current (`syncpad-v2`)
+- [ ] `service-worker.js` cache name is intentionally bumped when cached assets change (currently `syncpad-v8`)
 - [ ] Hard refresh (`Ctrl+Shift+R`) loads fresh content, no stale cache issues
 - [ ] `404.html` is deployed and room URL redirect works
 - [ ] Mobile browser tested (iOS Safari, Android Chrome)
