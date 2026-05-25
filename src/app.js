@@ -86,6 +86,7 @@ let _searchTerm    = '';
 
 
 const BASE = '/SyncPad';
+const EXPIRATION_TIMER_MAX_DELAY_MS = 2147483647;
 
 
 const REPORT_REASON_OPTIONS = new Set(['Spam', 'Abuse or harassment', 'Illegal or harmful content', 'Private information', 'Other']);
@@ -209,6 +210,25 @@ async function boot() {
 // ── Landing screen ────────────────────────────────────────────────────────────
 
 async function _openShareModal() {
+  if (_isReadOnly) {
+    const currentReadOnlyUrl = location.origin + location.pathname + location.search + location.hash;
+    UI.populateShareModal({
+      editableUrl: '',
+      readOnlyUrl: currentReadOnlyUrl,
+      readOnlyError: false,
+      roomPath: '',
+      roomDisplayTitle: (_room?.room_name || '').trim() || _roomId,
+      hasPasscode: !!_room?.passcode_hash,
+      hasEncryption: !!_room?.encryption_enabled,
+      hasReadOnlyLink: !!currentReadOnlyUrl,
+      isEditingLocked: !!_room?.editing_locked,
+      hasViewOnce: !!_room?.view_once,
+      expiresAt: _room?.expires_at || null,
+    });
+    UI.openModal('share-modal');
+    return;
+  }
+
   let readOnlyUrl = '';
   let readOnlyError = false;
   try {
@@ -240,7 +260,7 @@ function wireLandingEvents() {
   const joinInput = document.getElementById('landing-join-input');
   const joinBtn   = document.getElementById('landing-join-btn');
 
-  const createRoom = () => {
+  const handleCreateRoomClick = () => {
     const roomId = generateRoomId();
     const qs     = location.search || '';
     history.pushState(null, '', `${BASE}/${roomId}${qs}`);
@@ -271,7 +291,7 @@ function wireLandingEvents() {
     joinRoom(id);
   };
 
-  createBtn?.addEventListener('click', createRoom);
+  createBtn?.addEventListener('click', handleCreateRoomClick);
   joinBtn?.addEventListener('click', joinRoom_);
   joinInput?.addEventListener('keydown', (e) => { if (e.key === 'Enter') joinRoom_(); });
 }
@@ -512,7 +532,6 @@ async function startApp() {
   _renderRoomHeader();
   UI.setEncryptionBadge(!!_room.encryption_enabled);
   UI.setViewOnceBadge(!!_room.view_once);
-  _renderRoomHeader();
   UI.renderSettingsPanel(_room);
   UI.setStatus('connected');
   UI.setMonospace(_monospace);
@@ -575,12 +594,20 @@ async function startApp() {
     },
     onRemoteFiles: async () => refreshFiles(),
     onRemoteClear: async () => {
+      cancelPendingSave();
+      cancelPendingTypingBroadcast();
+      cancelPendingLiveContentBroadcast();
+      clearDraft(_roomId);
       setContentNoSave('');
       UI.updateWordCount('');
       _refreshPreviewIfActive();
       UI.showToast('Note was cleared by another device.', 'warning');
     },
     onRemoteExpired: async () => {
+      cancelPendingSave();
+      cancelPendingTypingBroadcast();
+      cancelPendingLiveContentBroadcast();
+      clearDraft(_roomId);
       setContentNoSave('');
       UI.updateWordCount('');
       UI.hideExpirationBar();
@@ -588,6 +615,10 @@ async function startApp() {
       UI.showToast('This note expired and was cleared.', 'warning', 5000);
     },
     onRemoteViewOnce: async () => {
+      cancelPendingSave();
+      cancelPendingTypingBroadcast();
+      cancelPendingLiveContentBroadcast();
+      clearDraft(_roomId);
       setContentNoSave('');
       UI.updateWordCount('');
       _refreshPreviewIfActive();
@@ -755,6 +786,10 @@ async function _handleRoomStateTransition(prev, newRoom) {
 
   // ── Clear/expired/view-once toasts ─────────────────────────────────────────
   if (newRoom.cleared_reason === 'expired' && prev?.cleared_reason !== 'expired') {
+    cancelPendingSave();
+    cancelPendingTypingBroadcast();
+    cancelPendingLiveContentBroadcast();
+    clearDraft(_roomId);
     setContentNoSave('');
     UI.updateWordCount('');
     UI.hideExpirationBar();
@@ -770,6 +805,9 @@ async function _handleRoomStateTransition(prev, newRoom) {
       _consumingViewOnce = false;
       _updatePermissionContext();
     } else {
+      cancelPendingSave();
+      cancelPendingTypingBroadcast();
+      cancelPendingLiveContentBroadcast();
       setContentNoSave('');
       UI.updateWordCount('');
       _refreshPreviewIfActive();
@@ -831,9 +869,33 @@ function _updateViewOnceConsumedUI() {
 
 function setupExpirationTimer() {
   clearTimeout(_expTimer);
+  _expTimer = null;
   if (!_room?.expires_at) return;
-  const remaining = new Date(_room.expires_at) - Date.now();
-  if (remaining <= 0) return;
+  const armExpirationTimer = () => {
+    clearTimeout(_expTimer);
+    _expTimer = null;
+    if (!_room?.expires_at) return;
+    const remaining = new Date(_room.expires_at) - Date.now();
+    if (remaining <= 0) {
+      void (async () => {
+        const didClear = await handleExpiration(_roomId, _room, await _emptyContentForCurrentEncryption());
+        if (didClear) {
+          setContentNoSave('');
+          UI.updateWordCount('');
+          UI.hideExpirationBar();
+          _refreshPreviewIfActive();
+          UI.showToast('This note expired and was cleared.', 'warning', 5000);
+          broadcastSettingsChange();
+        }
+      })();
+      return;
+    }
+
+    const nextDelay = Math.min(remaining, EXPIRATION_TIMER_MAX_DELAY_MS);
+    _expTimer = setTimeout(() => {
+      armExpirationTimer();
+    }, nextDelay);
+  };
 
   UI.showExpirationBar(_room.expires_at, async () => {
     if (!canChangeSettings()) { UI.showToast(editBlockedReason() || 'Cannot change settings.', 'warning'); return; }
@@ -846,17 +908,7 @@ function setupExpirationTimer() {
     } catch { UI.showToast('Could not remove expiration.', 'error'); }
   });
 
-  _expTimer = setTimeout(async () => {
-    const didClear = await handleExpiration(_roomId, _room, await _emptyContentForCurrentEncryption());
-    if (didClear) {
-      setContentNoSave('');
-      UI.updateWordCount('');
-      UI.hideExpirationBar();
-      _refreshPreviewIfActive();
-      UI.showToast('This note expired and was cleared.', 'warning', 5000);
-      broadcastSettingsChange();
-    }
-  }, remaining);
+  armExpirationTimer();
 }
 
 // ── File refresh ──────────────────────────────────────────────────────────────

@@ -53,6 +53,13 @@ export function canBroadcastLiveContent() {
   return !_anyEditBlock() && !_ctx.isEncryptionEnabled;
 }
 
+/** Can this client accept/render live note snapshots from other devices? */
+export function canReceiveLiveContent() {
+  // Read-only viewers may receive live snapshots for responsiveness.
+  // Encrypted rooms remain DB-only unless this client has the key.
+  return !_ctx.isEncryptedNoKey && !_ctx.isViewOnceConsumed;
+}
+
 /** Can this client toggle passcode / encryption / expiration / view-once? */
 export function canChangeSettings() {
   // Read-only and lock both disable settings UI.
