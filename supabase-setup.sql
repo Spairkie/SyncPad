@@ -111,6 +111,35 @@ create table if not exists syncpad_files (
 create index if not exists idx_syncpad_files_room_id
   on syncpad_files(room_id);
 
+
+-- Database owns syncpad_rooms.updated_at on every UPDATE to prevent
+-- client clocks or client-supplied timestamps from skewing reconciliation.
+create or replace function public.set_syncpad_rooms_updated_at()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+do $$
+begin
+  if not exists (
+    select 1
+      from pg_trigger
+     where tgname = 'syncpad_rooms_set_updated_at'
+       and tgrelid = 'public.syncpad_rooms'::regclass
+  ) then
+    create trigger syncpad_rooms_set_updated_at
+      before update on public.syncpad_rooms
+      for each row
+      execute function public.set_syncpad_rooms_updated_at();
+  end if;
+end $$;
+
 create index if not exists idx_syncpad_rooms_expires
   on syncpad_rooms(expires_at)
   where expires_at is not null;
