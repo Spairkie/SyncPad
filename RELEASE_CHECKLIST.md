@@ -3,6 +3,7 @@
 Use this checklist before publishing a new version or sharing the demo link.
 
 > ⚠️ Reminder: SyncPad is a personal/demo project. All room controls are frontend-only.  
+> View-once is convenience-only, not secure destruction; viewers may still copy or capture content before it clears.  
 > Do not use for sensitive data.
 
 ---
@@ -17,8 +18,8 @@ Use this checklist before publishing a new version or sharing the demo link.
 - [ ] **Join room** by pasting a link into the landing screen join input
 - [ ] **Join room** by pasting a bare room ID
 - [ ] **Editable link** — opens editor, typing is allowed
-- [ ] **Read-only link** (`?mode=read`) — editor is `readonly`, no upload/delete controls visible
-- [ ] **Invalid/missing room** — read-only link to a nonexistent room shows a clear message, does not crash
+- [ ] **Read-only share link** (`/SyncPad/share/:token`) — editor is `readonly`, no upload/delete controls visible
+- [ ] **Invalid/missing room** — read-only share link (`/SyncPad/share/:token`) to a nonexistent room shows a clear message, does not crash
 - [ ] **Lock editing** — all devices see the edit-blocked banner; typing is disabled
 - [ ] **Unlock editing** — banner clears; typing resumes
 
@@ -156,6 +157,7 @@ Use this checklist before publishing a new version or sharing the demo link.
 
 ## 11. Documentation
 
+- [ ] **View-once caveat is visible** — docs/UX copy clearly says view-once is convenience-only, not secure destruction
 - [ ] README.md describes only **actually implemented** features
 - [ ] No claims of CSV sorting, syntax highlighting, or automatic storage cleanup
 - [ ] Known Limitations section is present and accurate

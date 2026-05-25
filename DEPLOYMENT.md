@@ -1,7 +1,8 @@
 # SyncPad — Deployment Guide
 
 > ⚠️ **Personal / demo project.**  
-> Read-only links and room locks are frontend/convenience controls, not backend-enforced security boundaries.  
+> Read-only links, room locks, and view-once are frontend/convenience controls, not backend-enforced security boundaries.  
+> View-once is a convenience feature, not a secure destruction guarantee. A viewer may copy, screenshot, save, or otherwise preserve content before it clears.  
 > Do **not** deploy SyncPad for use with passwords, HIPAA/PII, classified data, or anything sensitive.
 
 ---
@@ -99,7 +100,7 @@ After deploying, confirm these work in a browser:
 - [ ] Creating a room redirects to `/<roomId>`
 - [ ] Joining a room by URL works
 - [ ] Hard-refreshing a room URL loads correctly (404.html redirect)
-- [ ] Read-only link (`?mode=read`) opens in read-only mode
+- [ ] Read-only share link (`/SyncPad/share/:token`) opens in read-only mode
 - [ ] Uploading a file works
 - [ ] Downloading a file works
 - [ ] Two browser tabs show each other in the Devices panel

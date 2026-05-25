@@ -11,6 +11,7 @@
 > SyncPad is a personal project built for learning and portfolio purposes.  
 > **Read-only links and room locks are frontend/convenience controls, not backend-enforced security boundaries.**  
 > Anyone with the Supabase anon key can call the API directly.  
+> View-once is a convenience feature, not a secure destruction guarantee. A viewer may copy, screenshot, save, or otherwise preserve content before it clears.  
 > **Do not use SyncPad for passwords, HIPAA/PII, classified information, or any sensitive data.**
 
 ---
@@ -181,11 +182,12 @@ Full automated cleanup (listing bucket objects and deleting orphans programmatic
 | Limitation | Notes |
 |---|---|
 | No backend-enforced permissions | All permission checks are client-side JavaScript |
-| No user accounts or authentication | SyncPad is anonymous and link-based; anyone with an editable room URL can edit |
+| No user accounts or authentication | Normal users do not log in; SyncPad is anonymous and link-based |
 | Read-only share links are bearer-token links | They hide the room path but are still possession-based access, not identity authorization |
 | Room lock is frontend-only | Not a security boundary |
 | `/admin` route is a placeholder only | Admin dashboard is intentionally shelved |
-| Files are not end-to-end encrypted | Text encryption covers note content only |
+| View-once is convenience-only | Not a secure destruction guarantee; viewers can still copy or capture content before it clears |
+| Files are not end-to-end encrypted | Text encryption covers note content only unless file encryption is explicitly added |
 | Passcode is a convenience gate | Hash is checked client-side; not server-enforced |
 | Storage orphan cleanup is manual | No automatic deletion of orphaned storage objects |
 | File upload is one file at a time | Multi-file upload not implemented |
