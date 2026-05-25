@@ -97,6 +97,13 @@ function _parseRoute() {
   if (cleaned === 'privacy') return { type: 'privacy' };
   if (cleaned === 'terms') return { type: 'terms' };
   if (cleaned === 'admin') return { type: 'admin' };
+  if (cleaned === 'share') {
+    return {
+      type: 'info',
+      title: 'Share link unavailable',
+      message: 'This read-only link is missing its token. Please use the full /share/:token URL.',
+    };
+  }
 
   const shareMatch = cleaned.match(/^share\/([^/]+)$/);
   if (shareMatch) return { type: 'share', token: shareMatch[1] };
@@ -345,7 +352,11 @@ async function joinRoom(roomId) {
     if (!room) {
       // Read-only clients should NOT auto-create rooms; the room must already exist.
       if (_isReadOnly) {
-        UI.setLoadingMessage('This read-only link points to a room that does not exist.');
+        UI.setInfoScreen({
+          title: 'Share link unavailable',
+          message: 'This read-only link points to a room that does not exist.',
+        });
+        UI.showScreen('info');
         return;
       }
       UI.setLoadingMessage('Creating room…');
