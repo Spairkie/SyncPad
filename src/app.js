@@ -537,6 +537,9 @@ async function startApp() {
   UI.setStatus('connected');
   UI.setMonospace(_monospace);
   UI.setReadOnlyMode(_isReadOnly);
+  // Ensure the editor always starts in write mode when entering a new room,
+  // since _markdownMode was reset to 'write' in teardownRealtimeSession().
+  UI.setMarkdownMode('write', null);
   UI.setLockedMode(!!_room.editing_locked);
   UI.renderThemePicker(THEMES, getSavedTheme_(), (id) => applyTheme(id));
 
@@ -1692,6 +1695,23 @@ function teardownRealtimeSession() {
   if (_scEl) _scEl.textContent = '';
   const _siEl = document.getElementById('search-input');
   if (_siEl) _siEl.value = '';
+  // Cancel any pending expiration timer. The callback closes over the
+  // module-level _roomId / _room which will be updated to the NEXT room
+  // before the timer fires — letting a stale timer run risks expiring the
+  // wrong room.
+  clearTimeout(_expTimer);
+  _expTimer = null;
+  // Reset encryption keys so a key from an encrypted room is never used to
+  // silently encrypt saves in a subsequent non-encrypted room.
+  _encKey  = null;
+  _encSalt = null;
+  // Reset editor mode so the next room always starts in plain-write view
+  // rather than inheriting preview / split mode from the previous room.
+  _markdownMode = 'write';
+  _showPreview  = false;
+  // Reset expiration preset so the settings panel shows a sensible default
+  // rather than whatever preset was last selected in the previous room.
+  _expPreset = '30s';
 }
 
 // ── Templates handler ─────────────────────────────────────────────────────────
