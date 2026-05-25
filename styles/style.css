@@ -1626,3 +1626,13 @@ kbd {
   #share-modal .share-modal-footer { padding: 14px 18px 18px; }
   #share-modal .share-qr canvas, #share-modal .share-qr img { width: 126px !important; height: 126px !important; }
 }
+
+
+.report-room-modal { max-width: 420px; }
+.report-field-label { display:block; font-size:12px; color:var(--text-secondary); margin:8px 0 6px; }
+.report-room-input { width: 100%; }
+.report-room-textarea { width:100%; resize: vertical; min-height: 92px; }
+.report-room-charcount { margin-top: 6px; font-size: 12px; color: var(--text-secondary); text-align: right; }
+.report-room-error { margin-top: 8px; font-size: 13px; color: var(--red); }
+.report-room-success { margin-top: 8px; font-size: 13px; color: #34d399; }
+#report-room-submit:disabled { opacity: .6; cursor: not-allowed; }
