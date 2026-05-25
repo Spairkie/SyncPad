@@ -44,16 +44,18 @@ function _send(event, payload) {
 
 // ── Typing (throttled) ────────────────────────────────────────────────────────
 
-const _throttledTyping = throttle(function (content, seq, encrypted = false) {
+const _throttledTyping = throttle(function (seq) {
   if (!_channel || !_roomId) return;
   _channel.send({
     type:    'broadcast',
     event:   'typing',
-    payload: { room_id: _roomId, device_id: getDeviceId(), device_name: getDeviceName(), content, encrypted: !!encrypted, ts: Date.now(), seq },
+    // Typing/activity messages are metadata-only by design.
+    // Note content syncs through the debounced DB save lane + postgres_changes.
+    payload: { room_id: _roomId, device_id: getDeviceId(), device_name: getDeviceName(), isTyping: true, ts: Date.now(), seq },
   });
 }, THROTTLE_MS);
 
-export function broadcastTyping(content, seq, options = {}) { _throttledTyping(content, seq, !!options.encrypted); }
+export function broadcastTyping(seq) { _throttledTyping(seq); }
 export function cancelPendingTypingBroadcast() { _throttledTyping.cancel?.(); }
 
 // ── Event broadcasts ──────────────────────────────────────────────────────────
