@@ -180,9 +180,32 @@ export function hideExpirationBar() {
 
 // ── Header / room info ────────────────────────────────────────────────────────
 
-export function setRoomName(name) {
-  const el = document.getElementById('room-name');
-  if (el) el.textContent = name;
+export function setRoomName({ roomId, roomName = '', canEditTitle = false } = {}) {
+  const titleEl = document.getElementById('room-name');
+  const pathEl = document.getElementById('room-path-label');
+  const editBtn = document.getElementById('room-title-edit-btn');
+  const normalizedName = (roomName || '').trim();
+  const displayName = normalizedName || roomId || '';
+  if (titleEl) titleEl.textContent = displayName;
+  if (pathEl) {
+    const showPath = !!roomId && !!normalizedName && normalizedName !== roomId;
+    pathEl.textContent = `Room path: /${roomId || ''}`;
+    pathEl.classList.toggle('hidden', !showPath);
+  }
+  if (editBtn) editBtn.classList.toggle('hidden', !canEditTitle);
+}
+
+export function setRoomTitleEditMode(editing, initialValue = '') {
+  const display = document.getElementById('room-name-display');
+  const editor = document.getElementById('room-title-editor');
+  const input = document.getElementById('room-title-input');
+  display?.classList.toggle('hidden', !!editing);
+  editor?.classList.toggle('hidden', !editing);
+  if (editing && input) {
+    input.value = initialValue || '';
+    input.focus();
+    input.select();
+  }
 }
 
 // ── Word / char count ─────────────────────────────────────────────────────────
@@ -332,10 +355,12 @@ export function closeAllModals() {
 
 export function populateShareModal({
   editableUrl, readOnlyUrl, readOnlyError = false, hasPasscode, hasEncryption,
-  roomPath = '', hasReadOnlyLink = false, isEditingLocked = false
+  roomPath = '', roomDisplayTitle = '', hasReadOnlyLink = false, isEditingLocked = false
 } = {}) {
   const roomPathEl = document.getElementById('share-room-path');
+  const roomTitleEl = document.getElementById('share-room-title');
   if (roomPathEl) roomPathEl.textContent = roomPath || '';
+  if (roomTitleEl) roomTitleEl.textContent = roomDisplayTitle || '';
   _renderShareBadges({ hasPasscode, hasEncryption, hasReadOnlyLink, isEditingLocked });
 
   // Editable URL row

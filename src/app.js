@@ -9,7 +9,7 @@ import {
   buildRoomUrl, buildReadOnlyUrl, getUrlMode,
 } from './utils.js';
 
-import { loadRoom, createRoom, clearRoomContent, subscribeToRoom, getOrCreateReadOnlyShareLink, resolveReadOnlyShareLink } from './rooms.js';
+import { loadRoom, createRoom, clearRoomContent, subscribeToRoom, getOrCreateReadOnlyShareLink, resolveReadOnlyShareLink, updateRoomDisplayName, normalizeRoomDisplayName } from './rooms.js';
 
 import {
   initBroadcast, destroyBroadcast,
@@ -188,7 +188,8 @@ async function _openShareModal() {
     editableUrl: buildRoomUrl(BASE, _roomId),
     readOnlyUrl,
     readOnlyError,
-    roomPath: `/${_roomId}`,
+    roomPath: `/${_roomId}` ,
+    roomDisplayTitle: (_room?.room_name || '').trim() || _roomId,
     hasPasscode: !!_room?.passcode_hash,
     hasEncryption: !!_room?.encryption_enabled,
     hasReadOnlyLink: !!readOnlyUrl,
@@ -463,9 +464,10 @@ async function startApp() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   UI.showScreen('app');
-  UI.setRoomName(_roomId);
+  _renderRoomHeader();
   UI.setEncryptionBadge(!!_room.encryption_enabled);
   UI.setViewOnceBadge(!!_room.view_once);
+  _renderRoomHeader();
   UI.renderSettingsPanel(_room);
   UI.setStatus('connected');
   UI.setMonospace(_monospace);
@@ -694,6 +696,7 @@ async function _handleRoomStateTransition(prev, newRoom) {
     await handleRemoteDatabaseChange(newRoom);
   }
 
+  _renderRoomHeader();
   UI.renderSettingsPanel(_room);
   UI.setEncryptionBadge(!!_room.encryption_enabled);
   UI.setViewOnceBadge(!!_room.view_once);
@@ -760,7 +763,8 @@ function _updateViewOnceConsumedUI() {
         UI.updateWordCount('');
         _refreshPreviewIfActive();
         _updatePermissionContext();
-        UI.renderSettingsPanel(_room);
+        _renderRoomHeader();
+  UI.renderSettingsPanel(_room);
         UI.setViewOnceBadge(!!_room.view_once);
         broadcastSettingsChange();
         broadcastClear();
@@ -856,6 +860,15 @@ async function refreshFiles() {
   );
 }
 
+
+
+function _renderRoomHeader() {
+  UI.setRoomName({
+    roomId: _roomId,
+    roomName: _room?.room_name || '',
+    canEditTitle: canEdit() && !(_room?.view_once && _room?.cleared_reason === 'view_once' && !!_room?.viewed && !_viewOnceConsumedByThisSession),
+  });
+}
 // ── Event wiring (guarded against double-wire) ────────────────────────────────
 
 function wireEvents() {
@@ -936,6 +949,31 @@ function wireEvents() {
   document.getElementById('room-name')?.addEventListener('click', () => {
     copyToClipboard(buildRoomUrl(BASE, _roomId))
       .then(() => UI.showToast('Room link copied!', 'success'));
+  });
+
+  document.getElementById('room-title-edit-btn')?.addEventListener('click', () => {
+    if (!canEdit()) return;
+    UI.setRoomTitleEditMode(true, (_room?.room_name || '').trim());
+  });
+  document.getElementById('room-title-cancel-btn')?.addEventListener('click', () => UI.setRoomTitleEditMode(false));
+  const saveTitle = async () => {
+    if (!canEdit()) return;
+    const input = document.getElementById('room-title-input');
+    const normalized = normalizeRoomDisplayName(input?.value || '');
+    try {
+      await updateRoomDisplayName(_roomId, normalized);
+      _room.room_name = normalized;
+      _renderRoomHeader();
+      UI.setRoomTitleEditMode(false);
+      UI.showToast('Room title updated.', 'success');
+    } catch {
+      UI.showToast('Could not save room title.', 'error');
+    }
+  };
+  document.getElementById('room-title-save-btn')?.addEventListener('click', saveTitle);
+  document.getElementById('room-title-input')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); saveTitle(); }
+    if (e.key === 'Escape') { e.preventDefault(); UI.setRoomTitleEditMode(false); }
   });
 
   // ── Segmented markdown control ─────────────────────────────────────────────
@@ -1082,7 +1120,8 @@ function wireEvents() {
         await removePasscode(_roomId);
         _room = await loadRoom(_roomId);
         _updatePermissionContext();
-        UI.renderSettingsPanel(_room);
+        _renderRoomHeader();
+  UI.renderSettingsPanel(_room);
         broadcastSettingsChange();
         UI.showToast('Passcode removed.', 'success');
       } catch { UI.showToast('Could not remove passcode.', 'error'); }
@@ -1093,7 +1132,8 @@ function wireEvents() {
         await setPasscode(_roomId, pc.trim());
         _room = await loadRoom(_roomId);
         _updatePermissionContext();
-        UI.renderSettingsPanel(_room);
+        _renderRoomHeader();
+  UI.renderSettingsPanel(_room);
         broadcastSettingsChange();
         UI.showToast('Passcode set.', 'success');
       } catch { UI.showToast('Could not set passcode.', 'error'); }
@@ -1117,7 +1157,8 @@ function wireEvents() {
         _room   = await loadRoom(_roomId);
         clearDraft(_roomId);
         _updatePermissionContext();
-        UI.renderSettingsPanel(_room);
+        _renderRoomHeader();
+  UI.renderSettingsPanel(_room);
         UI.setEncryptionBadge(false);
         UI.showEncryptionLockedBanner(false);
         broadcastSettingsChange();
@@ -1143,7 +1184,8 @@ function wireEvents() {
         _room   = await loadRoom(_roomId);
         clearDraft(_roomId);
         _updatePermissionContext();
-        UI.renderSettingsPanel(_room);
+        _renderRoomHeader();
+  UI.renderSettingsPanel(_room);
         UI.setEncryptionBadge(true);
         broadcastSettingsChange();
         UI.showToast('Encryption enabled.', 'success');
@@ -1158,7 +1200,8 @@ function wireEvents() {
       try {
         await clearExpiration(_roomId);
         _room = await loadRoom(_roomId);
-        UI.renderSettingsPanel(_room);
+        _renderRoomHeader();
+  UI.renderSettingsPanel(_room);
         UI.hideExpirationBar();
         broadcastSettingsChange();
         UI.showToast('Expiration removed.', 'success');
@@ -1169,7 +1212,8 @@ function wireEvents() {
       try {
         await setExpiration(_roomId, dur.trim());
         _room = await loadRoom(_roomId);
-        UI.renderSettingsPanel(_room);
+        _renderRoomHeader();
+  UI.renderSettingsPanel(_room);
         setupExpirationTimer();
         broadcastSettingsChange();
         UI.showToast('Expiration set.', 'success');
@@ -1188,7 +1232,8 @@ function wireEvents() {
         UI.showToast('View-once enabled. The note clears after the first viewer sees it.', 'success', 5000);
       }
       _room = await loadRoom(_roomId);
-      UI.renderSettingsPanel(_room);
+      _renderRoomHeader();
+  UI.renderSettingsPanel(_room);
       broadcastSettingsChange();
     } catch { UI.showToast('Could not update view-once setting.', 'error'); }
   });
@@ -1202,7 +1247,8 @@ function wireEvents() {
       await setEditingLocked(_roomId, target);
       _room = await loadRoom(_roomId);
       _updatePermissionContext();
-      UI.renderSettingsPanel(_room);
+      _renderRoomHeader();
+  UI.renderSettingsPanel(_room);
       UI.setLockedMode(!!_room.editing_locked);
       broadcastSettingsChange();
       UI.showToast(target ? 'Editing locked.' : 'Editing unlocked.', 'success');

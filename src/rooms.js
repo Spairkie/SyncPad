@@ -54,6 +54,23 @@ export async function saveContent(roomId, content) {
   if (error) { logSupabaseError('saveContent', error, { room_id: roomId }); throw error; }
 }
 
+export function normalizeRoomDisplayName(title) {
+  const trimmed = (title || '').trim();
+  if (!trimmed) return '';
+  return trimmed.slice(0, 80);
+}
+
+export async function updateRoomDisplayName(roomId, title) {
+  const sb = getSupabaseClient();
+  const roomName = normalizeRoomDisplayName(title);
+  const { error } = await sb.from(TABLE).update({
+    room_name: roomName,
+    updated_at: new Date().toISOString(),
+    updated_by_device: getDeviceId(),
+  }).eq('room_id', roomId);
+  if (error) { logSupabaseError('updateRoomDisplayName', error, { room_id: roomId }); throw error; }
+}
+
 // ── Settings-only update (strips content to prevent accidental overwrites) ───
 
 export async function updateRoomSettings(roomId, settings) {
