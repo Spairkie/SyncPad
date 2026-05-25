@@ -123,8 +123,18 @@ function _parseRoute() {
     };
   }
 
-  const shareMatch = cleaned.match(/^share\/([^/]+)$/);
-  if (shareMatch) return { type: 'share', token: shareMatch[1] };
+  const shareMatch = cleaned.match(/^share\/(.+)$/);
+  if (shareMatch) {
+    const token = shareMatch[1].replace(/^\/+|\/+$/g, '');
+    if (!token) {
+      return {
+        type: 'info',
+        title: 'Share link unavailable',
+        message: 'This read-only link is missing its token. Please use the full /share/:token URL.',
+      };
+    }
+    return { type: 'share', token };
+  }
 
   return { type: 'room', roomId: cleaned };
 }

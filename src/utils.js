@@ -238,7 +238,12 @@ export function parseDuration(str) {
 
 // ── Error logging ────────────────────────────────────────────────────────────
 
+function isDebugEnabled() {
+  try { return localStorage.getItem('syncpad_debug') === '1'; } catch { return false; }
+}
+
 export function logSupabaseError(context, error, extra = {}) {
+  if (!isDebugEnabled()) return;
   const safe = { ...extra };
   delete safe.content; delete safe.passcode; delete safe.passcode_hash; delete safe.encryption_key;
   console.error('[SyncPad]', context, {
