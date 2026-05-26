@@ -1,0 +1,99 @@
+// tests/settings.spec.js
+// Settings panel: opening, expiration validation (5-min minimum),
+// theme switching.
+
+import { test, expect } from '@playwright/test';
+import { createRoom, waitForToast } from './helpers.js';
+
+async function openSettingsPanel(page) {
+  const btn = page.locator('[aria-controls="settings-panel"], #btn-settings').first();
+  await btn.click();
+  await page.waitForSelector('#settings-panel.open', { timeout: 5000 });
+}
+
+test.describe('Settings panel', () => {
+  test('opens and shows room settings', async ({ page }) => {
+    await createRoom(page);
+    await openSettingsPanel(page);
+    await expect(page.locator('#settings-panel')).toBeVisible();
+    // Should show some setting rows
+    await expect(page.locator('#setting-passcode-btn')).toBeVisible();
+  });
+
+  test('expiration preset buttons are visible', async ({ page }) => {
+    await createRoom(page);
+    await openSettingsPanel(page);
+    // Expand expiration controls
+    await page.locator('#setting-exp-btn').click();
+    const expControls = page.locator('#setting-exp-controls');
+    await expect(expControls).toBeVisible();
+    // Should have at least one preset button
+    await expect(page.locator('[data-exp-preset]').first()).toBeVisible();
+  });
+
+  test('custom expiration rejects values below 5 minutes', async ({ page }) => {
+    await createRoom(page);
+    await openSettingsPanel(page);
+    await page.locator('#setting-exp-btn').click();
+    // Select custom preset
+    await page.locator('[data-exp-preset="custom"]').click();
+    // Enter 30 seconds (less than 5 min = 300s)
+    await page.locator('#exp-custom-value').fill('30');
+    await page.locator('#exp-custom-unit').selectOption('s');
+    await page.locator('#setting-exp-apply-btn').click();
+    // Should show error
+    const errorEl = page.locator('#setting-exp-error');
+    await expect(errorEl).toBeVisible();
+    await expect(errorEl).toContainText('5 minutes');
+  });
+
+  test('custom expiration accepts values of 5 minutes', async ({ page }) => {
+    await createRoom(page);
+    await openSettingsPanel(page);
+    await page.locator('#setting-exp-btn').click();
+    await page.locator('[data-exp-preset="custom"]').click();
+    await page.locator('#exp-custom-value').fill('5');
+    await page.locator('#exp-custom-unit').selectOption('m');
+    // Error should not be shown (we don't submit to DB in unit test context,
+    // but validation should pass — the apply btn click either succeeds or
+    // shows a DB-level error, not the validation error).
+    const errorEl = page.locator('#setting-exp-error');
+    // Either hidden or doesn't contain the "5 minutes" message
+    await page.locator('#setting-exp-apply-btn').click();
+    // If error is visible, it should NOT be about the 5-minute minimum
+    if (await errorEl.isVisible()) {
+      const text = await errorEl.textContent();
+      expect(text).not.toContain('5 minutes');
+    }
+  });
+
+  test('custom expiration rejects 4 minutes', async ({ page }) => {
+    await createRoom(page);
+    await openSettingsPanel(page);
+    await page.locator('#setting-exp-btn').click();
+    await page.locator('[data-exp-preset="custom"]').click();
+    await page.locator('#exp-custom-value').fill('4');
+    await page.locator('#exp-custom-unit').selectOption('m');
+    await page.locator('#setting-exp-apply-btn').click();
+    await expect(page.locator('#setting-exp-error')).toContainText('5 minutes');
+  });
+
+  test('theme picker renders theme options', async ({ page }) => {
+    await createRoom(page);
+    await openSettingsPanel(page);
+    const themeOptions = page.locator('.theme-option');
+    expect(await themeOptions.count()).toBeGreaterThanOrEqual(4);
+  });
+
+  test('clicking a theme option applies it to the document', async ({ page }) => {
+    await createRoom(page);
+    await openSettingsPanel(page);
+    const themes = page.locator('.theme-option');
+    // Click the second theme option
+    await themes.nth(1).click();
+    // data-theme attribute on <html> should be updated
+    const htmlTheme = await page.locator('html').getAttribute('data-theme');
+    expect(htmlTheme).toBeTruthy();
+    expect(htmlTheme).not.toBe('');
+  });
+});

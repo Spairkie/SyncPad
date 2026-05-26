@@ -54,12 +54,14 @@ import { renderMarkdown, toggleChecklistItem } from './markdown.js';
 import {
   TEMPLATES, getTemplate, getCustomTemplates,
   saveCustomTemplate, renameCustomTemplate, deleteCustomTemplate,
+  exportCustomTemplates, importCustomTemplates,
 } from './templates.js';
 import { loadSavedTheme, applyTheme, THEMES }  from './theme.js';
 import { initShortcuts, destroyShortcuts }     from './shortcuts.js';
 
 import * as UI from './ui.js';
 import { openFilePreview } from './file-preview.js';
+import { initAdmin } from './admin.js';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
@@ -185,6 +187,9 @@ async function boot() {
 
   if (route.type === 'admin') {
     UI.showScreen('admin');
+    initAdmin().catch((err) => {
+      console.error('[admin] initAdmin failed:', err);
+    });
     return;
   }
 
@@ -1041,6 +1046,9 @@ function _buildExpirationDuration() {
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) return { error: 'Custom auto-expire must be a number greater than 0.' };
   if (!['s', 'm', 'h', 'd'].includes(unit)) return { error: 'Unsupported unit. Use seconds, minutes, hours, or days.' };
+  // Enforce a 5-minute minimum to prevent accidental near-immediate expiry.
+  const seconds = unit === 's' ? n : unit === 'm' ? n * 60 : unit === 'h' ? n * 3600 : n * 86400;
+  if (seconds < 300) return { error: 'Minimum auto-expire duration is 5 minutes.' };
   return `${n}${unit}`;
 }
 
@@ -1417,13 +1425,55 @@ function wireEvents() {
     },
     'tool-templates': () => {
       if (!canUseTemplates()) { UI.showToast(editBlockedReason() || 'Templates are disabled.', 'warning'); return; }
-      UI.openTemplatesModal(
-        TEMPLATES,
-        getCustomTemplates(),
-        _onTemplateChosen,
-        (key) => { deleteCustomTemplate(key); },
-        (key, label) => { renameCustomTemplate(key, label); },
-      );
+
+      const _openTemplates = () => {
+        UI.openTemplatesModal(
+          TEMPLATES,
+          getCustomTemplates(),
+          _onTemplateChosen,
+          (key) => { deleteCustomTemplate(key); },
+          (key, label) => { renameCustomTemplate(key, label); },
+          {
+            onExport: () => {
+              const json = exportCustomTemplates();
+              const blob = new Blob([json], { type: 'application/json' });
+              const a    = Object.assign(document.createElement('a'), {
+                href: URL.createObjectURL(blob), download: 'syncpad-templates.json',
+              });
+              document.body.appendChild(a); a.click(); document.body.removeChild(a);
+              URL.revokeObjectURL(a.href);
+              UI.showToast('Templates exported.', 'success');
+            },
+            onImport: () => {
+              const inp = Object.assign(document.createElement('input'), {
+                type: 'file', accept: 'application/json,.json',
+              });
+              inp.onchange = () => {
+                const f = inp.files[0]; if (!f) return;
+                if (f.size > 1024 * 1024) { UI.showToast('File too large (max 1 MB for template import).', 'error'); return; }
+                const r = new FileReader();
+                r.onerror = () => UI.showToast('Could not read file.', 'error');
+                r.onload = (e) => {
+                  let count;
+                  try { count = importCustomTemplates(String(e.target.result)); }
+                  catch (err) {
+                    if (err?.code === 'QUOTA_EXCEEDED') { UI.showToast('Browser storage is full — could not import templates.', 'error'); return; }
+                    UI.showToast('Import failed.', 'error'); return;
+                  }
+                  if (count < 0) { UI.showToast('Invalid file — expected a JSON object of templates.', 'error'); return; }
+                  UI.showToast(`Imported ${count} template${count !== 1 ? 's' : ''}.`, 'success');
+                  UI.closeModal('templates-modal');
+                  setTimeout(_openTemplates, 150); // reopen with fresh data
+                };
+                r.readAsText(f);
+              };
+              inp.click();
+            },
+          }
+        );
+      };
+
+      _openTemplates();
     },
   };
 
@@ -1464,7 +1514,12 @@ function wireEvents() {
   document.getElementById('files-bulk-delete')?.addEventListener('click', async () => {
     if (!_selectedFiles.size) return;
     if (!canDeleteFiles()) { UI.showToast(editBlockedReason() || 'File deletion is disabled.', 'warning'); return; }
-    if (!confirm(`Delete ${_selectedFiles.size} file${_selectedFiles.size !== 1 ? 's' : ''}?`)) return;
+    const count = _selectedFiles.size;
+    const ok = await UI.showConfirm(
+      `Permanently delete ${count} file${count !== 1 ? 's' : ''}? This cannot be undone.`,
+      { confirmLabel: 'Delete', danger: true },
+    );
+    if (!ok) return;
     const ids = [..._selectedFiles];
     _selectedFiles.clear();
     let failed = 0;
@@ -1756,8 +1811,18 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
     if (!body) { UI.showToast('The note is empty — nothing to save as a template.', 'warning'); return; }
     const label = prompt('Template name:', 'My template');
     if (!label?.trim()) return;
-    saveCustomTemplate(label.trim(), body);
-    UI.showToast(`Saved as template "${label.trim()}".`, 'success');
+    try {
+      const { truncated } = saveCustomTemplate(label.trim(), body);
+      UI.showToast(
+        truncated
+          ? `Saved as template "${label.trim()}" (body capped at 50 KB).`
+          : `Saved as template "${label.trim()}".`,
+        'success',
+      );
+    } catch (err) {
+      if (err?.code === 'QUOTA_EXCEEDED') { UI.showToast('Browser storage is full — template could not be saved.', 'error'); return; }
+      UI.showToast('Could not save template.', 'error');
+    }
   });
 
   // ── Find & Replace panel ───────────────────────────────────────────────────

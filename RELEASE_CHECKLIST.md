@@ -108,11 +108,16 @@ Use this checklist before publishing a new version or sharing the demo link.
 
 ---
 
-## 7. Admin route (placeholder)
+## 7. Admin dashboard
 
-- [ ] `/SyncPad/admin` opens a placeholder page only
-- [ ] No interactive admin dashboard or room-tools panel is exposed
-- [ ] Placeholder copy indicates admin dashboard is intentionally shelved
+- [ ] `/SyncPad/admin` shows a login form (email + password)
+- [ ] Invalid credentials show an error message; valid credentials load the dashboard
+- [ ] **Rooms tab** — lists latest rooms; search works; Clear and Delete actions work
+- [ ] **Reports tab** — lists reports; Dismiss and Delete-room work; "show only new" filter works
+- [ ] **Cleanup tab** — RPC `run_cleanup_expired_syncpad_rooms_as_admin()` runs without error
+- [ ] Non-admin user (or no login) cannot reach dashboard data — `is_syncpad_admin()` RLS blocks
+- [ ] `PGRST301` error shown as "You do not have admin access." (not a raw error code)
+- [ ] Logout button signs out and returns to login form
 
 ---
 
@@ -157,7 +162,22 @@ Use this checklist before publishing a new version or sharing the demo link.
 
 ---
 
-## 11. Documentation
+## 11. Automated tests
+
+- [ ] `npm run serve` starts static server on port 5555
+- [ ] `npm test` runs without errors (or known failures documented)
+- [ ] `tests/landing.spec.js` — landing screen tests pass
+- [ ] `tests/editor.spec.js` — editor & export tests pass
+- [ ] `tests/markdown.spec.js` — Markdown renderer tests pass
+- [ ] `tests/search.spec.js` — Find & Replace tests pass
+- [ ] `tests/settings.spec.js` — settings panel tests pass
+- [ ] `tests/routing.spec.js` — URL routing tests pass
+- [ ] `tests/accessibility.spec.js` — ARIA / keyboard tests pass
+- [ ] `tests/utils.spec.js` — unit tests (escapeHtml, formatFileSize, templates) pass
+
+---
+
+## 12. Documentation
 
 - [ ] **View-once caveat is visible** — docs/UX copy clearly says view-once is convenience-only, not secure destruction
 - [ ] README.md describes only **actually implemented** features
@@ -168,7 +188,7 @@ Use this checklist before publishing a new version or sharing the demo link.
 - [ ] Screenshots added to `docs/screenshots/` or placeholder paths noted in README
 - [ ] `RELEASE_CHECKLIST.md` is present (this file)
 
-## 12. Anti-spam and abuse-control checks
+## 13. Anti-spam and abuse-control checks
 
 - [ ] Contact form still includes Web3Forms `botcheck` honeypot field
 - [ ] Report reason allowlist enforced (frontend + DB constraint)

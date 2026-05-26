@@ -63,11 +63,11 @@
 - **Markdown** — Write, Preview, and Split view modes
 - **Safe Markdown rendering** — custom renderer with no raw HTML pass-through; XSS-safe
 - **Checklist preview** — GFM-style checkboxes; click to toggle in preview
-- **Built-in templates** — meeting notes, daily plan, checklist, code block, email draft, and more
-- **Custom templates** — save, rename, and delete your own (localStorage)
-- **Find in note** — case-insensitive search with Prev / Next navigation
+- **Templates Library v2** — 13 built-in templates (meeting, checklist, standup, bug report, code review, and more); searchable modal with two-column preview pane
+- **Custom templates** — save, rename, delete, export/import as JSON (localStorage-backed, up to 50 000 chars each)
+- **Find & Replace** — case-insensitive search with Prev / Next navigation, Replace, and Replace All
 - **Keyboard shortcuts** — see [Keyboard Shortcuts](#keyboard-shortcuts) below
-- **Export** — download as `.txt`, `.md`, or rendered `.html`; copy as plain text or Markdown
+- **Export** — download as `.txt`, `.md`, rendered `.html`, or PDF (browser print); copy as plain text or Markdown
 - **Monospace toggle** — switch editor font with `Ctrl/⌘ + Shift + M`
 - **Timestamp insert** — add current date/time inline
 
@@ -103,7 +103,7 @@
 | `Ctrl/⌘ + Shift + P` | Toggle Preview mode |
 | `Ctrl/⌘ + Shift + S` | Toggle Split view |
 | `Ctrl/⌘ + Shift + M` | Toggle Monospace font |
-| `Ctrl/⌘ + F` | Open Find in note |
+| `Ctrl/⌘ + F` | Open Find & Replace panel |
 | `Ctrl/⌘ + B` | Bold selected text |
 | `Ctrl/⌘ + I` | Italic selected text |
 | `Ctrl/⌘ + K` | Insert Markdown link |
@@ -186,7 +186,7 @@ Full automated cleanup (listing bucket objects and deleting orphans programmatic
 | No user accounts or authentication | Normal users do not log in; SyncPad is anonymous and link-based |
 | Read-only share links are bearer-token links | They hide the room path but are still possession-based access, not identity authorization |
 | Room lock is frontend-only | Not a security boundary |
-| `/admin` route is a placeholder only | Admin dashboard is intentionally shelved |
+| Admin access requires Supabase Auth | The `/admin` route is protected by `signInWithPassword` + `is_syncpad_admin()` RLS — not for end users |
 | View-once is convenience-only | Not a secure destruction guarantee; viewers can still copy or capture content before it clears |
 | Files are not end-to-end encrypted | Text encryption covers note content only unless file encryption is explicitly added |
 | Passcode is a convenience gate | Hash is checked client-side; not server-enforced |
@@ -207,21 +207,26 @@ Browser UI (HTML/CSS/JS)
             ├── sync.js         — live typing + durable save lanes
             ├── presence.js     — device/typing/cursor tracking
             ├── live-broadcast.js — Supabase Broadcast events
-            ├── files.js        — upload, download, delete
+            ├── files.js        — upload, download, delete (signed-URL cache)
             ├── file-preview.js — in-app preview modal
             ├── markdown.js     — safe custom Markdown renderer
             ├── encryption.js   — AES-256-GCM + PBKDF2 (Web Crypto)
             ├── permissions.js  — frontend permission context
             ├── settings.js     — room settings (passcode, expiry, etc.)
-            ├── templates.js    — built-in + localStorage custom templates
+            ├── templates.js    — 13 built-ins + localStorage custom templates
             ├── theme.js        — CSS variable theme system
-            └── shortcuts.js    — keyboard shortcut handler
+            ├── shortcuts.js    — keyboard shortcut handler
+            └── admin.js        — admin dashboard (Supabase Auth + RLS)
 
 Supabase Backend
-    ├── syncpad_rooms    (Postgres table + Realtime)
-    ├── syncpad_files    (Postgres table + Realtime)
-    └── syncpad-files    (Storage bucket, private, signed URLs)
+    ├── syncpad_rooms        (Postgres table + Realtime)
+    ├── syncpad_files        (Postgres table + Realtime)
+    ├── syncpad_share_links  (Postgres table)
+    ├── syncpad_room_reports (Postgres table, insert-only for anon)
+    └── syncpad-files        (Storage bucket, private, signed URLs)
 ```
+
+See [`docs/architecture.md`](docs/architecture.md) for the full module-by-module breakdown and data flow diagrams.
 
 ### Key design decisions
 
@@ -245,17 +250,49 @@ Supabase Backend
 | Markdown | Custom safe renderer (built from scratch) |
 | File preview | Fetch API + vanilla JS (no library) |
 | PWA | Service Worker + Web App Manifest |
+| Tests | Playwright (chromium, firefox, webkit, mobile) |
+
+---
+
+## Documentation
+
+| Document | Description |
+|---|---|
+| [`DEPLOYMENT.md`](DEPLOYMENT.md) | Step-by-step deploy guide (Supabase, GitHub Pages, custom domain) |
+| [`docs/architecture.md`](docs/architecture.md) | Module responsibilities, data flow, state management |
+| [`docs/security.md`](docs/security.md) | Security model, encryption, XSS mitigations, known limitations |
+| [`docs/playwright.md`](docs/playwright.md) | Running and writing Playwright tests |
+| [`CHANGELOG.md`](CHANGELOG.md) | Change history |
+| [`RELEASE_CHECKLIST.md`](RELEASE_CHECKLIST.md) | Pre-release verification checklist |
+| [`CLAUDE.md`](CLAUDE.md) | Development guide for AI coding assistants |
+
+---
+
+## Testing
+
+```bash
+npm run serve          # start static server on :5555
+npx playwright install # one-time browser download
+npm test               # run all tests (headless)
+npm run test:ui        # Playwright UI mode
+npm run test:chrome    # chromium only
+npm run test:report    # open HTML report
+```
+
+See [`docs/playwright.md`](docs/playwright.md) for the full test guide.
 
 ---
 
 ## Roadmap
 
-- [ ] Web3Forms cleanup/configuration (allowed domain, subject/from_name, anti-spam pass)
-- [ ] Reliability pass for view-once/share/presence edge cases
-- [ ] Report room button + report storage
-- [ ] UI modernization pass
-- [ ] Rebuild admin later from scratch (current `/SyncPad/admin` route is placeholder-only)
-- [ ] Optional future exploration: stronger backend authorization model (not currently planned)
+- [ ] Web3Forms domain allowlist + anti-spam pass
+- [ ] Reliability pass for view-once / share / presence edge cases
+- [ ] Find & Replace UI polish (match count badge, case-sensitive toggle)
+- [ ] Expiration countdown — live "expires in X min" in expiry bar
+- [ ] Syntax highlighting in preview (Prism or highlight.js for fenced code blocks)
+- [ ] Read-only link PIN (separate from room passcode)
+- [ ] Bulk file delete (multi-select checkboxes)
+- [ ] Optional future: stronger backend authorization model
 
 ---
 

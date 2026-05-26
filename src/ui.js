@@ -255,6 +255,7 @@ export function initFooterClock() {
 export function renderDevicesList(devices, myDeviceId, onNameChange) {
   const list = document.getElementById('devices-list');
   if (!list) return;
+  list.setAttribute('role', 'list');
   list.innerHTML = '';
   if (!devices.length) {
     list.innerHTML = '<div class="device-empty">No other devices connected</div>';
@@ -264,6 +265,7 @@ export function renderDevicesList(devices, myDeviceId, onNameChange) {
     const isMe = device.device_id === myDeviceId;
     const item = document.createElement('div');
     item.className = `device-item${isMe ? ' me' : ''}${device.read_only ? ' viewer' : ''}${device.typing ? ' typing' : ''}`;
+    item.setAttribute('role', 'listitem');
     item.dataset.deviceId = device.device_id || '';
 
     const roBadge = device.read_only
@@ -312,6 +314,7 @@ export function renderFilesList(files, onDownload, onDelete, opts = {}) {
   const list  = document.getElementById('files-list');
   const empty = document.getElementById('files-empty');
   if (!list) return;
+  list.setAttribute('role', 'list');
   list.innerHTML = '';
   if (!files?.length) { empty?.classList.remove('hidden'); return; }
   empty?.classList.add('hidden');
@@ -323,17 +326,18 @@ export function renderFilesList(files, onDownload, onDelete, opts = {}) {
   files.forEach(file => {
     const item = document.createElement('div');
     item.className = 'file-item' + (selectMode ? ' file-item--selectable' : '');
+    item.setAttribute('role', 'listitem');
     item.innerHTML = `
       ${selectMode ? `<input type="checkbox" class="file-select-cb" aria-label="Select ${escapeHtml(file.filename)}"${selectedIds.has(file.id) ? ' checked' : ''}>` : ''}
-      <div class="file-emoji">${fileEmoji(file.mime_type, file.filename)}</div>
+      <div class="file-emoji" aria-hidden="true">${fileEmoji(file.mime_type, file.filename)}</div>
       <div class="file-info">
         <div class="file-name">${escapeHtml(file.filename)}</div>
         <div class="file-meta">${formatFileSize(file.file_size)} · ${formatTimestamp(file.uploaded_at)}</div>
       </div>
       <div class="file-actions">
-        ${(!selectMode && onPreview) ? `<button class="file-action-btn preview" title="Preview">${getIcon('eye', 15)}</button>` : ''}
-        ${!selectMode ? `<button class="file-action-btn download" title="Download">${getIcon('download', 15)}</button>` : ''}
-        ${(!selectMode && canDelete) ? `<button class="file-action-btn delete" title="Delete">${getIcon('trash', 15)}</button>` : ''}
+        ${(!selectMode && onPreview) ? `<button class="file-action-btn preview" title="Preview ${escapeHtml(file.filename)}" aria-label="Preview ${escapeHtml(file.filename)}">${getIcon('eye', 15)}</button>` : ''}
+        ${!selectMode ? `<button class="file-action-btn download" title="Download ${escapeHtml(file.filename)}" aria-label="Download ${escapeHtml(file.filename)}">${getIcon('download', 15)}</button>` : ''}
+        ${(!selectMode && canDelete) ? `<button class="file-action-btn delete" title="Delete ${escapeHtml(file.filename)}" aria-label="Delete ${escapeHtml(file.filename)}">${getIcon('trash', 15)}</button>` : ''}
       </div>`;
     if (selectMode && onSelectionChange) {
       const cb = item.querySelector('.file-select-cb');
@@ -990,13 +994,14 @@ export function renderThemePicker(themes, currentId, onSelect) {
 
 /**
  * Open the templates modal.
- * @param {object} builtins   – TEMPLATES constant
- * @param {object} customs    – result of getCustomTemplates()
- * @param {Function} onChoose – (key, mode) => void
- * @param {Function} onDelete – (key) => void  – called when user deletes a custom template
- * @param {Function} onRename – (key, newLabel) => void
+ * @param {object}   builtins   – TEMPLATES constant
+ * @param {object}   customs    – result of getCustomTemplates()
+ * @param {Function} onChoose   – (key, mode) => void
+ * @param {Function} onDelete   – (key) => void
+ * @param {Function} onRename   – (key, newLabel) => void
+ * @param {object}   [io={}]    – optional { onExport, onImport } callbacks
  */
-export function openTemplatesModal(builtins, customs, onChoose, onDelete, onRename) {
+export function openTemplatesModal(builtins, customs, onChoose, onDelete, onRename, { onExport, onImport } = {}) {
   const modal = document.getElementById('templates-modal');
   if (!modal) return;
 
@@ -1010,7 +1015,7 @@ export function openTemplatesModal(builtins, customs, onChoose, onDelete, onRena
     if (_activeTab === 'insert') {
       _renderInsertTab(body, builtins, customs, onChoose);
     } else {
-      _renderCustomTab(body, customs, onDelete, onRename, _render);
+      _renderCustomTab(body, customs, onDelete, onRename, _render, { onExport, onImport });
     }
   };
 
@@ -1036,32 +1041,116 @@ export function openTemplatesModal(builtins, customs, onChoose, onDelete, onRena
 }
 
 function _renderInsertTab(body, builtins, customs, onChoose) {
+  // ── Search bar ───────────────────────────────────────────────
+  const searchWrap = document.createElement('div');
+  searchWrap.className = 'tmpl-search-wrap';
+  const searchInput = document.createElement('input');
+  searchInput.type = 'search';
+  searchInput.placeholder = 'Search templates…';
+  searchInput.className = 'tmpl-search-input';
+  searchInput.autocomplete = 'off';
+  searchInput.setAttribute('aria-label', 'Search templates');
+  searchWrap.appendChild(searchInput);
+  body.appendChild(searchWrap);
+
+  // ── Two-column layout: list + preview ────────────────────────
+  const twoCol = document.createElement('div');
+  twoCol.className = 'tmpl-two-col';
+
+  const listCol = document.createElement('div');
+  listCol.className = 'tmpl-list-col';
+
+  const previewCol = document.createElement('div');
+  previewCol.className = 'tmpl-preview-col';
+  const previewEl = document.createElement('pre');
+  previewEl.className = 'tmpl-preview-body';
+  previewEl.textContent = 'Hover or focus a template to preview its content.';
+  previewCol.appendChild(previewEl);
+
+  const showPreview = (t) => {
+    const lines = (t.body || '').trimEnd();
+    const LIMIT = 800;
+    previewEl.textContent = lines.length
+      ? (lines.length > LIMIT ? lines.slice(0, LIMIT) + '\n…' : lines)
+      : `(${t.desc || 'Empty template'})`;
+  };
+
+  // ── Template list with group headers ────────────────────────
   const list = document.createElement('div');
   list.className = 'templates-list';
+  list.setAttribute('role', 'list');
 
-  const hasCustom = Object.keys(customs).length > 0;
-  if (hasCustom) {
-    const header = document.createElement('div');
-    header.className = 'templates-group-label';
-    header.textContent = 'My Templates';
-    list.appendChild(header);
-    Object.entries(customs).forEach(([key, t]) => {
-      list.appendChild(_makeTemplateBtn(key, t, onChoose));
-    });
-    const sep = document.createElement('div');
-    sep.className = 'templates-group-label';
-    sep.textContent = 'Built-in';
-    list.appendChild(sep);
-  }
+  const buildList = (filter) => {
+    list.innerHTML = '';
+    const f = filter.toLowerCase();
 
-  Object.entries(builtins).forEach(([key, t]) => {
-    list.appendChild(_makeTemplateBtn(key, t, onChoose));
-  });
+    const matchFn = (t) => !f
+      || t.label.toLowerCase().includes(f)
+      || (t.desc || '').toLowerCase().includes(f);
 
-  body.appendChild(list);
+    const customEntries = Object.entries(customs).filter(([, t]) => matchFn(t));
+    if (customEntries.length) {
+      const hdr = document.createElement('div');
+      hdr.className = 'templates-group-label';
+      hdr.textContent = 'My Templates';
+      list.appendChild(hdr);
+      customEntries.forEach(([key, t]) => list.appendChild(_makeTemplateBtn(key, t, onChoose, showPreview)));
+
+      const sep = document.createElement('div');
+      sep.className = 'templates-group-label';
+      sep.textContent = 'Built-in';
+      list.appendChild(sep);
+    }
+
+    const builtinEntries = Object.entries(builtins).filter(([, t]) => matchFn(t));
+    builtinEntries.forEach(([key, t]) => list.appendChild(_makeTemplateBtn(key, t, onChoose, showPreview)));
+
+    if (!customEntries.length && !builtinEntries.length) {
+      const none = document.createElement('div');
+      none.className = 'tmpl-no-results';
+      none.textContent = 'No templates match your search.';
+      list.appendChild(none);
+    }
+  };
+
+  buildList('');
+  searchInput.addEventListener('input', () => buildList(searchInput.value));
+
+  listCol.appendChild(list);
+  twoCol.appendChild(listCol);
+  twoCol.appendChild(previewCol);
+  body.appendChild(twoCol);
+
+  // Focus search on open
+  requestAnimationFrame(() => searchInput.focus());
 }
 
-function _renderCustomTab(body, customs, onDelete, onRename, rerender) {
+function _renderCustomTab(body, customs, onDelete, onRename, rerender, { onExport, onImport } = {}) {
+  // ── Export / Import bar ──────────────────────────────────────
+  if (onExport || onImport) {
+    const ioBar = document.createElement('div');
+    ioBar.className = 'tmpl-io-bar';
+    if (onExport) {
+      const expBtn = document.createElement('button');
+      expBtn.className = 'tmpl-io-btn';
+      expBtn.title = 'Export all custom templates as JSON';
+      expBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Export JSON`;
+      expBtn.disabled = Object.keys(customs).length === 0;
+      expBtn.addEventListener('click', onExport);
+      ioBar.appendChild(expBtn);
+    }
+    if (onImport) {
+      const impBtn = document.createElement('button');
+      impBtn.className = 'tmpl-io-btn';
+      impBtn.title = 'Import templates from a JSON file';
+      impBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> Import JSON`;
+      impBtn.addEventListener('click', onImport);
+      ioBar.appendChild(impBtn);
+    }
+    body.appendChild(ioBar);
+  }
+
+  // ── Template list ─────────────────────────────────────────────
   const keys = Object.keys(customs);
 
   if (!keys.length) {
@@ -1076,10 +1165,12 @@ function _renderCustomTab(body, customs, onDelete, onRename, rerender) {
 
   const list = document.createElement('div');
   list.className = 'templates-list custom-templates-list';
+  list.setAttribute('role', 'list');
   keys.forEach(key => {
     const t    = customs[key];
     const item = document.createElement('div');
     item.className = 'custom-template-item';
+    item.setAttribute('role', 'listitem');
 
     const label = document.createElement('span');
     label.className = 'custom-template-label';
@@ -1091,8 +1182,8 @@ function _renderCustomTab(body, customs, onDelete, onRename, rerender) {
     const renameBtn = document.createElement('button');
     renameBtn.className = 'custom-tmpl-btn';
     renameBtn.title = 'Rename';
-    renameBtn.setAttribute('aria-label', 'Rename template');
-    renameBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
+    renameBtn.setAttribute('aria-label', `Rename template "${t.label}"`);
+    renameBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
     renameBtn.addEventListener('click', () => {
       const newName = prompt('Rename template:', t.label);
       if (newName?.trim()) { onRename(key, newName.trim()); rerender(); }
@@ -1101,8 +1192,8 @@ function _renderCustomTab(body, customs, onDelete, onRename, rerender) {
     const delBtn = document.createElement('button');
     delBtn.className = 'custom-tmpl-btn danger';
     delBtn.title = 'Delete';
-    delBtn.setAttribute('aria-label', 'Delete template');
-    delBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`;
+    delBtn.setAttribute('aria-label', `Delete template "${t.label}"`);
+    delBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`;
     delBtn.addEventListener('click', () => {
       if (!confirm(`Delete template "${t.label}"?`)) return;
       onDelete(key);
@@ -1119,12 +1210,19 @@ function _renderCustomTab(body, customs, onDelete, onRename, rerender) {
   body.appendChild(list);
 }
 
-function _makeTemplateBtn(key, t, onChoose) {
+function _makeTemplateBtn(key, t, onChoose, onHover) {
   const btn = document.createElement('button');
   btn.className = 'template-btn';
   btn.dataset.key = key;
-  btn.innerHTML = `<span class="template-label">${escapeHtml(t.label)}</span>`;
+  btn.setAttribute('role', 'listitem');
+  btn.innerHTML = `
+    <span class="template-label">${escapeHtml(t.label)}</span>
+    ${t.desc ? `<span class="template-desc">${escapeHtml(t.desc)}</span>` : ''}`;
   btn.addEventListener('click', () => _confirmTemplateInsert(key, t.label, onChoose));
+  if (onHover) {
+    btn.addEventListener('mouseenter', () => onHover(t));
+    btn.addEventListener('focus',      () => onHover(t));
+  }
   return btn;
 }
 
@@ -1160,4 +1258,74 @@ function _showInlineChoice(message, choices, onPick) {
     b.addEventListener('click', () => { closeModal('templates-modal'); onPick(c.value); }, { once: true });
     actions.appendChild(b);
   });
+}
+
+// ── Confirm modal ─────────────────────────────────────────────────────────────
+
+/**
+ * Show a themed confirm dialog. Returns a Promise<boolean> that resolves when
+ * the user clicks Confirm (true) or Cancel/backdrop (false).
+ *
+ * @param {string} message
+ * @param {object} [opts]
+ * @param {string} [opts.confirmLabel='Confirm']
+ * @param {string} [opts.cancelLabel='Cancel']
+ * @param {boolean} [opts.danger=false]  – uses red confirm button
+ */
+export function showConfirm(message, { confirmLabel = 'Confirm', cancelLabel = 'Cancel', danger = false } = {}) {
+  return new Promise((resolve) => {
+    _ensureConfirmModal();
+    const modal      = document.getElementById('sp-confirm-modal');
+    const msgEl      = document.getElementById('sp-confirm-message');
+    const okBtn      = document.getElementById('sp-confirm-ok');
+    const cancelBtn  = document.getElementById('sp-confirm-cancel');
+    if (!modal || !msgEl || !okBtn || !cancelBtn) { resolve(false); return; }
+
+    msgEl.textContent = message;
+    okBtn.textContent = confirmLabel;
+    okBtn.className   = `modal-actions-btn${danger ? ' modal-btn-danger' : ' modal-btn-confirm'}`;
+    cancelBtn.textContent = cancelLabel;
+
+    const cleanup = (result) => {
+      modal.classList.remove('visible');
+      okBtn.onclick     = null;
+      cancelBtn.onclick = null;
+      modal.onclick     = null;
+      document.removeEventListener('keydown', _onConfirmKey);
+      resolve(result);
+    };
+
+    const _onConfirmKey = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); cleanup(false); }
+      if (e.key === 'Enter'  && document.activeElement === okBtn) cleanup(true);
+    };
+
+    okBtn.onclick     = () => cleanup(true);
+    cancelBtn.onclick = () => cleanup(false);
+    modal.onclick     = (e) => { if (e.target === modal) cleanup(false); };
+    document.addEventListener('keydown', _onConfirmKey);
+
+    modal.classList.add('visible');
+    // Focus the safer button by default (Cancel for danger, Confirm otherwise).
+    requestAnimationFrame(() => (danger ? cancelBtn : okBtn).focus());
+  });
+}
+
+function _ensureConfirmModal() {
+  if (document.getElementById('sp-confirm-modal')) return;
+  const el = document.createElement('div');
+  el.id        = 'sp-confirm-modal';
+  el.className = 'modal-backdrop';
+  el.setAttribute('role', 'dialog');
+  el.setAttribute('aria-modal', 'true');
+  el.setAttribute('aria-labelledby', 'sp-confirm-message');
+  el.innerHTML = `
+    <div class="modal confirm-modal-inner">
+      <p id="sp-confirm-message" class="confirm-modal-message"></p>
+      <div class="modal-actions">
+        <button id="sp-confirm-cancel" class="modal-actions-btn modal-btn-cancel"></button>
+        <button id="sp-confirm-ok"     class="modal-actions-btn modal-btn-confirm"></button>
+      </div>
+    </div>`;
+  document.body.appendChild(el);
 }
