@@ -315,26 +315,42 @@ export function renderFilesList(files, onDownload, onDelete, opts = {}) {
   list.innerHTML = '';
   if (!files?.length) { empty?.classList.remove('hidden'); return; }
   empty?.classList.add('hidden');
-  const canDelete  = opts.canDelete  !== false;
-  const onPreview  = opts.onPreview  || null;
+  const canDelete         = opts.canDelete         !== false;
+  const onPreview         = opts.onPreview         || null;
+  const selectMode        = !!opts.selectMode;
+  const selectedIds       = opts.selectedIds        || new Set();
+  const onSelectionChange = opts.onSelectionChange  || null;
   files.forEach(file => {
     const item = document.createElement('div');
-    item.className = 'file-item';
+    item.className = 'file-item' + (selectMode ? ' file-item--selectable' : '');
     item.innerHTML = `
+      ${selectMode ? `<input type="checkbox" class="file-select-cb" aria-label="Select ${escapeHtml(file.filename)}"${selectedIds.has(file.id) ? ' checked' : ''}>` : ''}
       <div class="file-emoji">${fileEmoji(file.mime_type, file.filename)}</div>
       <div class="file-info">
         <div class="file-name">${escapeHtml(file.filename)}</div>
         <div class="file-meta">${formatFileSize(file.file_size)} · ${formatTimestamp(file.uploaded_at)}</div>
       </div>
       <div class="file-actions">
-        ${onPreview ? `<button class="file-action-btn preview" title="Preview">${getIcon('eye', 15)}</button>` : ''}
-        <button class="file-action-btn download" title="Download">${getIcon('download', 15)}</button>
-        ${canDelete ? `<button class="file-action-btn delete" title="Delete">${getIcon('trash', 15)}</button>` : ''}
+        ${(!selectMode && onPreview) ? `<button class="file-action-btn preview" title="Preview">${getIcon('eye', 15)}</button>` : ''}
+        ${!selectMode ? `<button class="file-action-btn download" title="Download">${getIcon('download', 15)}</button>` : ''}
+        ${(!selectMode && canDelete) ? `<button class="file-action-btn delete" title="Delete">${getIcon('trash', 15)}</button>` : ''}
       </div>`;
-    if (onPreview) item.querySelector('.preview').addEventListener('click', () => onPreview(file));
-    item.querySelector('.download').addEventListener('click', () => onDownload(file));
-    if (canDelete) {
-      item.querySelector('.delete').addEventListener('click', () => onDelete(file));
+    if (selectMode && onSelectionChange) {
+      const cb = item.querySelector('.file-select-cb');
+      cb.addEventListener('change', () => onSelectionChange(file, cb.checked));
+      // Clicking the row body also toggles the checkbox
+      item.addEventListener('click', (e) => {
+        if (e.target === cb) return;
+        cb.checked = !cb.checked;
+        onSelectionChange(file, cb.checked);
+      });
+    }
+    if (!selectMode) {
+      if (onPreview) item.querySelector('.preview').addEventListener('click', () => onPreview(file));
+      item.querySelector('.download').addEventListener('click', () => onDownload(file));
+      if (canDelete) {
+        item.querySelector('.delete').addEventListener('click', () => onDelete(file));
+      }
     }
     list.appendChild(item);
   });
@@ -897,12 +913,12 @@ export function setMarkdownMode(mode, renderFn) {
     editor.classList.add('hidden');
     preview.classList.remove('hidden');
     wrap?.classList.remove('split-mode');
-    if (renderFn) preview.innerHTML = renderFn();
+    if (renderFn) { preview.innerHTML = renderFn(); _prismHighlight(preview); }
   } else if (mode === 'split') {
     editor.classList.remove('hidden');
     preview.classList.remove('hidden');
     wrap?.classList.add('split-mode');
-    if (renderFn) preview.innerHTML = renderFn();
+    if (renderFn) { preview.innerHTML = renderFn(); _prismHighlight(preview); }
   }
 }
 
@@ -915,6 +931,14 @@ export function refreshPreview(renderFn) {
   const preview = document.getElementById('note-preview');
   if (!preview || preview.classList.contains('hidden')) return;
   preview.innerHTML = renderFn ? renderFn() : '';
+  if (renderFn) _prismHighlight(preview);
+}
+
+/** Call Prism.js syntax highlighting if it is loaded. */
+function _prismHighlight(container) {
+  try {
+    if (typeof Prism !== 'undefined') Prism.highlightAllUnder(container);
+  } catch {}
 }
 
 // ── Theme picker ──────────────────────────────────────────────────────────────

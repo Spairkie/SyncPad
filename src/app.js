@@ -86,6 +86,10 @@ let _searchMatches = []; // [{start,end}]
 let _searchIndex   = -1;
 let _searchTerm    = '';
 
+// ── Files bulk-select state ───────────────────────────────────────────────────
+let _filesSelectMode = false;
+let _selectedFiles   = new Set(); // Set<file.id>
+
 
 const BASE = '/SyncPad';
 const EXPIRATION_TIMER_MAX_DELAY_MS = 2147483647;
@@ -944,6 +948,14 @@ function setupExpirationTimer() {
 
 // ── File refresh ──────────────────────────────────────────────────────────────
 
+function _updateBulkBar() {
+  const n = _selectedFiles.size;
+  const countEl  = document.getElementById('files-bulk-count');
+  const deleteEl = document.getElementById('files-bulk-delete');
+  if (countEl)  countEl.textContent = `${n} selected`;
+  if (deleteEl) deleteEl.disabled   = n === 0;
+}
+
 async function refreshFiles() {
   const files = await listFiles(_roomId);
   UI.renderFilesList(
@@ -974,6 +986,13 @@ async function refreshFiles() {
     },
     {
       canDelete: canDeleteFiles(),
+      selectMode: _filesSelectMode,
+      selectedIds: _selectedFiles,
+      onSelectionChange: (file, checked) => {
+        if (checked) _selectedFiles.add(file.id);
+        else         _selectedFiles.delete(file.id);
+        _updateBulkBar();
+      },
       onPreview: async (file) => {
         try {
           await openFilePreview(
@@ -1415,6 +1434,45 @@ function wireEvents() {
     finally  { UI.setUploadingState(false); }
   });
 
+  // ── Files — bulk select ────────────────────────────────────────────────────
+  document.getElementById('files-select-toggle')?.addEventListener('click', () => {
+    _filesSelectMode = !_filesSelectMode;
+    _selectedFiles.clear();
+    document.getElementById('files-select-toggle')?.classList.toggle('active', _filesSelectMode);
+    document.getElementById('files-bulk-bar')?.classList.toggle('hidden', !_filesSelectMode);
+    _updateBulkBar();
+    refreshFiles();
+  });
+  document.getElementById('files-bulk-cancel')?.addEventListener('click', () => {
+    _filesSelectMode = false;
+    _selectedFiles.clear();
+    document.getElementById('files-select-toggle')?.classList.remove('active');
+    document.getElementById('files-bulk-bar')?.classList.add('hidden');
+    refreshFiles();
+  });
+  document.getElementById('files-bulk-delete')?.addEventListener('click', async () => {
+    if (!_selectedFiles.size) return;
+    if (!canDeleteFiles()) { UI.showToast(editBlockedReason() || 'File deletion is disabled.', 'warning'); return; }
+    if (!confirm(`Delete ${_selectedFiles.size} file${_selectedFiles.size !== 1 ? 's' : ''}?`)) return;
+    const ids = [..._selectedFiles];
+    _selectedFiles.clear();
+    let failed = 0;
+    // Load current file list so we have file_path for each id
+    const allFiles = await listFiles(_roomId);
+    for (const id of ids) {
+      const f = allFiles.find(x => x.id === id);
+      if (!f) continue;
+      try {
+        await deleteFile(f.id, f.file_path);
+      } catch { failed++; }
+    }
+    broadcastFilesChange();
+    if (failed) UI.showToast(`${ids.length - failed} deleted, ${failed} failed.`, 'error');
+    else        UI.showToast(`${ids.length} file${ids.length !== 1 ? 's' : ''} deleted.`, 'success');
+    await refreshFiles();
+    _updateBulkBar();
+  });
+
   // ── Settings ───────────────────────────────────────────────────────────────
   document.getElementById('setting-passcode-btn')?.addEventListener('click', async () => {
     if (!canChangeSettings()) { UI.showToast(editBlockedReason() || 'Settings are disabled.', 'warning'); return; }
@@ -1635,6 +1693,35 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
     if (ok) UI.showToast('Copied as HTML.', 'success');
     else    UI.showToast('Could not copy.', 'error');
   });
+  document.getElementById('export-pdf')?.addEventListener('click', () => {
+    if (!_requireContent()) return;
+    const content = UI.getEditorValue();
+    const renderedHtml = renderMarkdown(content);
+    const title = escapeHtml(_room?.room_name?.trim() || _roomId);
+    const win = window.open('', '_blank');
+    if (!win) { UI.showToast('Pop-up blocked — allow pop-ups and try again.', 'warning'); return; }
+    win.document.write(`<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${title}</title>
+<style>
+  @media print { body { margin: 0; } }
+  body { font-family: system-ui, sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px;
+         color: #1a1a1a; line-height: 1.75; font-size: 15px; }
+  h1,h2,h3,h4,h5,h6 { line-height: 1.3; margin: 1.5em 0 0.5em; }
+  pre { background: #f5f5f5; padding: 1em; border-radius: 4px; overflow: auto; font-size: 13px; }
+  code { background: #f5f5f5; padding: 2px 5px; border-radius: 3px; font-size: 0.9em; }
+  pre code { background: none; padding: 0; }
+  blockquote { border-left: 3px solid #ccc; margin: 0; padding-left: 1em; color: #666; }
+  table { border-collapse: collapse; width: 100%; }
+  td, th { border: 1px solid #ddd; padding: 6px 10px; }
+  img { max-width: 100%; }
+  a { color: #0066cc; }
+</style>
+</head><body>${renderedHtml}</body></html>`);
+    win.document.close();
+    win.print();
+  });
 
   // ── Keyboard shortcuts modal ───────────────────────────────────────────────
   document.getElementById('btn-shortcuts')?.addEventListener('click', () => {
@@ -1827,6 +1914,11 @@ function teardownRealtimeSession() {
   // Reset expiration preset so the settings panel shows a sensible default
   // rather than whatever preset was last selected in the previous room.
   _expPreset = '30s';
+  // Exit bulk-select mode so the next room starts with a clean files panel.
+  _filesSelectMode = false;
+  _selectedFiles   = new Set();
+  document.getElementById('files-bulk-bar')?.classList.add('hidden');
+  document.getElementById('files-select-toggle')?.classList.remove('active');
 }
 
 // ── Templates handler ─────────────────────────────────────────────────────────

@@ -33,6 +33,17 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <!-- QR Code -->
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+  <!-- Prism.js — syntax highlighting in markdown preview -->
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js" defer></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      if (window.Prism && Prism.plugins && Prism.plugins.autoloader) {
+        Prism.plugins.autoloader.languages_path =
+          'https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/';
+      }
+    });
+  </script>
 
   <!-- ⚠️  Replace with your Supabase project credentials -->
   <script>
@@ -496,11 +507,21 @@
 <div class="side-panel" id="files-panel">
   <div class="panel-header">
     <h3>Files</h3>
-    <button class="panel-close" aria-label="Close">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-    </button>
+    <div class="panel-header-actions">
+      <button class="files-select-toggle" id="files-select-toggle" title="Select files for bulk actions" data-readonly-hide>Select</button>
+      <button class="panel-close" aria-label="Close">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
   </div>
   <div class="panel-body">
+    <div class="files-bulk-bar hidden" id="files-bulk-bar">
+      <span class="files-bulk-count" id="files-bulk-count">0 selected</span>
+      <div class="files-bulk-actions">
+        <button class="files-bulk-cancel-btn" id="files-bulk-cancel">Cancel</button>
+        <button class="files-bulk-delete-btn" id="files-bulk-delete" disabled>Delete selected</button>
+      </div>
+    </div>
     <div class="files-upload-zone" id="files-upload-zone" data-readonly-hide>
       <span class="upload-icon">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
@@ -855,6 +876,11 @@
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
         Download .html
         <span class="export-desc">Rendered HTML page</span>
+      </button>
+      <button class="export-btn" id="export-pdf">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        Print / Save as PDF
+        <span class="export-desc">Browser print dialog</span>
       </button>
       <div class="export-separator"></div>
       <button class="export-btn" id="export-copy-text">
