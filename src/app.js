@@ -81,7 +81,7 @@ let _shareToken    = null;
 let _markdownMode  = 'write'; // 'write' | 'preview' | 'split'
 let _showPreview   = false;  // derived: _markdownMode !== 'write'
 let _previewObserverWired = false;
-let _expPreset = '30s';
+let _expPreset = '10m';
 
 // ── Search state ──────────────────────────────────────────────────────────────
 let _searchMatches    = []; // [{start,end}]
@@ -1452,9 +1452,9 @@ function wireEvents() {
 
     'tool-share': () => { _openShareModal(); },
 
-    'tool-clear': () => {
+    'tool-clear': async () => {
       if (!canClearNote()) { UI.showToast(editBlockedReason() || 'Clear is disabled.', 'warning'); return; }
-      if (!confirm('Clear the note for everyone? This cannot be undone.')) return;
+      if (!await UI.showConfirm('Clear the note for everyone? This cannot be undone.', { confirmLabel: 'Clear', danger: true })) return;
       doClearNote();
     },
 
@@ -1632,7 +1632,7 @@ function wireEvents() {
   document.getElementById('setting-passcode-btn')?.addEventListener('click', async () => {
     if (!canChangeSettings()) { UI.showToast(editBlockedReason() || 'Settings are disabled.', 'warning'); return; }
     if (_room.passcode_hash) {
-      if (!confirm('Remove the room passcode?')) return;
+      if (!await UI.showConfirm('Remove the room passcode?', { confirmLabel: 'Remove', danger: true })) return;
       try {
         await removePasscode(_roomId);
         _room = await loadRoom(_roomId);
@@ -1643,7 +1643,7 @@ function wireEvents() {
         UI.showToast('Passcode removed.', 'success');
       } catch { UI.showToast('Could not remove passcode.', 'error'); }
     } else {
-      const pc = prompt('Set a new passcode (shared with everyone who joins):');
+      const pc = await UI.showPrompt('Set a new passcode:', { placeholder: 'Passcode…', confirmLabel: 'Set passcode' });
       if (!pc?.trim()) return;
       try {
         await setPasscode(_roomId, pc.trim());
@@ -1661,11 +1661,11 @@ function wireEvents() {
     if (!canChangeSettings()) { UI.showToast(editBlockedReason() || 'Settings are disabled.', 'warning'); return; }
     const encBtn = document.getElementById('setting-enc-btn');
     if (_room.encryption_enabled) {
-      if (!confirm('Disable encryption? Content will be stored in plaintext.')) return;
+      if (!await UI.showConfirm('Disable encryption? Content will be stored in plaintext.', { confirmLabel: 'Disable', danger: true })) return;
       await flushSave();
       cancelPendingTypingBroadcast();
       cancelPendingLiveContentBroadcast();
-      const pp = prompt('Enter the current encryption passphrase to confirm:');
+      const pp = await UI.showPrompt('Enter the current passphrase to confirm:', { placeholder: 'Passphrase…', confirmLabel: 'Confirm' });
       if (!pp) return;
       // PBKDF2 key derivation takes 1-3 s — indicate progress on the button.
       if (encBtn) { encBtn.disabled = true; encBtn.textContent = 'Decrypting…'; }
@@ -1695,8 +1695,8 @@ function wireEvents() {
       let existingFiles;
       try { existingFiles = await listFiles(_roomId); }
       catch { existingFiles = []; } // non-critical — just skip the warning if file list fails
-      if (existingFiles.length && !confirm('This room has file attachments. SyncPad v1 encrypts note text only, not files. Continue enabling text encryption?')) return;
-      const pp = prompt('Set an encryption passphrase (share it with anyone who needs to read this note):');
+      if (existingFiles.length && !await UI.showConfirm('This room has file attachments. SyncPad v1 encrypts note text only — files are not encrypted. Continue?', { confirmLabel: 'Continue' })) return;
+      const pp = await UI.showPrompt('Set an encryption passphrase:', { placeholder: 'Passphrase…', confirmLabel: 'Enable encryption' });
       if (!pp?.trim()) return;
       // PBKDF2 key derivation takes 1-3 s — indicate progress on the button.
       if (encBtn) { encBtn.disabled = true; encBtn.textContent = 'Encrypting…'; }
@@ -1732,7 +1732,7 @@ function wireEvents() {
     const isHidden = controls.classList.toggle('hidden');
     if (!isHidden) _updateExpirationPreview(); // refresh preview when expanding
   });
-  document.querySelectorAll('[data-exp-preset]').forEach((el) => el.addEventListener('click', () => _selectExpirationPreset(el.dataset.expPreset || '30s')));
+  document.querySelectorAll('[data-exp-preset]').forEach((el) => el.addEventListener('click', () => _selectExpirationPreset(el.dataset.expPreset || '10m')));
   document.getElementById('exp-custom-value')?.addEventListener('input', _updateExpirationPreview);
   document.getElementById('exp-custom-unit')?.addEventListener('change', _updateExpirationPreview);
   document.getElementById('setting-exp-apply-btn')?.addEventListener('click', async () => {
@@ -1767,7 +1767,7 @@ function wireEvents() {
       UI.showToast('Auto-expire removed.', 'success');
     } catch { UI.showToast('Could not remove auto-expire.', 'error'); }
   });
-  _selectExpirationPreset('30s');
+  _selectExpirationPreset('10m');
 
   document.getElementById('setting-vo-btn')?.addEventListener('click', async () => {
     if (!canChangeSettings()) { UI.showToast(editBlockedReason() || 'Settings are disabled.', 'warning'); return; }
@@ -1897,10 +1897,10 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
   document.getElementById('shortcuts-modal-close')?.addEventListener('click', () => UI.closeModal('shortcuts-modal'));
 
   // ── Save as template ───────────────────────────────────────────────────────
-  document.getElementById('btn-save-as-template')?.addEventListener('click', () => {
+  document.getElementById('btn-save-as-template')?.addEventListener('click', async () => {
     const body = UI.getEditorValue().trim();
     if (!body) { UI.showToast('The note is empty — nothing to save as a template.', 'warning'); return; }
-    const label = prompt('Template name:', 'My template');
+    const label = await UI.showPrompt('Template name:', { defaultValue: 'My template', confirmLabel: 'Save' });
     if (!label?.trim()) return;
     try {
       const { truncated } = saveCustomTemplate(label.trim(), body);
@@ -2158,7 +2158,7 @@ function teardownRealtimeSession() {
   UI.setMarkdownMode('write', null);
   // Reset expiration preset so the settings panel shows a sensible default
   // rather than whatever preset was last selected in the previous room.
-  _expPreset = '30s';
+  _expPreset = '10m';
   // Exit bulk-select mode so the next room starts with a clean files panel.
   _filesSelectMode = false;
   _selectedFiles   = new Set();
