@@ -255,6 +255,7 @@ export function initFooterClock() {
 export function renderDevicesList(devices, myDeviceId, onNameChange) {
   const list = document.getElementById('devices-list');
   if (!list) return;
+  list.setAttribute('role', 'list');
   list.innerHTML = '';
   if (!devices.length) {
     list.innerHTML = '<div class="device-empty">No other devices connected</div>';
@@ -264,6 +265,7 @@ export function renderDevicesList(devices, myDeviceId, onNameChange) {
     const isMe = device.device_id === myDeviceId;
     const item = document.createElement('div');
     item.className = `device-item${isMe ? ' me' : ''}${device.read_only ? ' viewer' : ''}${device.typing ? ' typing' : ''}`;
+    item.setAttribute('role', 'listitem');
     item.dataset.deviceId = device.device_id || '';
 
     const roBadge = device.read_only
@@ -312,6 +314,7 @@ export function renderFilesList(files, onDownload, onDelete, opts = {}) {
   const list  = document.getElementById('files-list');
   const empty = document.getElementById('files-empty');
   if (!list) return;
+  list.setAttribute('role', 'list');
   list.innerHTML = '';
   if (!files?.length) { empty?.classList.remove('hidden'); return; }
   empty?.classList.add('hidden');
@@ -323,17 +326,18 @@ export function renderFilesList(files, onDownload, onDelete, opts = {}) {
   files.forEach(file => {
     const item = document.createElement('div');
     item.className = 'file-item' + (selectMode ? ' file-item--selectable' : '');
+    item.setAttribute('role', 'listitem');
     item.innerHTML = `
       ${selectMode ? `<input type="checkbox" class="file-select-cb" aria-label="Select ${escapeHtml(file.filename)}"${selectedIds.has(file.id) ? ' checked' : ''}>` : ''}
-      <div class="file-emoji">${fileEmoji(file.mime_type, file.filename)}</div>
+      <div class="file-emoji" aria-hidden="true">${fileEmoji(file.mime_type, file.filename)}</div>
       <div class="file-info">
         <div class="file-name">${escapeHtml(file.filename)}</div>
         <div class="file-meta">${formatFileSize(file.file_size)} · ${formatTimestamp(file.uploaded_at)}</div>
       </div>
       <div class="file-actions">
-        ${(!selectMode && onPreview) ? `<button class="file-action-btn preview" title="Preview">${getIcon('eye', 15)}</button>` : ''}
-        ${!selectMode ? `<button class="file-action-btn download" title="Download">${getIcon('download', 15)}</button>` : ''}
-        ${(!selectMode && canDelete) ? `<button class="file-action-btn delete" title="Delete">${getIcon('trash', 15)}</button>` : ''}
+        ${(!selectMode && onPreview) ? `<button class="file-action-btn preview" title="Preview ${escapeHtml(file.filename)}" aria-label="Preview ${escapeHtml(file.filename)}">${getIcon('eye', 15)}</button>` : ''}
+        ${!selectMode ? `<button class="file-action-btn download" title="Download ${escapeHtml(file.filename)}" aria-label="Download ${escapeHtml(file.filename)}">${getIcon('download', 15)}</button>` : ''}
+        ${(!selectMode && canDelete) ? `<button class="file-action-btn delete" title="Delete ${escapeHtml(file.filename)}" aria-label="Delete ${escapeHtml(file.filename)}">${getIcon('trash', 15)}</button>` : ''}
       </div>`;
     if (selectMode && onSelectionChange) {
       const cb = item.querySelector('.file-select-cb');
@@ -1160,4 +1164,74 @@ function _showInlineChoice(message, choices, onPick) {
     b.addEventListener('click', () => { closeModal('templates-modal'); onPick(c.value); }, { once: true });
     actions.appendChild(b);
   });
+}
+
+// ── Confirm modal ─────────────────────────────────────────────────────────────
+
+/**
+ * Show a themed confirm dialog. Returns a Promise<boolean> that resolves when
+ * the user clicks Confirm (true) or Cancel/backdrop (false).
+ *
+ * @param {string} message
+ * @param {object} [opts]
+ * @param {string} [opts.confirmLabel='Confirm']
+ * @param {string} [opts.cancelLabel='Cancel']
+ * @param {boolean} [opts.danger=false]  – uses red confirm button
+ */
+export function showConfirm(message, { confirmLabel = 'Confirm', cancelLabel = 'Cancel', danger = false } = {}) {
+  return new Promise((resolve) => {
+    _ensureConfirmModal();
+    const modal      = document.getElementById('sp-confirm-modal');
+    const msgEl      = document.getElementById('sp-confirm-message');
+    const okBtn      = document.getElementById('sp-confirm-ok');
+    const cancelBtn  = document.getElementById('sp-confirm-cancel');
+    if (!modal || !msgEl || !okBtn || !cancelBtn) { resolve(false); return; }
+
+    msgEl.textContent = message;
+    okBtn.textContent = confirmLabel;
+    okBtn.className   = `modal-actions-btn${danger ? ' modal-btn-danger' : ' modal-btn-confirm'}`;
+    cancelBtn.textContent = cancelLabel;
+
+    const cleanup = (result) => {
+      modal.classList.remove('visible');
+      okBtn.onclick     = null;
+      cancelBtn.onclick = null;
+      modal.onclick     = null;
+      document.removeEventListener('keydown', _onConfirmKey);
+      resolve(result);
+    };
+
+    const _onConfirmKey = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); cleanup(false); }
+      if (e.key === 'Enter'  && document.activeElement === okBtn) cleanup(true);
+    };
+
+    okBtn.onclick     = () => cleanup(true);
+    cancelBtn.onclick = () => cleanup(false);
+    modal.onclick     = (e) => { if (e.target === modal) cleanup(false); };
+    document.addEventListener('keydown', _onConfirmKey);
+
+    modal.classList.add('visible');
+    // Focus the safer button by default (Cancel for danger, Confirm otherwise).
+    requestAnimationFrame(() => (danger ? cancelBtn : okBtn).focus());
+  });
+}
+
+function _ensureConfirmModal() {
+  if (document.getElementById('sp-confirm-modal')) return;
+  const el = document.createElement('div');
+  el.id        = 'sp-confirm-modal';
+  el.className = 'modal-backdrop';
+  el.setAttribute('role', 'dialog');
+  el.setAttribute('aria-modal', 'true');
+  el.setAttribute('aria-labelledby', 'sp-confirm-message');
+  el.innerHTML = `
+    <div class="modal confirm-modal-inner">
+      <p id="sp-confirm-message" class="confirm-modal-message"></p>
+      <div class="modal-actions">
+        <button id="sp-confirm-cancel" class="modal-actions-btn modal-btn-cancel"></button>
+        <button id="sp-confirm-ok"     class="modal-actions-btn modal-btn-confirm"></button>
+      </div>
+    </div>`;
+  document.body.appendChild(el);
 }

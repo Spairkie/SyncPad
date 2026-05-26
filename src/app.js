@@ -1041,6 +1041,9 @@ function _buildExpirationDuration() {
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) return { error: 'Custom auto-expire must be a number greater than 0.' };
   if (!['s', 'm', 'h', 'd'].includes(unit)) return { error: 'Unsupported unit. Use seconds, minutes, hours, or days.' };
+  // Enforce a 5-minute minimum to prevent accidental near-immediate expiry.
+  const seconds = unit === 's' ? n : unit === 'm' ? n * 60 : unit === 'h' ? n * 3600 : n * 86400;
+  if (seconds < 300) return { error: 'Minimum auto-expire duration is 5 minutes.' };
   return `${n}${unit}`;
 }
 
@@ -1464,7 +1467,12 @@ function wireEvents() {
   document.getElementById('files-bulk-delete')?.addEventListener('click', async () => {
     if (!_selectedFiles.size) return;
     if (!canDeleteFiles()) { UI.showToast(editBlockedReason() || 'File deletion is disabled.', 'warning'); return; }
-    if (!confirm(`Delete ${_selectedFiles.size} file${_selectedFiles.size !== 1 ? 's' : ''}?`)) return;
+    const count = _selectedFiles.size;
+    const ok = await UI.showConfirm(
+      `Permanently delete ${count} file${count !== 1 ? 's' : ''}? This cannot be undone.`,
+      { confirmLabel: 'Delete', danger: true },
+    );
+    if (!ok) return;
     const ids = [..._selectedFiles];
     _selectedFiles.clear();
     let failed = 0;

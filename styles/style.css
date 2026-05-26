@@ -128,6 +128,30 @@ body {
   overflow: hidden; display: flex; flex-direction: column;
 }
 button { font-family: inherit; cursor: pointer; border: none; background: none; }
+
+/* ── Theme transition ───────────────────────────────────────── */
+/* When a theme is applied, key surfaces animate their background/border.
+   Uses a precise selector list to avoid clobbering interaction transitions
+   on buttons, inputs, and animated components. */
+body,
+.app-header,
+.editor-wrap,
+#note-editor,
+#note-preview,
+.panel,
+.modal,
+.modal-backdrop,
+.landing-inner,
+#landing-screen,
+.auth-card,
+.file-item,
+.device-item,
+.toast,
+.expiration-bar,
+.offline-banner {
+  transition: background-color 0.22s ease, border-color 0.22s ease, color 0.22s ease;
+}
+
 input, textarea { font-family: inherit; }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
@@ -895,6 +919,12 @@ body.lock-mode .note-preview li.md-task input[type="checkbox"] { cursor: not-all
 .modal-btn-confirm:hover { opacity: 0.9; }
 .modal-btn-danger  { background: var(--red); color: white; transition: opacity var(--transition); }
 .modal-btn-danger:hover  { opacity: 0.85; }
+/* Confirm dialog specifics */
+.confirm-modal-inner { max-width: 340px; }
+.confirm-modal-message {
+  font-size: 15px; color: var(--text-primary); line-height: 1.55;
+  margin-bottom: 0; text-align: center;
+}
 
 /* ══════════════════════════════════════════════════════════════
    SHARE MODAL (card redesign)
