@@ -7,6 +7,7 @@ import {
   copyToClipboard, insertTimestamp,
   isMobile, isOnline, onOnlineChange,
   buildRoomUrl, buildReadOnlyUrl, getUrlMode, parseDuration,
+  escapeHtml,
 } from './utils.js';
 
 import { loadRoom, createRoom, clearRoomContent, subscribeToRoom, getOrCreateReadOnlyShareLink, resolveReadOnlyShareLink, updateRoomDisplayName, normalizeRoomDisplayName, submitRoomReport } from './rooms.js';
@@ -414,6 +415,18 @@ async function joinRoom(roomId) {
     _room = room;
   } catch {
     UI.setLoadingMessage('Could not load room. Check your connection and reload.');
+    return;
+  }
+
+  // Read-only share links cannot satisfy passcode or encryption prompts —
+  // the viewer doesn't have the credentials. Show a clear info screen instead
+  // of leaving them stuck at an auth form they can never complete.
+  if (_isReadOnly && (_room.passcode_hash || _room.encryption_enabled)) {
+    UI.setInfoScreen({
+      title: 'Room is locked',
+      message: 'This read-only link points to a room protected by a passcode or encryption key. Contact the room owner for access.',
+    });
+    UI.showScreen('info');
     return;
   }
 
@@ -1319,7 +1332,12 @@ function wireEvents() {
       });
       inp.onchange = () => {
         const f = inp.files[0]; if (!f) return;
+        if (f.size > 5 * 1024 * 1024) {
+          UI.showToast('File too large (max 5 MB for text import).', 'error');
+          return;
+        }
         const r = new FileReader();
+        r.onerror = () => UI.showToast('Could not read file.', 'error');
         r.onload = (e) => {
           UI.setEditorValue(String(e.target.result ?? ''));
           // Trigger the normal local-input pipeline: word count, draft save,
@@ -1562,7 +1580,7 @@ function wireEvents() {
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>SyncPad – ${_roomId}</title>
+<title>SyncPad – ${escapeHtml(_roomId)}</title>
 <style>body{font-family:system-ui,sans-serif;max-width:800px;margin:40px auto;padding:0 20px;color:#1a1a1a;line-height:1.7}
 pre{background:#f5f5f5;padding:1em;border-radius:4px;overflow:auto}code{background:#f5f5f5;padding:2px 4px;border-radius:2px}
 blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table{border-collapse:collapse}td,th{border:1px solid #ddd;padding:6px 10px}</style>
