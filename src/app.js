@@ -1123,6 +1123,10 @@ function wireEvents() {
   });
 
   window.addEventListener('beforeunload', () => {
+    // setTyping(false) clears the isTyping flag in Supabase Presence so other
+    // devices don't see a ghost "typing" indicator after this tab closes.
+    // visibilitychange handles tab-hide; beforeunload handles close/navigate.
+    setTyping(false);
     flushSave();
     destroyPresence();
   });
@@ -1179,6 +1183,12 @@ function wireEvents() {
     if (!canEdit()) return;
     const input = document.getElementById('room-title-input');
     const normalized = normalizeRoomDisplayName(input?.value || '');
+    // No-op when the name hasn't actually changed — avoids an unnecessary DB
+    // write and a misleading "Room title updated." toast on blur without edits.
+    if (normalized === (_room?.room_name || '').trim()) {
+      UI.setRoomTitleEditMode(false);
+      return;
+    }
     try {
       await updateRoomDisplayName(_roomId, normalized);
       _room.room_name = normalized;
@@ -1582,15 +1592,25 @@ function wireEvents() {
     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(a.href);
   };
 
+  // Shared guard: all export actions are meaningless on an empty note.
+  const _requireContent = () => {
+    if (UI.getEditorValue().trim()) return true;
+    UI.showToast('Nothing to export — the note is empty.', 'warning');
+    return false;
+  };
+
   document.getElementById('export-txt')?.addEventListener('click', () => {
+    if (!_requireContent()) return;
     _downloadBlob(UI.getEditorValue(), `${_roomId}.txt`, 'text/plain');
     UI.showToast('Downloaded .txt', 'success');
   });
   document.getElementById('export-md')?.addEventListener('click', () => {
+    if (!_requireContent()) return;
     _downloadBlob(UI.getEditorValue(), `${_roomId}.md`, 'text/markdown');
     UI.showToast('Downloaded .md', 'success');
   });
   document.getElementById('export-html')?.addEventListener('click', () => {
+    if (!_requireContent()) return;
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -1603,11 +1623,13 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
     UI.showToast('Downloaded .html', 'success');
   });
   document.getElementById('export-copy-text')?.addEventListener('click', async () => {
+    if (!_requireContent()) return;
     const ok = await copyToClipboard(UI.getEditorValue());
     if (ok) UI.showToast('Copied plain text.', 'success');
     else    UI.showToast('Could not copy.', 'error');
   });
   document.getElementById('export-copy-md')?.addEventListener('click', async () => {
+    if (!_requireContent()) return;
     // Copy rendered HTML so users can paste into rich-text editors, email, docs, etc.
     const ok = await copyToClipboard(renderMarkdown(UI.getEditorValue()));
     if (ok) UI.showToast('Copied as HTML.', 'success');
@@ -1639,7 +1661,13 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
     _searchTerm = (searchInput?.value || '').toLowerCase();
     _searchMatches = [];
     _searchIndex   = -1;
-    if (!_searchTerm || !editor) { if (searchCount) searchCount.textContent = ''; return; }
+    if (!_searchTerm || !editor) {
+      if (searchCount) searchCount.textContent = '';
+      // Collapse any selection left by the previous _jumpToMatch() call so the
+      // editor doesn't keep showing a stale highlighted range.
+      if (editor) editor.setSelectionRange(editor.selectionEnd, editor.selectionEnd);
+      return;
+    }
     const text = editor.value.toLowerCase();
     let pos = 0;
     while (true) {
