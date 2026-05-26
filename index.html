@@ -75,6 +75,7 @@
     <div class="landing-join">
       <input id="landing-join-input" class="landing-join-input"
              placeholder="Paste room link or ID…"
+             aria-label="Room link or ID to join"
              autocomplete="off" spellcheck="false" />
       <button id="landing-join-btn" class="landing-join-btn">Join</button>
     </div>
@@ -112,8 +113,9 @@
     <p>This note is protected. Enter the passcode to continue.</p>
     <div class="room-badge" id="passcode-room-badge"></div>
     <input id="passcode-input" class="auth-input" type="password"
-           placeholder="Enter passcode…" autocomplete="current-password" />
-    <div class="auth-error" id="passcode-error"></div>
+           placeholder="Enter passcode…" autocomplete="current-password"
+           aria-label="Room passcode" />
+    <div class="auth-error" id="passcode-error" role="alert" aria-live="assertive"></div>
     <button id="passcode-submit-btn" class="auth-btn">Unlock</button>
   </div>
 
@@ -134,8 +136,9 @@
     <p>This note text is encrypted. Enter the passphrase to decrypt it.</p>
     <div class="room-badge" id="encryption-room-badge"></div>
     <input id="encryption-input" class="auth-input" type="password"
-           placeholder="Enter passphrase…" autocomplete="current-password" />
-    <div class="auth-error" id="encryption-error"></div>
+           placeholder="Enter passphrase…" autocomplete="current-password"
+           aria-label="Encryption passphrase" />
+    <div class="auth-error" id="encryption-error" role="alert" aria-live="assertive"></div>
     <button id="encryption-submit-btn" class="auth-btn">Decrypt &amp; Open</button>
   </div>
 
@@ -629,8 +632,8 @@
           <button class="setting-chip" data-exp-preset="custom" type="button">Custom</button>
         </div>
         <div class="exp-custom-row hidden" id="exp-custom-row">
-          <input class="settings-input exp-custom-input" id="exp-custom-value" type="number" min="1" step="1" inputmode="numeric" placeholder="Number" />
-          <select class="settings-input exp-custom-unit" id="exp-custom-unit">
+          <input class="settings-input exp-custom-input" id="exp-custom-value" type="number" min="1" step="1" inputmode="numeric" placeholder="Number" aria-label="Expiration amount" />
+          <select class="settings-input exp-custom-unit" id="exp-custom-unit" aria-label="Expiration unit">
             <option value="s">seconds</option>
             <option value="m">minutes</option>
             <option value="h">hours</option>

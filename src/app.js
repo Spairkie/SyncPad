@@ -2073,6 +2073,10 @@ function teardownRealtimeSession() {
   _selectedFiles   = new Set();
   document.getElementById('files-bulk-bar')?.classList.add('hidden');
   document.getElementById('files-select-toggle')?.classList.remove('active');
+  // Reset view-once consumption guard. If this flag is left true from a previous
+  // room, the next room's handleRoomRealtime handler will silently skip a
+  // view-once clear event that it should actually surface to the user.
+  _consumingViewOnce = false;
 }
 
 // ── Templates handler ─────────────────────────────────────────────────────────

@@ -137,4 +137,31 @@ test.describe('Accessibility & keyboard', () => {
       expect(label, `Button at index ${i} has no accessible label`).toBeTruthy();
     }
   });
+
+  test('landing join input has aria-label', async ({ page }) => {
+    await page.goto('/SyncPad/');
+    await page.waitForSelector('#landing-screen:not(.hidden)');
+    const input = page.locator('#landing-join-input');
+    const ariaLabel = await input.getAttribute('aria-label');
+    expect(ariaLabel).toBeTruthy();
+  });
+
+  test('passcode input has aria-label', async ({ page }) => {
+    await page.goto('/SyncPad/');
+    const input = page.locator('#passcode-input');
+    const ariaLabel = await input.getAttribute('aria-label');
+    expect(ariaLabel).toBeTruthy();
+  });
+
+  test('passcode error has role=alert', async ({ page }) => {
+    await page.goto('/SyncPad/');
+    const errorEl = page.locator('#passcode-error');
+    await expect(errorEl).toHaveAttribute('role', 'alert');
+  });
+
+  test('encryption error has role=alert', async ({ page }) => {
+    await page.goto('/SyncPad/');
+    const errorEl = page.locator('#encryption-error');
+    await expect(errorEl).toHaveAttribute('role', 'alert');
+  });
 });
