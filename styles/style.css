@@ -491,7 +491,14 @@ svg { display: block; flex-shrink: 0; }
 
 /* Floating card editor — fills height, centered with all-around margins.
    overflow:hidden clips textarea/preview to the card border-radius.
-   No position:relative — .remote-notice is now a sibling in .editor-area. */
+   No position:relative — .remote-notice is now a sibling in .editor-area.
+
+   Mode classes set by setMarkdownMode() in ui.js:
+     .mode-write   — textarea only (default)
+     .mode-preview — preview pane only
+     .mode-split   — textarea + preview side-by-side
+   These classes drive grid-template-columns explicitly so the layout is
+   never ambiguous, regardless of which children are hidden. */
 .editor-wrap {
   /* Flex child: fill remaining height inside .editor-area */
   flex: 1;
@@ -502,15 +509,22 @@ svg { display: block; flex-shrink: 0; }
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
   overflow: hidden;
-  /* Grid container: auto-columns for write / preview / split modes */
+  /* Grid: single-column by default (write or preview mode).
+     .mode-split overrides to two columns below. */
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr));
+  grid-template-columns: 1fr;
   grid-template-rows: minmax(0, 1fr);
   gap: 0;
-  /* Centered with uniform margins on all sides */
-  width: min(100% - 2rem, 1400px);
+  /* Comfortable writing width on desktop. Split mode overrides below. */
+  width: min(100% - 2rem, 900px);
   margin-inline: auto;
   margin-block: 1rem;
+}
+
+/* Split mode: two equal columns, wider card to give each pane room. */
+.editor-wrap.mode-split {
+  grid-template-columns: 1fr 1fr;
+  width: min(100% - 2rem, 1400px);
 }
 
 #note-editor {
@@ -530,7 +544,9 @@ svg { display: block; flex-shrink: 0; }
   #note-editor { padding: 2rem max(5%, calc((100% - 800px) / 2)); font-size: 16px; }
 }
 
-/* Split mode: 1px border divider instead of heavy gap between panes */
+/* Split mode: 1px border divider between editor and preview panes.
+   The old .split-mode selector is kept as a fallback alias. */
+.editor-wrap.mode-split #note-editor,
 .editor-wrap.split-mode #note-editor {
   border-right: 1px solid var(--border);
 }

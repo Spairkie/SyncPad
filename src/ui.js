@@ -931,6 +931,10 @@ export function setMarkdownMode(mode, renderFn) {
   const wrap    = document.querySelector('.editor-wrap');
   if (!editor || !preview) return;
 
+  // Clear all stale mode classes so no previous mode leaks into the next.
+  // split-mode is the legacy alias — keep removing it for backward compat.
+  wrap?.classList.remove('mode-write', 'mode-preview', 'mode-split', 'split-mode');
+
   // Update segmented control
   document.querySelectorAll('.md-seg-btn').forEach(btn => {
     const active = btn.dataset.mode === mode;
@@ -941,16 +945,16 @@ export function setMarkdownMode(mode, renderFn) {
   if (mode === 'write') {
     editor.classList.remove('hidden');
     preview.classList.add('hidden');
-    wrap?.classList.remove('split-mode');
+    wrap?.classList.add('mode-write');
   } else if (mode === 'preview') {
     editor.classList.add('hidden');
     preview.classList.remove('hidden');
-    wrap?.classList.remove('split-mode');
+    wrap?.classList.add('mode-preview');
     if (renderFn) { preview.innerHTML = renderFn(); _prismHighlight(preview); }
   } else if (mode === 'split') {
     editor.classList.remove('hidden');
     preview.classList.remove('hidden');
-    wrap?.classList.add('split-mode');
+    wrap?.classList.add('mode-split');
     if (renderFn) { preview.innerHTML = renderFn(); _prismHighlight(preview); }
   }
 }

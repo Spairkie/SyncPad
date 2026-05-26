@@ -185,6 +185,7 @@ Operational note: keep the botcheck honeypot enabled and verify report-table DB 
 | App serving old cached content | Stale service worker | Bump `CACHE_VERSION` in `service-worker.js`; redeploy |
 | Room URL 404 on hard refresh | `404.html` not present | Ensure `404.html` is in the repo root and deployed |
 | Mobile "Add to Home Screen" fails | Wrong manifest paths | Verify `/SyncPad/` prefix in `manifest.json` icons |
+| Room creation fails after visiting `/admin` | Missing authenticated RLS policies | Re-run `supabase-setup.sql` — the authenticated baseline policies section fixes this |
 
 ---
 
@@ -212,3 +213,9 @@ Current value at the time of this update: `syncpad-v8`.
 | File access | Signed URLs (1 h TTL) — no end-to-end encryption |
 
 A determined user with the anon key can bypass all frontend controls. Do not use SyncPad for sensitive data.
+
+### Admin session and RLS roles
+
+The Supabase JS client uses a single shared instance. After a user signs in at `/admin`, the client's session role changes from `anon` to `authenticated`. This means the anon RLS policies for `syncpad_rooms`, `syncpad_files`, and `storage.objects` no longer apply — they only match the `anon` role.
+
+To prevent normal app features from breaking after admin login, `supabase-setup.sql` adds mirrored **authenticated baseline** policies that grant the same permissions as the anon policies. These are not privileged — they only allow what anon already could do. Admin-only destructive actions (delete rooms, etc.) are still gated by `is_syncpad_admin()` in separate admin policies.
