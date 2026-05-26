@@ -1,0 +1,5 @@
+{
+  "rewrites": [
+    { "source": "/SyncPad/**", "destination": "/SyncPad/index.html" }
+  ]
+}
