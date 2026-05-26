@@ -464,10 +464,32 @@ svg { display: block; flex-shrink: 0; }
    EDITOR AREA
 ══════════════════════════════════════════════════════════════ */
 .editor-area { flex: 1; display: flex; flex-direction: column; min-height: 0; position: relative; }
-.editor-wrap { flex: 1; display: flex; min-height: 0; position: relative; }
+
+/* Grid-based editor wrap — auto-stacks on narrow screens, side-by-side on wide.
+   gap: 2rem handles all spacing between panes; child margins removed.
+   padding: clamp() gives fluid outer gutters; width + margin-inline center
+   the content area and cap it at 1400 px on very wide viewports. */
+.editor-wrap {
+  /* Flex child: fill remaining height inside .editor-area */
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  /* Grid container: auto-columns for write / preview / split modes */
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr));
+  grid-template-rows: minmax(0, 1fr);
+  gap: 2rem;
+  /* Fluid outer gutters */
+  padding: clamp(1rem, 3vw, 3rem);
+  /* Centered, max-width content area — logical properties */
+  width: min(100% - 2rem, 1400px);
+  margin-inline: auto;
+  margin-block-start: 1.5rem;
+}
 
 #note-editor {
-  flex: 1; width: 100%; padding: 24px 20px;
+  /* No flex: 1 or margin: auto — grid handles sizing */
+  width: 100%; min-height: 0; padding: 24px 20px;
   background: var(--bg-base); border: none; resize: none;
   color: var(--text-primary); font-size: 15px; line-height: 1.7;
   font-family: var(--font-ui); outline: none;
@@ -477,26 +499,26 @@ svg { display: block; flex-shrink: 0; }
 #note-editor.remote-typing { box-shadow: inset 0 0 0 2px rgba(245,166,35,0.15); }
 #note-editor::placeholder  { color: var(--text-muted); }
 @media (min-width: 768px) {
-  #note-editor { padding: 32px; font-size: 16px; max-width: 800px; margin: 0 auto; width: 100%; }
+  /* Increased padding and font on desktop — no max-width/margin: grid controls width */
+  #note-editor { padding: 32px; font-size: 16px; }
 }
 
-/* Split mode */
-.editor-wrap.split-mode { flex-direction: row; }
-.editor-wrap.split-mode #note-editor {
-  flex: 1; width: 50%; max-width: none; margin: 0;
-  border-right: 1px solid var(--border);
-}
-.editor-wrap.split-mode .note-preview { flex: 1; width: 50%; max-width: none; margin: 0; }
+/* Split mode: the .split-mode class is still toggled by JS for aria-pressed state.
+   Layout is handled entirely by auto-fit grid — no flex overrides needed. */
 
 /* Markdown preview */
 .note-preview {
-  flex: 1; width: 100%; padding: 24px 20px;
+  /* No flex: 1 or margin: auto — grid handles sizing */
+  width: 100%; min-height: 0; padding: 24px 20px;
   background: var(--bg-base); color: var(--text-primary);
   font-size: 15px; line-height: 1.7; font-family: var(--font-ui); overflow-y: auto;
 }
 .note-preview.monospace { font-family: var(--font-mono); font-size: 14px; }
 .note-preview.hidden    { display: none; }
-@media (min-width: 768px) { .note-preview { padding: 32px; max-width: 800px; margin: 0 auto; } }
+@media (min-width: 768px) {
+  /* Increased padding on desktop — no max-width/margin: grid controls width */
+  .note-preview { padding: 32px; }
+}
 .note-preview h1,.note-preview h2,.note-preview h3,
 .note-preview h4,.note-preview h5,.note-preview h6 { margin: 1.2em 0 0.5em; line-height: 1.25; }
 .note-preview h1 { font-size: 1.6em; font-weight: 600; border-bottom: 1px solid var(--border); padding-bottom: 0.3em; }
@@ -1395,6 +1417,8 @@ kbd {
 
 /* ── CSV preview ── */
 .preview-csv-wrap { padding: 0; overflow-x: auto; }
+/* Scroll wrapper prevents wide tables from breaking the modal on mobile */
+.preview-csv-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: var(--radius-md); }
 .preview-csv-table {
   border-collapse: collapse; width: 100%; font-size: 13px;
   background: var(--bg-base);

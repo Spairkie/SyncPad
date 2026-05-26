@@ -165,16 +165,22 @@ function _csvToTable(text) {
   const lines = text.trim().split('\n');
   if (!lines.length) return '<p>Empty file.</p>';
 
+  const CELL_CAP = 10_000; // max chars per cell — prevents DOM freeze on bad CSV
   const parseRow = (line) => {
     const cells = [];
-    let cur = '', inQ = false;
+    let cur = '', inQ = false, truncated = false;
     for (let i = 0; i < line.length; i++) {
       const ch = line[i];
       if (ch === '"') { inQ = !inQ; continue; }
-      if (ch === ',' && !inQ) { cells.push(cur); cur = ''; continue; }
-      cur += ch;
+      if (ch === ',' && !inQ) {
+        cells.push(truncated ? cur + '…' : cur);
+        cur = ''; truncated = false;
+        continue;
+      }
+      if (cur.length < CELL_CAP) cur += ch;
+      else truncated = true;
     }
-    cells.push(cur);
+    cells.push(truncated ? cur + '…' : cur);
     return cells;
   };
 
@@ -189,7 +195,8 @@ function _csvToTable(text) {
   ).join('');
 
   const cap = capped ? `<p class="preview-truncation-warning">Showing first ${ROW_CAP} rows.</p>` : '';
-  return `<table class="preview-csv-table"><thead><tr>${thHtml}</tr></thead><tbody>${trHtml}</tbody></table>${cap}`;
+  // Wrap in a scrollable container so wide tables don't break the modal layout.
+  return `<div class="preview-csv-scroll"><table class="preview-csv-table"><thead><tr>${thHtml}</tr></thead><tbody>${trHtml}</tbody></table></div>${cap}`;
 }
 
 // ── DOM helpers ───────────────────────────────────────────────────────────────

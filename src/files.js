@@ -18,6 +18,13 @@ const BUCKET   = 'syncpad-files';
 const TABLE    = 'syncpad_files';
 const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
 
+// ── Signed URL cache ──────────────────────────────────────────────────────────
+// Supabase signed URLs are valid for 3600 s (1 hour). We cache them for 55 min
+// (3300 s) to avoid redundant API calls on every download/preview interaction
+// while leaving a 5-minute safety margin before expiry.
+const _urlCache  = new Map(); // filePath → { url: string, expiresAt: number }
+const URL_TTL_MS = 55 * 60 * 1000; // 55 minutes in milliseconds
+
 export async function uploadFile(roomId, file) {
   if (file.size > MAX_SIZE) throw new Error('File too large. Maximum size is 10 MB.');
   const sb       = getSupabaseClient();
@@ -55,12 +62,17 @@ export async function uploadFile(roomId, file) {
 }
 
 export async function getDownloadUrl(filePath) {
+  // Return cached URL if still valid
+  const cached = _urlCache.get(filePath);
+  if (cached && Date.now() < cached.expiresAt) return cached.url;
+
   const { data, error } = await getSupabaseClient()
     .storage.from(BUCKET).createSignedUrl(filePath, 3600);
   if (error) {
     logSupabaseError('getDownloadUrl', error, { file_path: filePath });
     throw new Error('Could not generate download link.');
   }
+  _urlCache.set(filePath, { url: data.signedUrl, expiresAt: Date.now() + URL_TTL_MS });
   return data.signedUrl;
 }
 
@@ -78,6 +90,9 @@ export async function getDownloadUrl(filePath) {
  */
 export async function deleteFile(fileId, filePath) {
   const sb = getSupabaseClient();
+
+  // Evict cached signed URL so stale links are not returned after deletion.
+  _urlCache.delete(filePath);
 
   // Step 1: Delete from storage. Abort if this fails.
   const { error: se } = await sb.storage.from(BUCKET).remove([filePath]);

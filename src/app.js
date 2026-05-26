@@ -7,7 +7,7 @@ import {
   copyToClipboard, insertTimestamp,
   isMobile, isOnline, onOnlineChange,
   buildRoomUrl, buildReadOnlyUrl, getUrlMode, parseDuration,
-  escapeHtml,
+  escapeHtml, debounce,
 } from './utils.js';
 
 import { loadRoom, createRoom, clearRoomContent, subscribeToRoom, getOrCreateReadOnlyShareLink, resolveReadOnlyShareLink, updateRoomDisplayName, normalizeRoomDisplayName, submitRoomReport } from './rooms.js';
@@ -489,7 +489,10 @@ async function onEncryptionSubmit() {
 
   UI.clearEncryptionError();
   const btn = document.getElementById('encryption-submit-btn');
-  if (btn) btn.disabled = true;
+  // PBKDF2 key derivation takes 1-3 s — show a spinner so the UI doesn't
+  // look frozen. Preserve the button label so we can restore it on error.
+  const origLabel = btn?.textContent ?? 'Decrypt & Open';
+  if (btn) { btn.disabled = true; btn.textContent = 'Decrypting…'; }
 
   try {
     const key = await unlockEncryption(passphrase, _room.encryption_salt);
@@ -500,11 +503,11 @@ async function onEncryptionSubmit() {
     _encKey  = key;
     _encSalt = _room.encryption_salt;
   } catch {
-    if (btn) btn.disabled = false;
+    if (btn) { btn.disabled = false; btn.textContent = origLabel; }
     UI.showEncryptionError('Wrong passphrase. Could not decrypt the note.');
+    input?.focus(); input?.select();
     return;
   }
-  if (btn) btn.disabled = false;
   await startApp();
 }
 
@@ -1117,6 +1120,8 @@ function wireEvents() {
     onLocalInput(); // returns a Promise — intentional fire-and-forget
     setTyping(true);
     UI.updateWordCount(UI.getEditorValue());
+    // Debounced so large documents don't re-render markdown on every keystroke.
+    _debouncedRefreshPreview();
   });
   editor?.addEventListener('blur', () => onEditorBlur());
 
@@ -1208,6 +1213,8 @@ function wireEvents() {
       UI.setRoomTitleEditMode(false);
       return;
     }
+    const saveBtn = document.getElementById('room-title-save-btn');
+    if (saveBtn) saveBtn.disabled = true;
     try {
       await updateRoomDisplayName(_roomId, normalized);
       _room.room_name = normalized;
@@ -1215,7 +1222,11 @@ function wireEvents() {
       UI.setRoomTitleEditMode(false);
       UI.showToast('Room title updated.', 'success');
     } catch {
-      UI.showToast('Could not save room title.', 'error');
+      // Keep edit mode open so the user can retry without clicking Edit again.
+      if (saveBtn) saveBtn.disabled = false;
+      input?.focus();
+      input?.select();
+      UI.showToast('Could not save title — check your connection and try again.', 'error');
     }
   };
   document.getElementById('room-title-save-btn')?.addEventListener('click', saveTitle);
@@ -1504,6 +1515,7 @@ function wireEvents() {
 
   document.getElementById('setting-enc-btn')?.addEventListener('click', async () => {
     if (!canChangeSettings()) { UI.showToast(editBlockedReason() || 'Settings are disabled.', 'warning'); return; }
+    const encBtn = document.getElementById('setting-enc-btn');
     if (_room.encryption_enabled) {
       if (!confirm('Disable encryption? Content will be stored in plaintext.')) return;
       await flushSave();
@@ -1511,6 +1523,8 @@ function wireEvents() {
       cancelPendingLiveContentBroadcast();
       const pp = prompt('Enter the current encryption passphrase to confirm:');
       if (!pp) return;
+      // PBKDF2 key derivation takes 1-3 s — indicate progress on the button.
+      if (encBtn) { encBtn.disabled = true; encBtn.textContent = 'Decrypting…'; }
       try {
         // Pass plaintext (editor value), passphrase, stored salt, and current DB ciphertext
         await disableEncryption(_roomId, UI.getEditorValue(), pp, _encSalt, _room.content);
@@ -1527,6 +1541,7 @@ function wireEvents() {
         broadcastSettingsChange();
         UI.showToast('Encryption disabled.', 'success');
       } catch (err) {
+        UI.renderSettingsPanel(_room); // restore button state
         UI.showToast(err.message || 'Could not disable encryption.', 'error', 4000);
       }
     } else {
@@ -1537,6 +1552,8 @@ function wireEvents() {
       if (existingFiles.length && !confirm('This room has file attachments. SyncPad v1 encrypts note text only, not files. Continue enabling text encryption?')) return;
       const pp = prompt('Set an encryption passphrase (share it with anyone who needs to read this note):');
       if (!pp?.trim()) return;
+      // PBKDF2 key derivation takes 1-3 s — indicate progress on the button.
+      if (encBtn) { encBtn.disabled = true; encBtn.textContent = 'Encrypting…'; }
       try {
         const { salt, key } = await enableEncryption(_roomId, UI.getEditorValue(), pp.trim());
         _encKey = key; _encSalt = salt;
@@ -1553,7 +1570,10 @@ function wireEvents() {
         UI.setEncryptionBadge(true);
         broadcastSettingsChange();
         UI.showToast('Encryption enabled.', 'success');
-      } catch { UI.showToast('Could not enable encryption.', 'error'); }
+      } catch {
+        UI.renderSettingsPanel(_room); // restore button state
+        UI.showToast('Could not enable encryption.', 'error');
+      }
     }
   });
 
@@ -1786,7 +1806,7 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
     _syncReplaceButtons();
   };
 
-  const _jumpToMatch = (idx) => {
+  const _jumpToMatch = (idx, { keepFocus = false } = {}) => {
     if (!editor || !_searchMatches.length) return;
     const m = _searchMatches[idx];
     if (!m) return;
@@ -1795,7 +1815,11 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
       _markdownMode = 'write'; _showPreview = false;
       UI.setMarkdownMode('write');
     }
-    editor.focus();
+    // Only steal focus from the editor when the search/replace inputs don't
+    // own it — otherwise typing in the search panel scrolls away mid-query.
+    const active = document.activeElement;
+    const searchPanelFocused = active === searchInput || active === replaceInput;
+    if (!searchPanelFocused && !keepFocus) editor.focus();
     editor.setSelectionRange(m.start, m.end);
     // Scroll into view
     try {
@@ -1808,20 +1832,21 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
   };
 
   searchInput?.addEventListener('input', _runSearch);
+  // Single consolidated keydown handler for the search input.
   searchInput?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       if (!_searchMatches.length) return;
       _searchIndex = (_searchIndex + 1) % _searchMatches.length;
+      // Enter navigates — focus the editor so the selection highlight is visible.
+      editor?.focus();
       _jumpToMatch(_searchIndex);
     }
+    if (e.key === 'Tab' && !e.shiftKey) { e.preventDefault(); replaceInput?.focus(); }
     if (e.key === 'Escape') { UI.closeAllPanels(); editor?.focus(); }
   });
-  // Tab from search input moves focus to replace input (natural keyboard flow).
-  searchInput?.addEventListener('keydown', (e) => {
-    if (e.key === 'Tab' && !e.shiftKey) { e.preventDefault(); replaceInput?.focus(); }
-  });
   replaceInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Tab'    && e.shiftKey)  { e.preventDefault(); searchInput?.focus(); }
     if (e.key === 'Enter')  { e.preventDefault(); replaceOne?.click(); }
     if (e.key === 'Escape') { UI.closeAllPanels(); editor?.focus(); }
   });
@@ -1830,11 +1855,14 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
     if (!_searchMatches.length) return;
     _searchIndex = (_searchIndex + 1) % _searchMatches.length;
     _jumpToMatch(_searchIndex);
+    // Return focus to search input so keyboard nav continues naturally.
+    searchInput?.focus();
   });
   document.getElementById('search-prev')?.addEventListener('click', () => {
     if (!_searchMatches.length) return;
     _searchIndex = (_searchIndex - 1 + _searchMatches.length) % _searchMatches.length;
     _jumpToMatch(_searchIndex);
+    searchInput?.focus();
   });
 
   // Replace current match and advance to the next one.
@@ -1852,8 +1880,10 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
     _runSearch();
     if (_searchMatches.length > 0) {
       _searchIndex = Math.min(_searchIndex, _searchMatches.length - 1);
-      _jumpToMatch(_searchIndex);
+      _jumpToMatch(_searchIndex, { keepFocus: true });
     }
+    // Keep focus in the replace input so the user can continue replacing.
+    replaceInput?.focus();
   });
 
   // Replace every match at once.
@@ -1870,6 +1900,8 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
     _refreshPreviewIfActive();
     _runSearch();
     UI.showToast(`Replaced ${count} match${count !== 1 ? 'es' : ''}.`, 'success');
+    // Return focus to search so the user can start a new query.
+    searchInput?.focus();
   });
 
 }
@@ -1958,6 +1990,10 @@ function getSavedTheme_() {
 function _refreshPreviewIfActive() {
   if (_markdownMode !== 'write') UI.refreshPreview(() => renderMarkdown(UI.getEditorValue()));
 }
+
+// Debounced variant — used on every keystroke so heavy markdown docs
+// (50 KB+) don't re-render on every character and cause frame drops.
+const _debouncedRefreshPreview = debounce(_refreshPreviewIfActive, 300);
 
 function _wirePreviewClickOnce() {
   if (_previewObserverWired) return;
