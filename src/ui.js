@@ -49,6 +49,34 @@ export function setInfoScreen({ title = '', message = '' } = {}) {
 export function setLoadingMessage(msg) {
   const el = document.getElementById('loading-message');
   if (el) el.textContent = msg;
+  // Hide any stale retry button when we're loading normally.
+  const retryBtn = document.getElementById('loading-retry-btn');
+  const spinner  = document.getElementById('loading-spinner');
+  if (retryBtn) retryBtn.classList.add('hidden');
+  if (spinner)  spinner.style.display = '';
+}
+
+/**
+ * Switch the loading screen into an error state.
+ * Shows the message, hides the spinner, and reveals the retry button.
+ * @param {string} msg — error message to display
+ * @param {() => void} onRetry — called when the user clicks "Try again"
+ */
+export function showLoadingError(msg, onRetry) {
+  const msgEl    = document.getElementById('loading-message');
+  const retryBtn = document.getElementById('loading-retry-btn');
+  const spinner  = document.getElementById('loading-spinner');
+  if (msgEl)    msgEl.textContent = msg;
+  if (spinner)  spinner.style.display = 'none';
+  if (retryBtn) {
+    retryBtn.classList.remove('hidden');
+    // Replace the old listener before adding the new one.
+    retryBtn.onclick = () => {
+      retryBtn.classList.add('hidden');
+      if (spinner) spinner.style.display = '';
+      if (onRetry) onRetry();
+    };
+  }
 }
 
 // ── Status indicator ──────────────────────────────────────────────────────────

@@ -80,25 +80,26 @@ async function _renderDashboard(sb) {
         <div class="admin-header-brand">🛠️ SyncPad Admin</div>
         <div class="admin-header-actions">
           <span id="admin-user-email" class="admin-user-email">${escapeHtml(userEmail)}</span>
+          <button id="admin-refresh-btn" class="admin-icon-btn" title="Refresh stats and current tab" aria-label="Refresh">↺</button>
           <button id="admin-logout-btn" class="admin-logout-btn">Sign out</button>
         </div>
       </div>
 
       <div class="admin-stats-row" id="admin-stats-row">
         <div class="admin-stat-card">
-          <div class="admin-stat-value" id="stat-rooms">—</div>
+          <div class="admin-stat-value admin-skeleton" id="stat-rooms">—</div>
           <div class="admin-stat-label">Total rooms</div>
         </div>
         <div class="admin-stat-card">
-          <div class="admin-stat-value" id="stat-files">—</div>
+          <div class="admin-stat-value admin-skeleton" id="stat-files">—</div>
           <div class="admin-stat-label">Files</div>
         </div>
         <div class="admin-stat-card admin-stat-card--alert" id="stat-reports-card">
-          <div class="admin-stat-value" id="stat-reports">—</div>
+          <div class="admin-stat-value admin-skeleton" id="stat-reports">—</div>
           <div class="admin-stat-label">Open reports</div>
         </div>
         <div class="admin-stat-card">
-          <div class="admin-stat-value" id="stat-expired">—</div>
+          <div class="admin-stat-value admin-skeleton" id="stat-expired">—</div>
           <div class="admin-stat-label">Expired rooms</div>
         </div>
       </div>
@@ -124,16 +125,24 @@ async function _renderDashboard(sb) {
   const contentEl = document.getElementById('admin-content');
   let   activeTab = 'rooms';
 
-  async function switchTab(tab) {
+  async function switchTab(tab, { reload = true } = {}) {
     activeTab = tab;
     tabs.forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
-    contentEl.innerHTML = '<div class="admin-loading">Loading…</div>';
+    contentEl.innerHTML = _skeletonTabHtml();
     if (tab === 'rooms')   await _renderRoomsTab(sb, contentEl);
     if (tab === 'reports') await _renderReportsTab(sb, contentEl);
     if (tab === 'cleanup') await _renderCleanupTab(sb, contentEl);
   }
 
   tabs.forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
+
+  // Refresh button
+  document.getElementById('admin-refresh-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('admin-refresh-btn');
+    if (btn) { btn.disabled = true; btn.textContent = '↻'; }
+    await Promise.all([_loadStats(sb), switchTab(activeTab)]);
+    if (btn) { btn.disabled = false; btn.textContent = '↺'; }
+  });
 
   // Load stats and initial tab in parallel
   await Promise.all([
@@ -145,6 +154,12 @@ async function _renderDashboard(sb) {
 // ── Stats ─────────────────────────────────────────────────────────────────────
 
 async function _loadStats(sb) {
+  // Apply skeleton animation while loading
+  ['stat-rooms', 'stat-files', 'stat-reports', 'stat-expired'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.add('admin-skeleton');
+  });
+
   const [roomsRes, filesRes, reportsRes, expiredRes] = await Promise.allSettled([
     sb.from('syncpad_rooms').select('*', { count: 'exact', head: true }),
     sb.from('syncpad_files').select('*', { count: 'exact', head: true }),
@@ -161,10 +176,10 @@ async function _loadStats(sb) {
   const statReports  = document.getElementById('stat-reports');
   const statExpired  = document.getElementById('stat-expired');
 
-  if (statRooms)   statRooms.textContent   = get(roomsRes);
-  if (statFiles)   statFiles.textContent   = get(filesRes);
-  if (statReports) statReports.textContent = get(reportsRes);
-  if (statExpired) statExpired.textContent  = get(expiredRes);
+  if (statRooms)   { statRooms.textContent   = get(roomsRes);   statRooms.classList.remove('admin-skeleton'); }
+  if (statFiles)   { statFiles.textContent   = get(filesRes);   statFiles.classList.remove('admin-skeleton'); }
+  if (statReports) { statReports.textContent = get(reportsRes); statReports.classList.remove('admin-skeleton'); }
+  if (statExpired) { statExpired.textContent  = get(expiredRes); statExpired.classList.remove('admin-skeleton'); }
 
   // Highlight reports card when count > 0
   const reportCount = reportsRes.status === 'fulfilled' ? (reportsRes.value.count ?? 0) : 0;
@@ -258,8 +273,8 @@ async function _renderRoomsTab(sb, contentEl) {
           <td>${buildFlags(room)}</td>
           <td class="admin-content-preview">${contentPreview}</td>
           <td class="admin-actions">
-            <button class="admin-action-btn admin-action-clear" data-room-id="${escapeHtml(room.room_id)}" title="Clear content">🧹</button>
-            <button class="admin-action-btn admin-action-delete" data-room-id="${escapeHtml(room.room_id)}" title="Delete room">🗑</button>
+            <button class="admin-action-btn admin-action-clear" data-room-id="${escapeHtml(room.room_id)}" title="Clear content (keeps the room)">🧹 Clear</button>
+            <button class="admin-action-btn admin-action-delete" data-room-id="${escapeHtml(room.room_id)}" title="Permanently delete room and all files">🗑 Delete</button>
           </td>
         </tr>
       `;
@@ -269,13 +284,17 @@ async function _renderRoomsTab(sb, contentEl) {
     tbody.querySelectorAll('.admin-action-clear').forEach(btn => {
       btn.addEventListener('click', async () => {
         const roomId = btn.dataset.roomId;
-        if (!confirm(`Clear all content from room "${roomId}"?\n\nThis cannot be undone.`)) return;
+        const ok = await _adminConfirm(
+          `Clear all content from room "${roomId}"?\n\nThe room itself is kept; only the note text is removed. This cannot be undone.`,
+          { confirmLabel: 'Clear content', danger: true },
+        );
+        if (!ok) return;
         btn.disabled = true;
         const { error } = await sb.from('syncpad_rooms')
           .update({ content: '', cleared_reason: 'manual' })
           .eq('room_id', roomId);
         if (error) {
-          alert(`Error clearing room: ${error.message}`);
+          await _adminAlert(`Error clearing room: ${error.message}`);
           btn.disabled = false;
           return;
         }
@@ -287,15 +306,20 @@ async function _renderRoomsTab(sb, contentEl) {
       });
     });
 
-    // Wire delete buttons
+    // Wire delete buttons — require typed confirmation for permanent deletion
     tbody.querySelectorAll('.admin-action-delete').forEach(btn => {
       btn.addEventListener('click', async () => {
         const roomId = btn.dataset.roomId;
-        if (!confirm(`Permanently delete room "${roomId}"?\n\nThis will also delete all files in this room. This cannot be undone.`)) return;
+        const ok = await _adminTypedConfirm(
+          `Permanently delete room "${roomId}"?`,
+          `This will also delete all files in this room and cannot be undone.\n\nType the room ID to confirm:`,
+          roomId,
+        );
+        if (!ok) return;
         btn.disabled = true;
         const { error } = await sb.from('syncpad_rooms').delete().eq('room_id', roomId);
         if (error) {
-          alert(`Error deleting room: ${error.message}`);
+          await _adminAlert(`Error deleting room: ${error.message}`);
           btn.disabled = false;
           return;
         }
@@ -359,7 +383,12 @@ async function _renderReportsTab(sb, contentEl) {
   const emptyEl    = document.getElementById('admin-reports-empty');
 
   function statusBadge(status) {
-    const cls = status === 'new' ? 'admin-badge--alert' : 'admin-badge--muted';
+    const map = {
+      new:       'admin-badge--alert',
+      reviewed:  'admin-badge--pass',
+      dismissed: 'admin-badge--muted',
+    };
+    const cls = map[status] || 'admin-badge--muted';
     return `<span class="admin-badge ${cls}">${escapeHtml(status || '—')}</span>`;
   }
 
@@ -386,7 +415,7 @@ async function _renderReportsTab(sb, contentEl) {
           <td>${statusBadge(rep.status)}</td>
           <td class="admin-actions">
             ${rep.status === 'new'
-              ? `<button class="admin-action-btn admin-action-dismiss" data-report-id="${escapeHtml(String(rep.id))}" title="Dismiss report">✓ Dismiss</button>`
+              ? `<button class="admin-action-btn admin-action-dismiss" data-report-id="${escapeHtml(String(rep.id))}" title="Mark as reviewed">✓ Review</button>`
               : ''
             }
             ${rep.room_id
@@ -398,21 +427,21 @@ async function _renderReportsTab(sb, contentEl) {
       `;
     }).join('');
 
-    // Dismiss buttons
+    // Review/dismiss buttons
     tbody.querySelectorAll('.admin-action-dismiss').forEach(btn => {
       btn.addEventListener('click', async () => {
         const reportId = btn.dataset.reportId;
         btn.disabled = true;
         const { error } = await sb.from('syncpad_room_reports')
-          .update({ status: 'dismissed' })
+          .update({ status: 'reviewed' })
           .eq('id', reportId);
         if (error) {
-          alert(`Error dismissing report: ${error.message}`);
+          await _adminAlert(`Error updating report: ${error.message}`);
           btn.disabled = false;
           return;
         }
         const rep = reports.find(r => String(r.id) === reportId);
-        if (rep) rep.status = 'dismissed';
+        if (rep) rep.status = 'reviewed';
         renderRows();
         await _loadStats(sb);
       });
@@ -422,17 +451,21 @@ async function _renderReportsTab(sb, contentEl) {
     tbody.querySelectorAll('.admin-action-delete').forEach(btn => {
       btn.addEventListener('click', async () => {
         const roomId   = btn.dataset.roomId;
-        const reportId = btn.dataset.reportId;
-        if (!confirm(`Permanently delete room "${roomId}"?\n\nThis will also delete all files in this room. This cannot be undone.`)) return;
+        const ok = await _adminTypedConfirm(
+          `Permanently delete room "${roomId}"?`,
+          `This will also delete all files in this room and cannot be undone.\n\nType the room ID to confirm:`,
+          roomId,
+        );
+        if (!ok) return;
         btn.disabled = true;
         const { error } = await sb.from('syncpad_rooms').delete().eq('room_id', roomId);
         if (error) {
-          alert(`Error deleting room: ${error.message}`);
+          await _adminAlert(`Error deleting room: ${error.message}`);
           btn.disabled = false;
           return;
         }
-        // Mark all reports for this room as dismissed
-        reports.forEach(r => { if (r.room_id === roomId) r.status = 'dismissed'; });
+        // Mark all reports for this room as reviewed
+        reports.forEach(r => { if (r.room_id === roomId) r.status = 'reviewed'; });
         renderRows();
         await _loadStats(sb);
       });
@@ -482,6 +515,13 @@ async function _renderCleanupTab(sb, contentEl) {
   document.getElementById('admin-cleanup-btn').addEventListener('click', async () => {
     const btn       = document.getElementById('admin-cleanup-btn');
     const resultEl  = document.getElementById('admin-cleanup-result');
+
+    const ok = await _adminConfirm(
+      'Run the server-side cleanup function to delete all expired rooms?',
+      { confirmLabel: 'Run cleanup', danger: false },
+    );
+    if (!ok) return;
+
     btn.disabled    = true;
     btn.textContent = 'Running…';
     resultEl.classList.add('hidden');
@@ -511,10 +551,11 @@ async function _renderCleanupTab(sb, contentEl) {
     const btn      = document.getElementById('admin-manual-cleanup-btn');
     const resultEl = document.getElementById('admin-manual-cleanup-result');
 
-    if (!confirm(
-      'Delete ALL rooms where expires_at is in the past?\n\n' +
-      'This is permanent and cannot be undone. Continue?'
-    )) return;
+    const ok = await _adminConfirm(
+      'Delete ALL rooms where expires_at is in the past?\n\nThis is permanent and cannot be undone.',
+      { confirmLabel: 'Delete all expired', danger: true },
+    );
+    if (!ok) return;
 
     btn.disabled    = true;
     btn.textContent = 'Deleting…';
@@ -545,6 +586,172 @@ async function _renderCleanupTab(sb, contentEl) {
   });
 }
 
+// ── Admin dialog helpers ──────────────────────────────────────────────────────
+// Lightweight modal dialogs that bypass window.confirm/alert.
+// Appended to the admin-screen element (not body) so they sit within the
+// admin DOM subtree and don't interfere with the main app UI.
+
+function _adminGetHost() {
+  return document.getElementById('admin-screen') || document.body;
+}
+
+/** Async confirmation dialog — returns true if the user clicked the confirm button. */
+function _adminConfirm(message, { confirmLabel = 'Confirm', danger = false } = {}) {
+  return new Promise((resolve) => {
+    _ensureAdminDialogStyles();
+    const host = _adminGetHost();
+    const el = document.createElement('div');
+    el.className = 'admin-dialog-backdrop';
+    el.innerHTML = `
+      <div class="admin-dialog" role="dialog" aria-modal="true" aria-labelledby="adlg-msg">
+        <p id="adlg-msg" class="admin-dialog-msg">${escapeHtml(message).replace(/\n/g, '<br>')}</p>
+        <div class="admin-dialog-actions">
+          <button class="admin-dialog-cancel admin-dialog-btn">Cancel</button>
+          <button class="admin-dialog-ok admin-dialog-btn${danger ? ' admin-dialog-btn--danger' : ' admin-dialog-btn--primary'}"></button>
+        </div>
+      </div>`;
+    el.querySelector('.admin-dialog-ok').textContent = confirmLabel;
+    host.appendChild(el);
+
+    const cleanup = (result) => {
+      el.remove();
+      document.removeEventListener('keydown', onKey);
+      resolve(result);
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); cleanup(false); }
+    };
+    el.querySelector('.admin-dialog-ok').addEventListener('click', () => cleanup(true));
+    el.querySelector('.admin-dialog-cancel').addEventListener('click', () => cleanup(false));
+    el.addEventListener('click', (e) => { if (e.target === el) cleanup(false); });
+    document.addEventListener('keydown', onKey);
+    requestAnimationFrame(() =>
+      (danger
+        ? el.querySelector('.admin-dialog-cancel')
+        : el.querySelector('.admin-dialog-ok')
+      ).focus()
+    );
+  });
+}
+
+/**
+ * Async "type to confirm" dialog for irreversible actions.
+ * Returns true only when the user has typed the expected confirmation value.
+ */
+function _adminTypedConfirm(title, description, expectedValue) {
+  return new Promise((resolve) => {
+    _ensureAdminDialogStyles();
+    const host = _adminGetHost();
+    const el = document.createElement('div');
+    el.className = 'admin-dialog-backdrop';
+    el.innerHTML = `
+      <div class="admin-dialog" role="dialog" aria-modal="true" aria-labelledby="adlg-title">
+        <div id="adlg-title" class="admin-dialog-title">${escapeHtml(title)}</div>
+        <p class="admin-dialog-msg">${escapeHtml(description).replace(/\n/g, '<br>')}</p>
+        <input class="admin-dialog-input" type="text" autocomplete="off" spellcheck="false"
+          placeholder="${escapeHtml(expectedValue)}" aria-label="Confirmation input" />
+        <div class="admin-dialog-actions">
+          <button class="admin-dialog-cancel admin-dialog-btn">Cancel</button>
+          <button class="admin-dialog-ok admin-dialog-btn admin-dialog-btn--danger" disabled>Delete</button>
+        </div>
+      </div>`;
+
+    host.appendChild(el);
+
+    const input  = el.querySelector('.admin-dialog-input');
+    const okBtn  = el.querySelector('.admin-dialog-ok');
+    const cleanup = (result) => {
+      el.remove();
+      document.removeEventListener('keydown', onKey);
+      resolve(result);
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); cleanup(false); }
+    };
+
+    input.addEventListener('input', () => {
+      const match = input.value === expectedValue;
+      okBtn.disabled = !match;
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !okBtn.disabled) cleanup(true);
+    });
+    okBtn.addEventListener('click', () => { if (!okBtn.disabled) cleanup(true); });
+    el.querySelector('.admin-dialog-cancel').addEventListener('click', () => cleanup(false));
+    el.addEventListener('click', (e) => { if (e.target === el) cleanup(false); });
+    document.addEventListener('keydown', onKey);
+    requestAnimationFrame(() => input.focus());
+  });
+}
+
+/** Non-blocking alert replacement — resolves when user clicks OK. */
+function _adminAlert(message) {
+  return new Promise((resolve) => {
+    _ensureAdminDialogStyles();
+    const host = _adminGetHost();
+    const el = document.createElement('div');
+    el.className = 'admin-dialog-backdrop';
+    el.innerHTML = `
+      <div class="admin-dialog" role="dialog" aria-modal="true" aria-labelledby="adlg-alert">
+        <p id="adlg-alert" class="admin-dialog-msg admin-dialog-msg--error">${escapeHtml(message).replace(/\n/g, '<br>')}</p>
+        <div class="admin-dialog-actions">
+          <button class="admin-dialog-ok admin-dialog-btn admin-dialog-btn--primary">OK</button>
+        </div>
+      </div>`;
+    host.appendChild(el);
+    const cleanup = () => { el.remove(); resolve(); };
+    el.querySelector('.admin-dialog-ok').addEventListener('click', cleanup);
+    el.addEventListener('click', (e) => { if (e.target === el) cleanup(); });
+    requestAnimationFrame(() => el.querySelector('.admin-dialog-ok').focus());
+  });
+}
+
+let _adminDialogStylesInjected = false;
+function _ensureAdminDialogStyles() {
+  if (_adminDialogStylesInjected) return;
+  _adminDialogStylesInjected = true;
+  const style = document.createElement('style');
+  style.textContent = `
+.admin-dialog-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:9999}
+.admin-dialog{background:var(--bg-surface,#1e1e2e);border:1px solid var(--border,#333);border-radius:10px;padding:1.5rem;max-width:440px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.4)}
+.admin-dialog-title{font-weight:700;font-size:1rem;margin-bottom:.5rem;color:var(--text-primary,#e0e0e0)}
+.admin-dialog-msg{margin:0 0 1rem;font-size:.9rem;color:var(--text-secondary,#aaa);line-height:1.5;white-space:pre-wrap}
+.admin-dialog-msg--error{color:var(--red,#f87171)}
+.admin-dialog-input{width:100%;padding:.5rem .75rem;font-size:.875rem;border:1px solid var(--border,#333);border-radius:6px;background:var(--bg-elevated,#252538);color:var(--text-primary,#e0e0e0);margin-bottom:1rem;box-sizing:border-box;font-family:monospace}
+.admin-dialog-input:focus{outline:none;border-color:var(--accent,#f5a623)}
+.admin-dialog-actions{display:flex;justify-content:flex-end;gap:.5rem}
+.admin-dialog-btn{padding:.45rem 1rem;border-radius:6px;border:1px solid var(--border,#333);font-size:.875rem;cursor:pointer;transition:opacity .15s}
+.admin-dialog-btn:disabled{opacity:.4;cursor:not-allowed}
+.admin-dialog-btn--primary{background:var(--accent,#f5a623);color:#000;border-color:var(--accent,#f5a623)}
+.admin-dialog-btn--danger{background:var(--red,#f87171);color:#fff;border-color:var(--red,#f87171)}
+.admin-dialog-cancel{background:var(--bg-elevated,#252538);color:var(--text-primary,#e0e0e0)}
+`;
+  document.head.appendChild(style);
+}
+
+// ── Skeleton loading helper ───────────────────────────────────────────────────
+
+function _skeletonTabHtml() {
+  return `
+    <div class="admin-tab-content admin-skeleton-tab" aria-busy="true" aria-label="Loading…">
+      <div class="admin-toolbar">
+        <div class="admin-skeleton-bar" style="width:220px;height:32px;border-radius:6px"></div>
+        <div class="admin-skeleton-bar" style="width:80px;height:16px;border-radius:4px"></div>
+      </div>
+      <div class="admin-table-wrap">
+        ${Array.from({ length: 5 }, () => `
+          <div class="admin-skeleton-row">
+            <div class="admin-skeleton-bar" style="width:30%;height:14px;border-radius:3px"></div>
+            <div class="admin-skeleton-bar" style="width:15%;height:14px;border-radius:3px"></div>
+            <div class="admin-skeleton-bar" style="width:10%;height:14px;border-radius:3px"></div>
+            <div class="admin-skeleton-bar" style="width:25%;height:14px;border-radius:3px"></div>
+            <div class="admin-skeleton-bar" style="width:12%;height:14px;border-radius:3px"></div>
+          </div>
+        `).join('')}
+      </div>
+    </div>`;
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function _isExpired(expiresAt) {
@@ -561,6 +768,9 @@ function _accessDeniedHtml(error) {
         ${isRls ? 'You do not have admin access.' : 'Failed to load data.'}
       </div>
       <div class="admin-access-denied-detail">${escapeHtml(error?.message ?? 'Unknown error')}</div>
+      <div style="margin-top:1rem">
+        <button onclick="window.location.reload()" class="admin-action-btn admin-action-primary">Retry</button>
+      </div>
     </div>
   `;
 }

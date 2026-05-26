@@ -431,7 +431,10 @@ async function joinRoom(roomId) {
   } catch (err) {
     // Log the raw error so RLS / network failures are diagnosable in DevTools.
     console.error('[SyncPad] joinRoom failed for', roomId, err);
-    UI.setLoadingMessage('Could not load room. Check your connection and reload.');
+    UI.showLoadingError(
+      'Could not load room — check your connection and try again.',
+      () => joinRoom(roomId),  // retry callback
+    );
     return;
   }
 
