@@ -563,12 +563,17 @@ function _renderQr(containerId, url) {
   el.innerHTML = '';
   if (!url || !window.QRCode) return;
   try {
+    // Read QR colours from the active theme's CSS variables so the code adapts
+    // to all five themes rather than always using the Charcoal Amber palette.
+    const cs = getComputedStyle(document.documentElement);
+    const colorDark  = cs.getPropertyValue('--accent').trim()  || '#f5a623';
+    const colorLight = cs.getPropertyValue('--bg-base').trim() || '#18181c';
     new window.QRCode(el, {
       text: url,
       width: 144,
       height: 144,
-      colorDark: '#f5a623',
-      colorLight: '#18181c',
+      colorDark,
+      colorLight,
     });
   } catch {}
 }
@@ -1350,6 +1355,17 @@ export function showConfirm(message, { confirmLabel = 'Confirm', cancelLabel = '
     const _onConfirmKey = (e) => {
       if (e.key === 'Escape') { e.preventDefault(); cleanup(false); }
       if (e.key === 'Enter'  && document.activeElement === okBtn) cleanup(true);
+      // Focus trap — keep Tab cycling within the two modal buttons.
+      if (e.key === 'Tab') {
+        const focusables = [cancelBtn, okBtn].filter(btn => !btn.disabled);
+        const first = focusables[0];
+        const last  = focusables[focusables.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault(); last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault(); first.focus();
+        }
+      }
     };
 
     okBtn.onclick     = () => cleanup(true);
@@ -1423,6 +1439,17 @@ export function showPrompt(message, { defaultValue = '', placeholder = '', confi
 
     const _onKey = (e) => {
       if (e.key === 'Escape') { e.preventDefault(); cleanup(null); }
+      // Focus trap — Tab cycles: input → cancelBtn → okBtn → input.
+      if (e.key === 'Tab') {
+        const focusables = [inputEl, cancelBtn, okBtn].filter(el => !el.disabled);
+        const first = focusables[0];
+        const last  = focusables[focusables.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault(); last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault(); first.focus();
+        }
+      }
     };
 
     inputEl.onkeydown = (e) => {

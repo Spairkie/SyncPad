@@ -1257,7 +1257,12 @@ function wireEvents() {
   document.getElementById('btn-presence')?.addEventListener('click', () => { closeMoreDropdown(); UI.togglePanel('presence-panel'); });
   document.getElementById('btn-settings')?.addEventListener('click', () => { closeMoreDropdown(); UI.togglePanel('settings-panel'); });
   document.getElementById('btn-about')?.addEventListener('click', () => { closeMoreDropdown(); UI.openModal('about-modal'); });
-  document.getElementById('device-count-btn')?.addEventListener('click', () => UI.togglePanel('presence-panel'));
+  // A-3: device-count-badge — keyboard accessibility (role="button" set in HTML)
+  const deviceCountBtn = document.getElementById('device-count-btn');
+  deviceCountBtn?.addEventListener('click', () => UI.togglePanel('presence-panel'));
+  deviceCountBtn?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); UI.togglePanel('presence-panel'); }
+  });
 
   // More dropdown toggle
   const moreBtn      = document.getElementById('btn-more');
@@ -1270,6 +1275,30 @@ function wireEvents() {
     e.stopPropagation();
     const open = moreDropdown?.classList.toggle('open');
     moreBtn.setAttribute('aria-expanded', String(!!open));
+    // A-4: move focus to the first menu item when the dropdown opens.
+    if (open) {
+      const firstItem = moreDropdown?.querySelector('[role="menuitem"]');
+      requestAnimationFrame(() => firstItem?.focus());
+    }
+  });
+  // A-4: Arrow-key navigation and Escape within the more-dropdown.
+  moreDropdown?.addEventListener('keydown', (e) => {
+    const items = [...(moreDropdown.querySelectorAll('[role="menuitem"]'))];
+    const idx   = items.indexOf(document.activeElement);
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      items[(idx + 1) % items.length]?.focus();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      items[(idx - 1 + items.length) % items.length]?.focus();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      closeMoreDropdown();
+      moreBtn?.focus();
+    } else if (e.key === 'Tab') {
+      // Close the dropdown when tabbing out of it.
+      closeMoreDropdown();
+    }
   });
   document.addEventListener('click', (e) => {
     if (!moreDropdown?.contains(e.target) && e.target !== moreBtn) closeMoreDropdown();
