@@ -206,7 +206,7 @@ Current value at the time of this update: `syncpad-v8`.
 |---|---|
 | Read-only links | Frontend JS only |
 | Room lock | Frontend JS only |
-| `/admin` route | Placeholder page only (dashboard shelved) |
+| `/admin` route | Supabase Auth (`signInWithPassword`) + `is_syncpad_admin()` RLS — not a public-facing feature |
 | Passcode | Client-side hash check |
 | Text encryption | In-browser (AES-256-GCM) |
 | File access | Signed URLs (1 h TTL) — no end-to-end encryption |
