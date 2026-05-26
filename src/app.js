@@ -7,6 +7,7 @@ import {
   copyToClipboard, insertTimestamp,
   isMobile, isOnline, onOnlineChange,
   buildRoomUrl, buildReadOnlyUrl, getUrlMode, parseDuration,
+  escapeHtml,
 } from './utils.js';
 
 import { loadRoom, createRoom, clearRoomContent, subscribeToRoom, getOrCreateReadOnlyShareLink, resolveReadOnlyShareLink, updateRoomDisplayName, normalizeRoomDisplayName, submitRoomReport } from './rooms.js';
@@ -84,6 +85,10 @@ let _expPreset = '30s';
 let _searchMatches = []; // [{start,end}]
 let _searchIndex   = -1;
 let _searchTerm    = '';
+
+// ── Files bulk-select state ───────────────────────────────────────────────────
+let _filesSelectMode = false;
+let _selectedFiles   = new Set(); // Set<file.id>
 
 
 const BASE = '/SyncPad';
@@ -417,6 +422,18 @@ async function joinRoom(roomId) {
     return;
   }
 
+  // Read-only share links cannot satisfy passcode or encryption prompts —
+  // the viewer doesn't have the credentials. Show a clear info screen instead
+  // of leaving them stuck at an auth form they can never complete.
+  if (_isReadOnly && (_room.passcode_hash || _room.encryption_enabled)) {
+    UI.setInfoScreen({
+      title: 'Room is locked',
+      message: 'This read-only link points to a room protected by a passcode or encryption key. Contact the room owner for access.',
+    });
+    UI.showScreen('info');
+    return;
+  }
+
   if (_room.passcode_hash) {
     UI.showScreen('passcode');
     const badge = document.getElementById('passcode-room-badge');
@@ -698,7 +715,21 @@ async function _decodeLocalDraft(draft) {
     return draft.content ?? '';
   }
 
-  if (!_encKey) return null;
+  if (!_encKey) {
+    // Draft is encrypted but we have no key. The most common cause is that
+    // encryption was removed from the room after the draft was saved — the
+    // ciphertext is now permanently unreadable. Clear it and warn the user so
+    // they know work may have been lost.
+    if (!_room?.encryption_enabled) {
+      clearDraft(_roomId);
+      UI.showToast(
+        'A local draft from when this room was encrypted could not be restored (encryption has since been removed). Draft discarded.',
+        'warning',
+        8000,
+      );
+    }
+    return null;
+  }
   try { return await decryptContent(draft.content || '', _encKey); }
   catch {
     // Wrong/corrupt local draft ciphertext should not block room loading.
@@ -917,6 +948,14 @@ function setupExpirationTimer() {
 
 // ── File refresh ──────────────────────────────────────────────────────────────
 
+function _updateBulkBar() {
+  const n = _selectedFiles.size;
+  const countEl  = document.getElementById('files-bulk-count');
+  const deleteEl = document.getElementById('files-bulk-delete');
+  if (countEl)  countEl.textContent = `${n} selected`;
+  if (deleteEl) deleteEl.disabled   = n === 0;
+}
+
 async function refreshFiles() {
   const files = await listFiles(_roomId);
   UI.renderFilesList(
@@ -947,6 +986,13 @@ async function refreshFiles() {
     },
     {
       canDelete: canDeleteFiles(),
+      selectMode: _filesSelectMode,
+      selectedIds: _selectedFiles,
+      onSelectionChange: (file, checked) => {
+        if (checked) _selectedFiles.add(file.id);
+        else         _selectedFiles.delete(file.id);
+        _updateBulkBar();
+      },
       onPreview: async (file) => {
         try {
           await openFilePreview(
@@ -1096,6 +1142,10 @@ function wireEvents() {
   });
 
   window.addEventListener('beforeunload', () => {
+    // setTyping(false) clears the isTyping flag in Supabase Presence so other
+    // devices don't see a ghost "typing" indicator after this tab closes.
+    // visibilitychange handles tab-hide; beforeunload handles close/navigate.
+    setTyping(false);
     flushSave();
     destroyPresence();
   });
@@ -1152,6 +1202,12 @@ function wireEvents() {
     if (!canEdit()) return;
     const input = document.getElementById('room-title-input');
     const normalized = normalizeRoomDisplayName(input?.value || '');
+    // No-op when the name hasn't actually changed — avoids an unnecessary DB
+    // write and a misleading "Room title updated." toast on blur without edits.
+    if (normalized === (_room?.room_name || '').trim()) {
+      UI.setRoomTitleEditMode(false);
+      return;
+    }
     try {
       await updateRoomDisplayName(_roomId, normalized);
       _room.room_name = normalized;
@@ -1319,7 +1375,12 @@ function wireEvents() {
       });
       inp.onchange = () => {
         const f = inp.files[0]; if (!f) return;
+        if (f.size > 5 * 1024 * 1024) {
+          UI.showToast('File too large (max 5 MB for text import).', 'error');
+          return;
+        }
         const r = new FileReader();
+        r.onerror = () => UI.showToast('Could not read file.', 'error');
         r.onload = (e) => {
           UI.setEditorValue(String(e.target.result ?? ''));
           // Trigger the normal local-input pipeline: word count, draft save,
@@ -1371,6 +1432,45 @@ function wireEvents() {
       await refreshFiles();
     } catch { UI.showToast('Could not upload file.', 'error'); }
     finally  { UI.setUploadingState(false); }
+  });
+
+  // ── Files — bulk select ────────────────────────────────────────────────────
+  document.getElementById('files-select-toggle')?.addEventListener('click', () => {
+    _filesSelectMode = !_filesSelectMode;
+    _selectedFiles.clear();
+    document.getElementById('files-select-toggle')?.classList.toggle('active', _filesSelectMode);
+    document.getElementById('files-bulk-bar')?.classList.toggle('hidden', !_filesSelectMode);
+    _updateBulkBar();
+    refreshFiles();
+  });
+  document.getElementById('files-bulk-cancel')?.addEventListener('click', () => {
+    _filesSelectMode = false;
+    _selectedFiles.clear();
+    document.getElementById('files-select-toggle')?.classList.remove('active');
+    document.getElementById('files-bulk-bar')?.classList.add('hidden');
+    refreshFiles();
+  });
+  document.getElementById('files-bulk-delete')?.addEventListener('click', async () => {
+    if (!_selectedFiles.size) return;
+    if (!canDeleteFiles()) { UI.showToast(editBlockedReason() || 'File deletion is disabled.', 'warning'); return; }
+    if (!confirm(`Delete ${_selectedFiles.size} file${_selectedFiles.size !== 1 ? 's' : ''}?`)) return;
+    const ids = [..._selectedFiles];
+    _selectedFiles.clear();
+    let failed = 0;
+    // Load current file list so we have file_path for each id
+    const allFiles = await listFiles(_roomId);
+    for (const id of ids) {
+      const f = allFiles.find(x => x.id === id);
+      if (!f) continue;
+      try {
+        await deleteFile(f.id, f.file_path);
+      } catch { failed++; }
+    }
+    broadcastFilesChange();
+    if (failed) UI.showToast(`${ids.length - failed} deleted, ${failed} failed.`, 'error');
+    else        UI.showToast(`${ids.length} file${ids.length !== 1 ? 's' : ''} deleted.`, 'success');
+    await refreshFiles();
+    _updateBulkBar();
   });
 
   // ── Settings ───────────────────────────────────────────────────────────────
@@ -1550,19 +1650,29 @@ function wireEvents() {
     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(a.href);
   };
 
+  // Shared guard: all export actions are meaningless on an empty note.
+  const _requireContent = () => {
+    if (UI.getEditorValue().trim()) return true;
+    UI.showToast('Nothing to export — the note is empty.', 'warning');
+    return false;
+  };
+
   document.getElementById('export-txt')?.addEventListener('click', () => {
+    if (!_requireContent()) return;
     _downloadBlob(UI.getEditorValue(), `${_roomId}.txt`, 'text/plain');
     UI.showToast('Downloaded .txt', 'success');
   });
   document.getElementById('export-md')?.addEventListener('click', () => {
+    if (!_requireContent()) return;
     _downloadBlob(UI.getEditorValue(), `${_roomId}.md`, 'text/markdown');
     UI.showToast('Downloaded .md', 'success');
   });
   document.getElementById('export-html')?.addEventListener('click', () => {
+    if (!_requireContent()) return;
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>SyncPad – ${_roomId}</title>
+<title>SyncPad – ${escapeHtml(_roomId)}</title>
 <style>body{font-family:system-ui,sans-serif;max-width:800px;margin:40px auto;padding:0 20px;color:#1a1a1a;line-height:1.7}
 pre{background:#f5f5f5;padding:1em;border-radius:4px;overflow:auto}code{background:#f5f5f5;padding:2px 4px;border-radius:2px}
 blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table{border-collapse:collapse}td,th{border:1px solid #ddd;padding:6px 10px}</style>
@@ -1571,15 +1681,46 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
     UI.showToast('Downloaded .html', 'success');
   });
   document.getElementById('export-copy-text')?.addEventListener('click', async () => {
+    if (!_requireContent()) return;
     const ok = await copyToClipboard(UI.getEditorValue());
     if (ok) UI.showToast('Copied plain text.', 'success');
     else    UI.showToast('Could not copy.', 'error');
   });
   document.getElementById('export-copy-md')?.addEventListener('click', async () => {
+    if (!_requireContent()) return;
     // Copy rendered HTML so users can paste into rich-text editors, email, docs, etc.
     const ok = await copyToClipboard(renderMarkdown(UI.getEditorValue()));
     if (ok) UI.showToast('Copied as HTML.', 'success');
     else    UI.showToast('Could not copy.', 'error');
+  });
+  document.getElementById('export-pdf')?.addEventListener('click', () => {
+    if (!_requireContent()) return;
+    const content = UI.getEditorValue();
+    const renderedHtml = renderMarkdown(content);
+    const title = escapeHtml(_room?.room_name?.trim() || _roomId);
+    const win = window.open('', '_blank');
+    if (!win) { UI.showToast('Pop-up blocked — allow pop-ups and try again.', 'warning'); return; }
+    win.document.write(`<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${title}</title>
+<style>
+  @media print { body { margin: 0; } }
+  body { font-family: system-ui, sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px;
+         color: #1a1a1a; line-height: 1.75; font-size: 15px; }
+  h1,h2,h3,h4,h5,h6 { line-height: 1.3; margin: 1.5em 0 0.5em; }
+  pre { background: #f5f5f5; padding: 1em; border-radius: 4px; overflow: auto; font-size: 13px; }
+  code { background: #f5f5f5; padding: 2px 5px; border-radius: 3px; font-size: 0.9em; }
+  pre code { background: none; padding: 0; }
+  blockquote { border-left: 3px solid #ccc; margin: 0; padding-left: 1em; color: #666; }
+  table { border-collapse: collapse; width: 100%; }
+  td, th { border: 1px solid #ddd; padding: 6px 10px; }
+  img { max-width: 100%; }
+  a { color: #0066cc; }
+</style>
+</head><body>${renderedHtml}</body></html>`);
+    win.document.close();
+    win.print();
   });
 
   // ── Keyboard shortcuts modal ───────────────────────────────────────────────
@@ -1599,15 +1740,32 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
     UI.showToast(`Saved as template "${label.trim()}".`, 'success');
   });
 
-  // ── Search panel ───────────────────────────────────────────────────────────
-  const searchInput = document.getElementById('search-input');
-  const searchCount = document.getElementById('search-count');
+  // ── Find & Replace panel ───────────────────────────────────────────────────
+  const searchInput  = document.getElementById('search-input');
+  const searchCount  = document.getElementById('search-count');
+  const replaceInput = document.getElementById('replace-input');
+  const replaceOne   = document.getElementById('replace-one');
+  const replaceAll   = document.getElementById('replace-all');
+
+  // Enable/disable replace buttons based on edit permission and match count.
+  const _syncReplaceButtons = () => {
+    const enabled = canEdit() && _searchMatches.length > 0;
+    if (replaceOne) replaceOne.disabled = !enabled;
+    if (replaceAll) replaceAll.disabled = !enabled;
+  };
 
   const _runSearch = () => {
     _searchTerm = (searchInput?.value || '').toLowerCase();
     _searchMatches = [];
     _searchIndex   = -1;
-    if (!_searchTerm || !editor) { if (searchCount) searchCount.textContent = ''; return; }
+    if (!_searchTerm || !editor) {
+      if (searchCount) searchCount.textContent = '';
+      // Collapse any selection left by the previous _jumpToMatch() call so the
+      // editor doesn't keep showing a stale highlighted range.
+      if (editor) editor.setSelectionRange(editor.selectionEnd, editor.selectionEnd);
+      _syncReplaceButtons();
+      return;
+    }
     const text = editor.value.toLowerCase();
     let pos = 0;
     while (true) {
@@ -1625,6 +1783,7 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
         ? `${_searchMatches.length} match${_searchMatches.length !== 1 ? 'es' : ''}`
         : 'No matches';
     }
+    _syncReplaceButtons();
   };
 
   const _jumpToMatch = (idx) => {
@@ -1658,6 +1817,14 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
     }
     if (e.key === 'Escape') { UI.closeAllPanels(); editor?.focus(); }
   });
+  // Tab from search input moves focus to replace input (natural keyboard flow).
+  searchInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Tab' && !e.shiftKey) { e.preventDefault(); replaceInput?.focus(); }
+  });
+  replaceInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter')  { e.preventDefault(); replaceOne?.click(); }
+    if (e.key === 'Escape') { UI.closeAllPanels(); editor?.focus(); }
+  });
 
   document.getElementById('search-next')?.addEventListener('click', () => {
     if (!_searchMatches.length) return;
@@ -1668,6 +1835,41 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
     if (!_searchMatches.length) return;
     _searchIndex = (_searchIndex - 1 + _searchMatches.length) % _searchMatches.length;
     _jumpToMatch(_searchIndex);
+  });
+
+  // Replace current match and advance to the next one.
+  replaceOne?.addEventListener('click', () => {
+    if (!canEdit()) { UI.showToast(editBlockedReason() || 'Editing is disabled.', 'warning'); return; }
+    if (!_searchMatches.length || !editor) return;
+    const m = _searchMatches[Math.max(0, _searchIndex)];
+    if (!m) return;
+    const replacement = replaceInput?.value ?? '';
+    editor.value = editor.value.slice(0, m.start) + replacement + editor.value.slice(m.end);
+    editor.dispatchEvent(new Event('input', { bubbles: true }));
+    UI.updateWordCount(editor.value);
+    _refreshPreviewIfActive();
+    // Re-index so positions reflect the changed content, then advance.
+    _runSearch();
+    if (_searchMatches.length > 0) {
+      _searchIndex = Math.min(_searchIndex, _searchMatches.length - 1);
+      _jumpToMatch(_searchIndex);
+    }
+  });
+
+  // Replace every match at once.
+  replaceAll?.addEventListener('click', () => {
+    if (!canEdit()) { UI.showToast(editBlockedReason() || 'Editing is disabled.', 'warning'); return; }
+    if (!_searchMatches.length || !_searchTerm || !editor) return;
+    const count = _searchMatches.length;
+    const replacement = replaceInput?.value ?? '';
+    // Escape the raw search term so it can be used in a RegExp safely.
+    const escaped = _searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    editor.value = editor.value.replace(new RegExp(escaped, 'gi'), replacement);
+    editor.dispatchEvent(new Event('input', { bubbles: true }));
+    UI.updateWordCount(editor.value);
+    _refreshPreviewIfActive();
+    _runSearch();
+    UI.showToast(`Replaced ${count} match${count !== 1 ? 'es' : ''}.`, 'success');
   });
 
 }
@@ -1712,6 +1914,11 @@ function teardownRealtimeSession() {
   // Reset expiration preset so the settings panel shows a sensible default
   // rather than whatever preset was last selected in the previous room.
   _expPreset = '30s';
+  // Exit bulk-select mode so the next room starts with a clean files panel.
+  _filesSelectMode = false;
+  _selectedFiles   = new Set();
+  document.getElementById('files-bulk-bar')?.classList.add('hidden');
+  document.getElementById('files-select-toggle')?.classList.remove('active');
 }
 
 // ── Templates handler ─────────────────────────────────────────────────────────
@@ -1844,6 +2051,17 @@ window.addEventListener('beforeinstallprompt', (e) => {
     () => { localStorage.setItem(INSTALL_DISMISSED_KEY, '1'); }
   );
 });
+
+// ── Draft storage warning ─────────────────────────────────────────────────────
+// Fires at most once per page load when offline.js detects QuotaExceededError.
+// Using { once: true } so repeated keystrokes don't re-show the toast.
+window.addEventListener('syncpad:draft-storage-full', () => {
+  UI.showToast(
+    'Browser storage is full — local drafts cannot be saved. Your notes still sync to the server.',
+    'warning',
+    8000,
+  );
+}, { once: true });
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 

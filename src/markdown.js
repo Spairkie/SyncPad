@@ -126,7 +126,7 @@ function _renderBlock(block, ctx) {
       return `<h${block.level}>${_renderInline(block.text)}</h${block.level}>`;
 
     case 'code':
-      return `<pre><code${block.lang ? ` data-lang="${escapeHtml(block.lang)}"` : ''}>${escapeHtml(block.body)}</code></pre>`;
+      return `<pre><code${block.lang ? ` class="language-${escapeHtml(block.lang)}" data-lang="${escapeHtml(block.lang)}"` : ''}>${escapeHtml(block.body)}</code></pre>`;
 
     case 'list': {
       const tag = block.ordered ? 'ol' : 'ul';

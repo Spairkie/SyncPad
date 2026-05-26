@@ -32,9 +32,14 @@ export async function saveDraft(roomId, content, options = {}) {
       encrypted,
       timestamp: Date.now(),
     }));
-  } catch {
+  } catch (err) {
     // If encrypted draft writing fails, intentionally do NOT fall back to
     // plaintext. That would violate the encryption contract.
+    // If the browser's storage quota is exceeded, signal it via a custom event
+    // so the app can warn the user without changing saveDraft's return type.
+    if (err?.name === 'QuotaExceededError') {
+      window.dispatchEvent(new CustomEvent('syncpad:draft-storage-full'));
+    }
   }
 }
 
