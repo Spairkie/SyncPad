@@ -164,4 +164,38 @@ test.describe('Accessibility & keyboard', () => {
     const errorEl = page.locator('#encryption-error');
     await expect(errorEl).toHaveAttribute('role', 'alert');
   });
+
+  test('encryption passphrase input has aria-label', async ({ page }) => {
+    await page.goto('/SyncPad/');
+    const input = page.locator('#encryption-input');
+    const ariaLabel = await input.getAttribute('aria-label');
+    expect(ariaLabel).toBeTruthy();
+  });
+
+  test('exp-custom-value input has aria-label', async ({ page }) => {
+    await createRoom(page);
+    // Navigate to settings and expand expiry controls
+    const settingsBtn = page.locator('[aria-controls="settings-panel"], #btn-settings').first();
+    await settingsBtn.click();
+    await page.waitForSelector('#settings-panel.open', { timeout: 5000 });
+    await page.locator('#setting-exp-btn').click();
+    await page.locator('[data-exp-preset="custom"]').click();
+    const input = page.locator('#exp-custom-value');
+    await expect(input).toBeVisible();
+    const ariaLabel = await input.getAttribute('aria-label');
+    expect(ariaLabel).toBeTruthy();
+  });
+
+  test('exp-custom-unit select has aria-label', async ({ page }) => {
+    await createRoom(page);
+    const settingsBtn = page.locator('[aria-controls="settings-panel"], #btn-settings').first();
+    await settingsBtn.click();
+    await page.waitForSelector('#settings-panel.open', { timeout: 5000 });
+    await page.locator('#setting-exp-btn').click();
+    await page.locator('[data-exp-preset="custom"]').click();
+    const select = page.locator('#exp-custom-unit');
+    await expect(select).toBeVisible();
+    const ariaLabel = await select.getAttribute('aria-label');
+    expect(ariaLabel).toBeTruthy();
+  });
 });
