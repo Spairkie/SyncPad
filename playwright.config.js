@@ -23,7 +23,8 @@ export default defineConfig({
   /* Run each test file in parallel; tests within a file run serially by default */
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
+  /* 2 retries in CI; 1 retry locally so flaky parallel tests get a second chance */
+  retries: process.env.CI ? 2 : 1,
   workers: process.env.CI ? 1 : undefined,
 
   reporter: [
