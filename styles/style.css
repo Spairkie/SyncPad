@@ -1317,9 +1317,10 @@ body.lock-mode .note-preview li.md-task input[type="checkbox"] { cursor: not-all
   .remote-notice-actions { justify-content: stretch; }
   .remote-notice-btn { flex: 1; }
   .editor-toolbar { padding: 5px 12px; }
-  .editor-wrap.split-mode { flex-direction: column; }
-  .editor-wrap.split-mode #note-editor { width: 100%; flex: 1; border-right: none; border-bottom: 1px solid var(--border); max-width: none; margin: 0; }
-  .editor-wrap.split-mode .note-preview { width: 100%; flex: 1; max-width: none; margin: 0; }
+  /* Stack split-mode panes vertically on narrow viewports.
+     Uses the current mode-split class (split-mode was the legacy alias). */
+  .editor-wrap.mode-split { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }
+  .editor-wrap.mode-split #note-editor { border-right: none; border-bottom: 1px solid var(--border); }
   .md-seg-btn[data-mode="split"] { display: none; }
   #more-dropdown { min-width: 200px; }
 }
@@ -1768,7 +1769,7 @@ kbd {
 .legal-links { display:flex; gap:14px; flex-wrap:wrap; justify-content:center; margin-top:20px; }
 .legal-links a { color: var(--text-muted); text-decoration:none; font-size:13px; }
 .legal-links a:hover { color: var(--text-primary); text-decoration:underline; }
-.legal-screen { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; background:var(--bg); }
+.legal-screen { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; background:var(--bg-base); }
 .legal-card { width:min(760px,100%); background:var(--bg-elevated); border:1px solid var(--border); border-radius:16px; padding:28px; box-shadow:var(--shadow-md); }
 .legal-card h1 { margin:0 0 8px; font-size:30px; }
 .legal-lead { margin:0 0 18px; color:var(--text-muted); }
@@ -1993,6 +1994,8 @@ kbd {
   border-radius: 16px 16px 0 0;
   background: color-mix(in srgb, var(--bg-surface) 94%, var(--bg-base));
   overflow: hidden;
+  /* position: relative anchors ::after (read-only/lock bar) to this card */
+  position: relative;
 }
 #note-editor {
   line-height: 1.7;
@@ -2004,7 +2007,10 @@ kbd {
   font-style: italic;
 }
 @media (min-width: 901px) {
-  #note-editor { max-width: 920px; padding: 36px 36px 120px; }
+  /* Both panes use the same centering-padding formula so Write and Preview
+     are visually identical. max-width lives only on .editor-wrap, not here. */
+  #note-editor  { padding: 36px max(5%, calc((100% - 800px) / 2)) 120px; }
+  .note-preview { padding: 36px max(5%, calc((100% - 800px) / 2)) 36px; }
 }
 
 .empty-state {
@@ -2045,8 +2051,6 @@ kbd {
     border-radius: 12px 12px 0 0;
   }
   #note-editor {
-    max-width: none;
-    margin: 0;
     padding: 18px 14px 120px;
     font-size: 15px;
   }
