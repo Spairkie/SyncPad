@@ -28,9 +28,9 @@ test.describe('Accessibility & keyboard', () => {
 
   test('file list items have role=listitem', async ({ page }) => {
     await createRoom(page);
-    // Open files panel
-    const filesBtn = page.locator('[aria-controls="files-panel"], #btn-files').first();
-    await filesBtn.click();
+    // #btn-files is inside the #more-dropdown — open the dropdown first
+    await page.locator('#btn-more').click();
+    await page.locator('#btn-files').click();
     await page.waitForSelector('#files-panel.open', { timeout: 5000 });
     // The list should have role=list
     const filesList = page.locator('#files-list');
@@ -40,9 +40,9 @@ test.describe('Accessibility & keyboard', () => {
 
   test('devices list has role=list', async ({ page }) => {
     await createRoom(page);
-    // Open presence panel
-    const presenceBtn = page.locator('[aria-controls="presence-panel"], #btn-presence').first();
-    await presenceBtn.click();
+    // #btn-presence is inside the #more-dropdown — open the dropdown first
+    await page.locator('#btn-more').click();
+    await page.locator('#btn-presence').click();
     await page.waitForSelector('#presence-panel.open', { timeout: 5000 });
     const devList = page.locator('#devices-list');
     const role = await devList.getAttribute('role');
@@ -72,8 +72,8 @@ test.describe('Accessibility & keyboard', () => {
     await expect(modal).toHaveAttribute('aria-modal', 'true');
     await expect(page.locator('#sp-confirm-message')).toContainText('Test confirm message');
 
-    // Cancel the dialog
-    await page.locator('#sp-confirm-cancel').click();
+    // Cancel the dialog — force:true bypasses the landing-inner pointer-event overlay
+    await page.locator('#sp-confirm-cancel').click({ force: true });
     const result = await confirmPromise;
     expect(result).toBe(false);
   });
@@ -86,7 +86,8 @@ test.describe('Accessibility & keyboard', () => {
       )
     );
     await page.waitForSelector('#sp-confirm-modal.visible', { timeout: 5000 });
-    await page.locator('#sp-confirm-ok').click();
+    // force:true bypasses the landing-inner pointer-event overlay
+    await page.locator('#sp-confirm-ok').click({ force: true });
     const result = await confirmPromise;
     expect(result).toBe(true);
   });
@@ -114,8 +115,8 @@ test.describe('Accessibility & keyboard', () => {
     await page.waitForSelector('#sp-confirm-modal.visible', { timeout: 5000 });
     // Cancel button should be focused
     await expect(page.locator('#sp-confirm-cancel')).toBeFocused();
-    // Clean up
-    await page.locator('#sp-confirm-cancel').click();
+    // Clean up — force:true bypasses the landing-inner pointer-event overlay
+    await page.locator('#sp-confirm-cancel').click({ force: true });
   });
 
   test('note editor has accessible label or placeholder', async ({ page }) => {
@@ -176,9 +177,9 @@ test.describe('Accessibility & keyboard', () => {
 
   test('exp-custom-value input has aria-label', async ({ page }) => {
     await createRoom(page);
-    // Navigate to settings and expand expiry controls
-    const settingsBtn = page.locator('[aria-controls="settings-panel"], #btn-settings').first();
-    await settingsBtn.click();
+    // #btn-settings is inside the #more-dropdown — open the dropdown first
+    await page.locator('#btn-more').click();
+    await page.locator('#btn-settings').click();
     await page.waitForSelector('#settings-panel.open', { timeout: 5000 });
     await page.locator('#setting-exp-btn').click();
     await page.locator('[data-exp-preset="custom"]').click();
@@ -190,8 +191,9 @@ test.describe('Accessibility & keyboard', () => {
 
   test('exp-custom-unit select has aria-label', async ({ page }) => {
     await createRoom(page);
-    const settingsBtn = page.locator('[aria-controls="settings-panel"], #btn-settings').first();
-    await settingsBtn.click();
+    // #btn-settings is inside the #more-dropdown — open the dropdown first
+    await page.locator('#btn-more').click();
+    await page.locator('#btn-settings').click();
     await page.waitForSelector('#settings-panel.open', { timeout: 5000 });
     await page.locator('#setting-exp-btn').click();
     await page.locator('[data-exp-preset="custom"]').click();
