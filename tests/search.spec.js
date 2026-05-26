@@ -123,4 +123,47 @@ test.describe('Find & Replace panel', () => {
     await page.keyboard.press('Shift+Tab');
     await expect(page.locator('#search-input')).toBeFocused();
   });
+
+  test('Aa button is visible in search bar', async ({ page }) => {
+    await createRoom(page);
+    await openSearchPanel(page);
+    const caseBtn = page.locator('#search-case');
+    await expect(caseBtn).toBeVisible();
+    await expect(caseBtn).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  test('Aa button toggles case-sensitive search', async ({ page }) => {
+    await createRoom(page);
+    await page.locator('#note-editor').fill('Apple apple APPLE');
+    await openSearchPanel(page);
+    await page.locator('#search-input').fill('apple');
+
+    // Case-insensitive by default — all 3 should match
+    await expect(page.locator('#search-count')).toContainText('3');
+
+    // Enable case-sensitive — only the lowercase one should match
+    await page.locator('#search-case').click();
+    await expect(page.locator('#search-case')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('#search-count')).toContainText('1');
+
+    // Disable — back to 3 matches
+    await page.locator('#search-case').click();
+    await expect(page.locator('#search-case')).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.locator('#search-count')).toContainText('3');
+  });
+
+  test('Replace All respects case-sensitive mode', async ({ page }) => {
+    await createRoom(page);
+    await page.locator('#note-editor').fill('Foo foo FOO');
+    await openSearchPanel(page);
+    await page.locator('#search-input').fill('foo');
+    await page.locator('#replace-input').fill('bar');
+
+    // Enable case-sensitive — only the lowercase 'foo' should be replaced
+    await page.locator('#search-case').click();
+    await page.locator('#replace-all').click();
+
+    const content = await page.locator('#note-editor').inputValue();
+    expect(content).toBe('Foo bar FOO');
+  });
 });

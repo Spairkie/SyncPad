@@ -1,9 +1,9 @@
 // tests/settings.spec.js
 // Settings panel: opening, expiration validation (5-min minimum),
-// theme switching.
+// theme switching, file sort.
 
 import { test, expect } from '@playwright/test';
-import { createRoom, waitForToast } from './helpers.js';
+import { createRoom, openPanel, waitForToast } from './helpers.js';
 
 async function openSettingsPanel(page) {
   const btn = page.locator('[aria-controls="settings-panel"], #btn-settings').first();
@@ -95,5 +95,58 @@ test.describe('Settings panel', () => {
     const htmlTheme = await page.locator('html').getAttribute('data-theme');
     expect(htmlTheme).toBeTruthy();
     expect(htmlTheme).not.toBe('');
+  });
+
+  test('strip formatting on paste toggle is visible', async ({ page }) => {
+    await createRoom(page);
+    await openSettingsPanel(page);
+    const btn = page.locator('#setting-strip-paste-btn');
+    await expect(btn).toBeVisible();
+  });
+
+  test('strip formatting on paste toggles between On and Off', async ({ page }) => {
+    await createRoom(page);
+    await openSettingsPanel(page);
+    const btn = page.locator('#setting-strip-paste-btn');
+
+    // Default state is Off
+    await expect(btn).toHaveText('Off');
+
+    // Click to enable
+    await btn.click();
+    await expect(btn).toHaveText('On');
+
+    // Click to disable
+    await btn.click();
+    await expect(btn).toHaveText('Off');
+  });
+});
+
+test.describe('File sort', () => {
+  test('file sort dropdown is visible in the files panel', async ({ page }) => {
+    await createRoom(page);
+    await openPanel(page, 'files');
+    const sortSelect = page.locator('#files-sort');
+    await expect(sortSelect).toBeVisible();
+  });
+
+  test('file sort dropdown has the expected ordering options', async ({ page }) => {
+    await createRoom(page);
+    await openPanel(page, 'files');
+    const sortSelect = page.locator('#files-sort');
+    const options = await sortSelect.locator('option').allTextContents();
+    // Should include at least newest, oldest, name-asc, name-desc
+    const joined = options.join(' ').toLowerCase();
+    expect(joined).toContain('newest');
+    expect(joined).toContain('oldest');
+    expect(joined).toContain('name');
+  });
+
+  test('file sort defaults to "newest"', async ({ page }) => {
+    await createRoom(page);
+    await openPanel(page, 'files');
+    const sortSelect = page.locator('#files-sort');
+    const value = await sortSelect.inputValue();
+    expect(value).toBe('newest');
   });
 });
