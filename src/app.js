@@ -1786,7 +1786,7 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
     _syncReplaceButtons();
   };
 
-  const _jumpToMatch = (idx) => {
+  const _jumpToMatch = (idx, { keepFocus = false } = {}) => {
     if (!editor || !_searchMatches.length) return;
     const m = _searchMatches[idx];
     if (!m) return;
@@ -1795,7 +1795,11 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
       _markdownMode = 'write'; _showPreview = false;
       UI.setMarkdownMode('write');
     }
-    editor.focus();
+    // Only steal focus from the editor when the search/replace inputs don't
+    // own it — otherwise typing in the search panel scrolls away mid-query.
+    const active = document.activeElement;
+    const searchPanelFocused = active === searchInput || active === replaceInput;
+    if (!searchPanelFocused && !keepFocus) editor.focus();
     editor.setSelectionRange(m.start, m.end);
     // Scroll into view
     try {
@@ -1808,20 +1812,21 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
   };
 
   searchInput?.addEventListener('input', _runSearch);
+  // Single consolidated keydown handler for the search input.
   searchInput?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       if (!_searchMatches.length) return;
       _searchIndex = (_searchIndex + 1) % _searchMatches.length;
+      // Enter navigates — focus the editor so the selection highlight is visible.
+      editor?.focus();
       _jumpToMatch(_searchIndex);
     }
+    if (e.key === 'Tab' && !e.shiftKey) { e.preventDefault(); replaceInput?.focus(); }
     if (e.key === 'Escape') { UI.closeAllPanels(); editor?.focus(); }
   });
-  // Tab from search input moves focus to replace input (natural keyboard flow).
-  searchInput?.addEventListener('keydown', (e) => {
-    if (e.key === 'Tab' && !e.shiftKey) { e.preventDefault(); replaceInput?.focus(); }
-  });
   replaceInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Tab'    && e.shiftKey)  { e.preventDefault(); searchInput?.focus(); }
     if (e.key === 'Enter')  { e.preventDefault(); replaceOne?.click(); }
     if (e.key === 'Escape') { UI.closeAllPanels(); editor?.focus(); }
   });
@@ -1830,11 +1835,14 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
     if (!_searchMatches.length) return;
     _searchIndex = (_searchIndex + 1) % _searchMatches.length;
     _jumpToMatch(_searchIndex);
+    // Return focus to search input so keyboard nav continues naturally.
+    searchInput?.focus();
   });
   document.getElementById('search-prev')?.addEventListener('click', () => {
     if (!_searchMatches.length) return;
     _searchIndex = (_searchIndex - 1 + _searchMatches.length) % _searchMatches.length;
     _jumpToMatch(_searchIndex);
+    searchInput?.focus();
   });
 
   // Replace current match and advance to the next one.
@@ -1852,8 +1860,10 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
     _runSearch();
     if (_searchMatches.length > 0) {
       _searchIndex = Math.min(_searchIndex, _searchMatches.length - 1);
-      _jumpToMatch(_searchIndex);
+      _jumpToMatch(_searchIndex, { keepFocus: true });
     }
+    // Keep focus in the replace input so the user can continue replacing.
+    replaceInput?.focus();
   });
 
   // Replace every match at once.
@@ -1870,6 +1880,8 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
     _refreshPreviewIfActive();
     _runSearch();
     UI.showToast(`Replaced ${count} match${count !== 1 ? 'es' : ''}.`, 'success');
+    // Return focus to search so the user can start a new query.
+    searchInput?.focus();
   });
 
 }
