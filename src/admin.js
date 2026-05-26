@@ -8,13 +8,46 @@ import { escapeHtml, formatFileSize, formatTimestamp } from './utils.js';
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 export async function initAdmin() {
-  const sb = getSupabaseClient();
-  const { data: { session } } = await sb.auth.getSession();
-  if (session) {
-    await _renderDashboard(sb);
-  } else {
-    _renderLogin(sb);
+  let sb;
+  try {
+    sb = getSupabaseClient();
+  } catch (err) {
+    // Supabase JS failed to load (CDN blocked, network error, etc.)
+    _renderUnavailable();
+    return;
   }
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    if (session) {
+      await _renderDashboard(sb);
+    } else {
+      _renderLogin(sb);
+    }
+  } catch (err) {
+    console.error('[admin] initAdmin failed:', err);
+    _renderUnavailable();
+  }
+}
+
+function _renderUnavailable() {
+  const screen = document.getElementById('admin-screen');
+  if (!screen) return;
+  screen.innerHTML = `
+    <div class="admin-login-wrap">
+      <div class="auth-card" style="max-width:360px;text-align:center">
+        <div class="auth-card-icon">⚠️</div>
+        <h2>Admin unavailable</h2>
+        <p style="color:var(--text-secondary);font-size:14px">
+          Could not connect to Supabase. Check your network connection and try again.
+        </p>
+        <button onclick="window.location.reload()" class="auth-btn" style="margin-top:14px">Retry</button>
+        <button onclick="window.location.href='/SyncPad/'" class="auth-btn"
+          style="margin-top:10px;background:var(--bg-elevated);color:var(--text-primary);border:1px solid var(--border)">
+          Back to SyncPad
+        </button>
+      </div>
+    </div>
+  `;
 }
 
 // ── Login form ────────────────────────────────────────────────────────────────

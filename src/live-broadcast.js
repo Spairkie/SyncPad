@@ -18,13 +18,17 @@ export function initBroadcast(roomId, handlers) {
   const sb       = getSupabaseClient();
   const deviceId = getDeviceId();
 
+  // Each handler is wrapped in try/catch so a bug in a downstream callback
+  // cannot abort the Supabase Realtime subscription for the whole session.
+  const _safeCall = (fn, p) => { try { fn?.(p); } catch (e) { console.error('[broadcast] handler error', e); } };
+
   _channel = sb.channel(`room:${roomId}`, { config: { broadcast: { self: false } } })
-    .on('broadcast', { event: 'typing' },           (m) => { const p = m.payload; if (!p || p.device_id === deviceId) return; _handlers.onRemoteTyping?.(p); })
-    .on('broadcast', { event: 'content_live' },     (m) => { const p = m.payload; if (!p || p.device_id === deviceId) return; _handlers.onRemoteLiveContent?.(p); })
-    .on('broadcast', { event: 'settings' },         (m) => { const p = m.payload; if (!p || p.device_id === deviceId) return; _handlers.onRemoteSettings?.(p); })
-    .on('broadcast', { event: 'files' },            (m) => { const p = m.payload; if (!p || p.device_id === deviceId) return; _handlers.onRemoteFiles?.(p); })
-    .on('broadcast', { event: 'clear' },            (m) => { const p = m.payload; if (!p || p.device_id === deviceId) return; _handlers.onRemoteClear?.(p); })
-    .on('broadcast', { event: 'view_once_cleared' },(m) => { const p = m.payload; if (!p || p.device_id === deviceId) return; _handlers.onRemoteViewOnce?.(p); })
+    .on('broadcast', { event: 'typing' },           (m) => { const p = m.payload; if (!p || p.device_id === deviceId) return; _safeCall(_handlers.onRemoteTyping, p); })
+    .on('broadcast', { event: 'content_live' },     (m) => { const p = m.payload; if (!p || p.device_id === deviceId) return; _safeCall(_handlers.onRemoteLiveContent, p); })
+    .on('broadcast', { event: 'settings' },         (m) => { const p = m.payload; if (!p || p.device_id === deviceId) return; _safeCall(_handlers.onRemoteSettings, p); })
+    .on('broadcast', { event: 'files' },            (m) => { const p = m.payload; if (!p || p.device_id === deviceId) return; _safeCall(_handlers.onRemoteFiles, p); })
+    .on('broadcast', { event: 'clear' },            (m) => { const p = m.payload; if (!p || p.device_id === deviceId) return; _safeCall(_handlers.onRemoteClear, p); })
+    .on('broadcast', { event: 'view_once_cleared' },(m) => { const p = m.payload; if (!p || p.device_id === deviceId) return; _safeCall(_handlers.onRemoteViewOnce, p); })
     .subscribe();
 
   return _channel;

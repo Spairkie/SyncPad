@@ -10,7 +10,7 @@ import {
   escapeHtml, debounce,
 } from './utils.js';
 
-import { loadRoom, createRoom, clearRoomContent, subscribeToRoom, getOrCreateReadOnlyShareLink, resolveReadOnlyShareLink, updateRoomDisplayName, normalizeRoomDisplayName, submitRoomReport } from './rooms.js';
+import { loadRoom, createRoom, clearRoomContent, subscribeToRoom, getOrCreateReadOnlyShareLink, resolveReadOnlyShareLink, updateRoomDisplayName, normalizeRoomDisplayName, submitRoomReport, REPORT_REASONS } from './rooms.js';
 
 import {
   initBroadcast, destroyBroadcast,
@@ -103,7 +103,8 @@ const BASE = '/SyncPad';
 const EXPIRATION_TIMER_MAX_DELAY_MS = 2147483647;
 
 
-const REPORT_REASON_OPTIONS = new Set(['Spam', 'Abuse or harassment', 'Illegal or harmful content', 'Private information', 'Other']);
+// Use REPORT_REASONS imported from rooms.js to keep client and server in sync.
+const REPORT_REASON_OPTIONS = REPORT_REASONS;
 
 function _resetReportRoomModal() {
   const reasonEl = document.getElementById('report-room-reason');
@@ -988,7 +989,13 @@ function _sortFiles(files) {
 }
 
 async function refreshFiles() {
-  const files = _sortFiles(await listFiles(_roomId));
+  let files;
+  try {
+    files = _sortFiles(await listFiles(_roomId));
+  } catch {
+    UI.showToast('Could not load files — check your connection.', 'error');
+    return;
+  }
   UI.renderFilesList(
     files,
     async (file) => {
@@ -1557,7 +1564,9 @@ function wireEvents() {
     _selectedFiles.clear();
     let failed = 0;
     // Load current file list so we have file_path for each id
-    const allFiles = await listFiles(_roomId);
+    let allFiles;
+    try { allFiles = await listFiles(_roomId); }
+    catch { UI.showToast('Could not load files — check your connection.', 'error'); return; }
     for (const id of ids) {
       const f = allFiles.find(x => x.id === id);
       if (!f) continue;
@@ -1636,7 +1645,9 @@ function wireEvents() {
       await flushSave();
       cancelPendingTypingBroadcast();
       cancelPendingLiveContentBroadcast();
-      const existingFiles = await listFiles(_roomId);
+      let existingFiles;
+      try { existingFiles = await listFiles(_roomId); }
+      catch { existingFiles = []; } // non-critical — just skip the warning if file list fails
       if (existingFiles.length && !confirm('This room has file attachments. SyncPad v1 encrypts note text only, not files. Continue enabling text encryption?')) return;
       const pp = prompt('Set an encryption passphrase (share it with anyone who needs to read this note):');
       if (!pp?.trim()) return;
@@ -2108,6 +2119,13 @@ function teardownRealtimeSession() {
   // room, the next room's handleRoomRealtime handler will silently skip a
   // view-once clear event that it should actually surface to the user.
   _consumingViewOnce = false;
+  // Cancel any queued debounced preview refresh from the previous room so it
+  // does not fire in the next room's context and render stale content.
+  _debouncedRefreshPreview.cancel?.();
+  // Reset the preview-click listener guard so the next room can wire it when
+  // the user enters preview mode. Without this, the guard stays true and the
+  // listener is never re-wired after the first navigation.
+  _previewObserverWired = false;
 }
 
 // ── Templates handler ─────────────────────────────────────────────────────────

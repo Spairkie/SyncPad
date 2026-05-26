@@ -2,7 +2,7 @@
 // Keyboard navigation, ARIA roles, focus management, and confirm dialog.
 
 import { test, expect } from '@playwright/test';
-import { createRoom } from './helpers.js';
+import { createRoom, goToLanding } from './helpers.js';
 
 test.describe('Accessibility & keyboard', () => {
   test('landing page is keyboard-navigable (Tab reaches key buttons)', async ({ page }) => {
@@ -50,7 +50,9 @@ test.describe('Accessibility & keyboard', () => {
   });
 
   test('custom confirm modal accessible: has role=dialog and aria-modal', async ({ page }) => {
-    await createRoom(page);
+    // Confirm modal only needs the SyncPad app loaded — goToLanding avoids
+    // the Supabase room-creation call that createRoom() requires.
+    await goToLanding(page);
 
     // Trigger the custom confirm via showConfirm() in the page context
     const confirmPromise = page.evaluate(() => {
@@ -77,7 +79,7 @@ test.describe('Accessibility & keyboard', () => {
   });
 
   test('custom confirm modal: OK button resolves true', async ({ page }) => {
-    await createRoom(page);
+    await goToLanding(page);
     const confirmPromise = page.evaluate(() =>
       import('/SyncPad/src/ui.js').then(({ showConfirm }) =>
         showConfirm('Are you sure?', { confirmLabel: 'Yes', danger: false })
@@ -90,7 +92,7 @@ test.describe('Accessibility & keyboard', () => {
   });
 
   test('custom confirm modal: Escape closes and resolves false', async ({ page }) => {
-    await createRoom(page);
+    await goToLanding(page);
     const confirmPromise = page.evaluate(() =>
       import('/SyncPad/src/ui.js').then(({ showConfirm }) =>
         showConfirm('Escape test', {})
@@ -103,7 +105,7 @@ test.describe('Accessibility & keyboard', () => {
   });
 
   test('danger confirm modal focuses Cancel by default', async ({ page }) => {
-    await createRoom(page);
+    await goToLanding(page);
     page.evaluate(() =>
       import('/SyncPad/src/ui.js').then(({ showConfirm }) =>
         showConfirm('Delete?', { danger: true, confirmLabel: 'Delete' })

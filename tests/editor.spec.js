@@ -60,14 +60,9 @@ test.describe('Editor', () => {
   test('export modal opens when export button clicked', async ({ page }) => {
     await createRoom(page);
     await page.locator('#note-editor').fill('export me');
-    // Open export modal (button might be in more dropdown)
-    const exportBtn = page.locator('#btn-export');
-    if (await exportBtn.isVisible()) {
-      await exportBtn.click();
-    } else {
-      await page.locator('#btn-more').click();
-      await page.locator('#btn-export').click();
-    }
+    // #btn-export lives inside #more-dropdown; open it via #btn-more first.
+    await page.locator('#btn-more').click();
+    await page.locator('#btn-export').click();
     await expect(page.locator('#export-modal')).toBeVisible({ timeout: 3000 });
   });
 
@@ -75,13 +70,9 @@ test.describe('Editor', () => {
     await createRoom(page);
     // Clear editor
     await page.locator('#note-editor').fill('');
-    const exportBtn = page.locator('#btn-export');
-    if (await exportBtn.isVisible()) {
-      await exportBtn.click();
-    } else {
-      await page.locator('#btn-more').click();
-      await page.locator('#btn-export').click();
-    }
+    // #btn-export lives inside #more-dropdown; open it via #btn-more first.
+    await page.locator('#btn-more').click();
+    await page.locator('#btn-export').click();
     // Click export .txt button in modal
     await page.locator('#export-txt').click();
     await waitForToast(page, 'empty');

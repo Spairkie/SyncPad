@@ -46,11 +46,11 @@ test.describe('Read-only links', () => {
     await page.goto(`/SyncPad/${roomId}?mode=read`);
     await page.waitForSelector('#app-screen:not(.hidden)', { timeout: 15_000 });
 
-    // The file upload button should either not exist or be disabled
-    const uploadBtn = page.locator('#file-upload-btn, [data-action="upload-file"], .file-upload-btn');
-    if (await uploadBtn.count() > 0) {
-      const isDisabled = await uploadBtn.first().evaluate(el => el.disabled);
-      expect(isDisabled).toBe(true);
+    // The file upload zone (#files-upload-zone) has data-readonly-hide and
+    // should be hidden in read-only mode.
+    const uploadZone = page.locator('#files-upload-zone');
+    if (await uploadZone.count() > 0) {
+      await expect(uploadZone).toBeHidden();
     }
   });
 

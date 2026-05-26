@@ -224,8 +224,8 @@ function _clearPending() {
 
 export function setContentNoSave(plaintext) {
   _applyingRemote = true;
-  _setEditorVal(plaintext);
-  _applyingRemote = false;
+  try { _setEditorVal(plaintext); }
+  finally { _applyingRemote = false; }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -241,6 +241,6 @@ function _mustIgnoreEncryptedRemote() {
 
 function _applyContentSafe(text) {
   _applyingRemote = true;
-  _setEditorVal(text);
-  _applyingRemote = false;
+  try { _setEditorVal(text); }
+  finally { _applyingRemote = false; }
 }
