@@ -3,6 +3,7 @@
 // read-only share links, reserved paths.
 
 import { test, expect } from '@playwright/test';
+import { supabaseAvailable } from './helpers.js';
 
 test.describe('URL routing', () => {
   test('/SyncPad/ shows landing screen', async ({ page }) => {
@@ -44,6 +45,10 @@ test.describe('URL routing', () => {
   });
 
   test('/SyncPad/some-room-id shows app screen', async ({ page }) => {
+    if (!(await supabaseAvailable(page))) {
+      test.skip(true, 'Supabase JS CDN blocked — room loading requires network access');
+      return;
+    }
     await page.goto('/SyncPad/test-routing-room');
     await page.waitForSelector('#app-screen:not(.hidden)', { timeout: 15_000 });
     await expect(page.locator('#app-screen')).not.toHaveClass(/hidden/);
@@ -67,6 +72,10 @@ test.describe('URL routing', () => {
   });
 
   test('navigating browser back to landing works', async ({ page }) => {
+    if (!(await supabaseAvailable(page))) {
+      test.skip(true, 'Supabase JS CDN blocked — room creation requires network access');
+      return;
+    }
     await page.goto('/SyncPad/');
     await page.waitForSelector('#landing-screen:not(.hidden)');
     await page.locator('.landing-create-btn').click();
