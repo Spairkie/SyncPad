@@ -299,6 +299,43 @@ create policy "anon insert files"
 create policy "anon delete files"
   on syncpad_files for delete to anon using (true);
 
+-- ── Authenticated baseline policies ──────────────────────────
+-- After an admin signs in at /admin, the Supabase client holds an
+-- authenticated session for the rest of the browsing session.
+-- The shared anon-key client then sends requests as `authenticated`
+-- instead of `anon`, which means the anon policies above no longer
+-- apply — so normal room/file operations would fail with RLS errors.
+-- These policies give every authenticated user the same baseline
+-- access as anon for the normal app features.
+-- Admin-only actions (update/delete by admin) are still gated by
+-- is_syncpad_admin() in the admin-specific policies below.
+
+drop policy if exists "authenticated baseline read rooms"   on syncpad_rooms;
+drop policy if exists "authenticated baseline insert rooms" on syncpad_rooms;
+drop policy if exists "authenticated baseline update rooms" on syncpad_rooms;
+create policy "authenticated baseline read rooms"
+  on syncpad_rooms for select to authenticated using (true);
+create policy "authenticated baseline insert rooms"
+  on syncpad_rooms for insert to authenticated with check (true);
+create policy "authenticated baseline update rooms"
+  on syncpad_rooms for update to authenticated using (true) with check (true);
+
+drop policy if exists "authenticated baseline read files"   on syncpad_files;
+drop policy if exists "authenticated baseline insert files" on syncpad_files;
+drop policy if exists "authenticated baseline delete files" on syncpad_files;
+create policy "authenticated baseline read files"
+  on syncpad_files for select to authenticated using (true);
+create policy "authenticated baseline insert files"
+  on syncpad_files for insert to authenticated with check (true);
+create policy "authenticated baseline delete files"
+  on syncpad_files for delete to authenticated using (true);
+
+-- ── Admin-only policies ────────────────────────────────────────
+-- These allow admins to perform elevated actions (delete rooms,
+-- update files metadata, etc.) that the baseline policies above
+-- do not need to grant. The is_syncpad_admin() check ensures only
+-- users in the syncpad_admins table can invoke these.
+
 drop policy if exists "admin read rooms" on syncpad_rooms;
 drop policy if exists "admin update rooms" on syncpad_rooms;
 drop policy if exists "admin delete rooms" on syncpad_rooms;
@@ -469,6 +506,27 @@ create policy "anon read syncpad files"
 
 create policy "anon delete syncpad files"
   on storage.objects for delete to anon
+  using (bucket_id = 'syncpad-files');
+
+-- Authenticated baseline Storage policies.
+-- After admin sign-in the Supabase client uses the authenticated role,
+-- so the anon storage policies above no longer apply. Mirror them here
+-- so file upload/read/delete continues to work for authenticated users.
+
+drop policy if exists "authenticated upload syncpad files" on storage.objects;
+drop policy if exists "authenticated read syncpad files"   on storage.objects;
+drop policy if exists "authenticated delete syncpad files" on storage.objects;
+
+create policy "authenticated upload syncpad files"
+  on storage.objects for insert to authenticated
+  with check (bucket_id = 'syncpad-files');
+
+create policy "authenticated read syncpad files"
+  on storage.objects for select to authenticated
+  using (bucket_id = 'syncpad-files');
+
+create policy "authenticated delete syncpad files"
+  on storage.objects for delete to authenticated
   using (bucket_id = 'syncpad-files');
 
 -- ════════════════════════════════════════════════════════════════

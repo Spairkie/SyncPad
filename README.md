@@ -285,14 +285,33 @@ See [`docs/playwright.md`](docs/playwright.md) for the full test guide.
 
 ## Roadmap
 
-- [ ] Web3Forms domain allowlist + anti-spam pass
-- [ ] Reliability pass for view-once / share / presence edge cases
-- [ ] Find & Replace UI polish (match count badge, case-sensitive toggle)
-- [ ] Expiration countdown — live "expires in X min" in expiry bar
-- [ ] Syntax highlighting in preview (Prism or highlight.js for fenced code blocks)
-- [ ] Read-only link PIN (separate from room passcode)
-- [ ] Bulk file delete (multi-select checkboxes)
-- [ ] Optional future: stronger backend authorization model
+### Recently completed
+
+- [x] Find & Replace — case-sensitive toggle (`Aa`), Replace / Replace All
+- [x] Expiration countdown — live "expires in Xh Xm Xs" bar; relative time in settings panel
+- [x] Syntax highlighting in preview — Prism.js autoloader for fenced code blocks
+- [x] Bulk file delete — multi-select checkboxes with confirmation modal
+- [x] File sort — 6 orderings in the Files panel (newest, oldest, name, size)
+- [x] Admin dashboard — Supabase Auth gate, rooms / reports / cleanup tabs
+- [x] Templates Library v2 — 13 built-ins, searchable modal, export / import JSON
+- [x] PDF export — browser `window.print()` in a styled preview window
+- [x] Playwright test suite — ~75 scenarios across 6 spec files, 4 browser projects
+- [x] Editor modernization — floating card layout, comfortable max writing width, split-view divider
+
+### Near-term
+
+- [ ] Editor polish and mobile QA — verify all modes on iOS Safari and small viewports
+- [ ] Admin user setup documentation — step-by-step guide for adding a user to `syncpad_admins`
+- [ ] Release checklist pass — work through `RELEASE_CHECKLIST.md` in full
+- [ ] Web3Forms domain allowlist + anti-spam verification
+- [ ] Service worker cache version audit — confirm `syncpad-vN` version is bumped after each deploy
+
+### Future
+
+- [ ] Storage orphan cleanup Edge Function — automate bucket cleanup when rooms with attachments are deleted or expired (requires service-role key; currently manual)
+- [ ] Optional multi-file upload — select multiple files in one picker action
+- [ ] Read-only link PIN — separate passcode for the read-only share URL
+- [ ] Stronger backend authorization — rate limiting, room ID entropy hardening, PBKDF2 iterations increase
 
 ---
 

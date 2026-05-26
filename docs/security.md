@@ -144,6 +144,12 @@ Admin queries are additionally gated by the `is_syncpad_admin()` function, which
 - Every admin database query is gated by the `is_syncpad_admin()` RLS policy — there is no admin-only API surface that bypasses RLS.
 - JWT expiry and insufficient privilege errors (`PGRST301`) are surfaced to the admin UI as the human-readable message "You do not have admin access." rather than exposing internal error details.
 
+### Admin session and Supabase role
+
+SyncPad uses a single shared Supabase client for both the normal app and the admin dashboard. After a user signs in via Supabase Auth at `/admin`, the client's effective role changes from `anon` to `authenticated`. Supabase RLS policies are role-specific — policies written for `to anon` do not apply to `authenticated` requests, and vice versa.
+
+Without a matching set of baseline policies for the `authenticated` role, normal app operations (loading rooms, uploading files, etc.) fail with RLS permission errors after admin login. The `supabase-setup.sql` script includes **authenticated baseline** policies that mirror the anon policies for `syncpad_rooms`, `syncpad_files`, and the `syncpad-files` storage bucket. These do not grant additional privileges — they simply ensure normal app features continue to work during an authenticated session. Elevated admin actions (delete rooms, bulk manage files) are still gated by `is_syncpad_admin()` in separate policies.
+
 ---
 
 ## Known Limitations / Threat Model

@@ -428,7 +428,9 @@ async function joinRoom(roomId) {
       room = await createRoom(roomId);
     }
     _room = room;
-  } catch {
+  } catch (err) {
+    // Log the raw error so RLS / network failures are diagnosable in DevTools.
+    console.error('[SyncPad] joinRoom failed for', roomId, err);
     UI.setLoadingMessage('Could not load room. Check your connection and reload.');
     return;
   }
@@ -2086,8 +2088,11 @@ function teardownRealtimeSession() {
   _encSalt = null;
   // Reset editor mode so the next room always starts in plain-write view
   // rather than inheriting preview / split mode from the previous room.
+  // setMarkdownMode() cleans up DOM mode classes immediately (mode-split, etc.)
+  // so the card layout doesn't show a stale divider during the loading screen.
   _markdownMode = 'write';
   _showPreview  = false;
+  UI.setMarkdownMode('write', null);
   // Reset expiration preset so the settings panel shows a sensible default
   // rather than whatever preset was last selected in the previous room.
   _expPreset = '30s';
