@@ -93,9 +93,10 @@ let _caseSensitive    = false; // toggled by Aa button in F&R panel; reset on na
 const _STRIP_PASTE_KEY = 'syncpad_strip_paste';
 let _stripPaste = localStorage.getItem(_STRIP_PASTE_KEY) === 'true';
 
-// ── Files bulk-select state ───────────────────────────────────────────────────
+// ── Files state ───────────────────────────────────────────────────────────────
 let _filesSelectMode = false;
 let _selectedFiles   = new Set(); // Set<file.id>
+let _filesSort       = 'newest';  // sort order for the files panel (not room-scoped)
 
 
 const BASE = '/SyncPad';
@@ -969,8 +970,20 @@ function _updateBulkBar() {
   if (deleteEl) deleteEl.disabled   = n === 0;
 }
 
+function _sortFiles(files) {
+  const arr = [...files];
+  switch (_filesSort) {
+    case 'oldest':    return arr.sort((a, b) => new Date(a.uploaded_at) - new Date(b.uploaded_at));
+    case 'name-asc':  return arr.sort((a, b) => a.filename.localeCompare(b.filename));
+    case 'name-desc': return arr.sort((a, b) => b.filename.localeCompare(a.filename));
+    case 'size-desc': return arr.sort((a, b) => b.file_size - a.file_size);
+    case 'size-asc':  return arr.sort((a, b) => a.file_size - b.file_size);
+    default:          return arr.sort((a, b) => new Date(b.uploaded_at) - new Date(a.uploaded_at)); // newest
+  }
+}
+
 async function refreshFiles() {
-  const files = await listFiles(_roomId);
+  const files = _sortFiles(await listFiles(_roomId));
   UI.renderFilesList(
     files,
     async (file) => {
@@ -983,7 +996,11 @@ async function refreshFiles() {
     },
     async (file) => {
       if (!canDeleteFiles()) { UI.showToast(editBlockedReason() || 'File deletion is disabled.', 'warning'); return; }
-      if (!confirm(`Delete "${file.filename}"?`)) return;
+      const ok = await UI.showConfirm(
+        `Delete "${escapeHtml(file.filename)}"?`,
+        { confirmLabel: 'Delete', danger: true },
+      );
+      if (!ok) return;
       try {
         await deleteFile(file.id, file.file_path);
         UI.showToast('File deleted.', 'success');
@@ -1498,6 +1515,12 @@ function wireEvents() {
       await refreshFiles();
     } catch { UI.showToast('Could not upload file.', 'error'); }
     finally  { UI.setUploadingState(false); }
+  });
+
+  // ── Files — sort order ────────────────────────────────────────────────────
+  document.getElementById('files-sort')?.addEventListener('change', (e) => {
+    _filesSort = e.target.value;
+    refreshFiles();
   });
 
   // ── Files — bulk select ────────────────────────────────────────────────────

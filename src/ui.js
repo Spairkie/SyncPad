@@ -9,6 +9,21 @@ import { getIcon } from './icons.js';
 let _footerClockTimer = null;
 const _footerTimeFormatter = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
 
+// ── Private helpers ───────────────────────────────────────────────────────────
+
+/** Return a human-readable "in X" string for an ISO expiry date. */
+function _expiresIn(isoDate) {
+  const ms = new Date(isoDate) - Date.now();
+  if (ms <= 0) return 'expired';
+  const s = Math.floor(ms / 1000);
+  if (s < 120)  return `in ${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 120)  return `in ${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 48)   return `in ${h}h`;
+  return `in ${Math.floor(h / 24)}d`;
+}
+
 // ── Screen management ─────────────────────────────────────────────────────────
 
 export function showScreen(name) {
@@ -702,7 +717,7 @@ export function renderSettingsPanel(room) {
   if (pcStatus)  pcStatus.textContent  = room.passcode_hash      ? 'Protected'  : 'None';
   if (encStatus) encStatus.textContent = room.encryption_enabled ? 'Enabled for note text' : 'Off';
   if (expStatus) expStatus.textContent = room.expires_at
-    ? new Date(room.expires_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
+    ? `${new Date(room.expires_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })} (${_expiresIn(room.expires_at)})`
     : 'Never';
   if (voStatus) {
     voStatus.textContent = !room.view_once ? 'Off'

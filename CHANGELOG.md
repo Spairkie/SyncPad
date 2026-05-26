@@ -8,6 +8,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Phase 8 — Bug Fix: view-once teardown + accessibility labels
+
+Branch: `claude/phase1-stability` · Commit: `fix(phase-8): view-once teardown bug + accessibility labels on auth/landing inputs`
+
+#### Fixed
+- `teardownRealtimeSession()`: reset `_consumingViewOnce` to `false` so the flag from a previous room never silently swallows view-once clear events in the next room
+
+#### Changed
+- `#landing-join-input`: added `aria-label="Room link or ID to join"`
+- `#passcode-input`: added `aria-label="Room passcode"`
+- `#encryption-input`: added `aria-label="Encryption passphrase"`
+- `#passcode-error`: added `role="alert" aria-live="assertive"` so screen readers announce failed login attempts
+- `#encryption-error`: same `role="alert"` treatment
+- `#exp-custom-value` / `#exp-custom-unit`: added `aria-label` for expiration amount and unit inputs
+
+#### Added
+- `accessibility.spec.js`: 4 new tests covering the above `aria-label` and `role` attributes
+
+---
+
+### Phase 7 — Find & Replace Polish + Paste Sanitization
+
+Branch: `claude/phase1-stability` · Commit: `feat(phase-7): case-sensitive search toggle + paste sanitization setting`
+
+#### Added
+- **Case-sensitive search (`Aa` button)**: toggle inside the search bar; `_caseSensitive` flag resets to `false` on room navigation; hint updated to "Aa = case-sensitive"
+- **Replace All**: now uses `'g'` flag (not `'gi'`) when case-sensitive mode is active; uses the unmodified raw search term for the `RegExp` pattern
+- **Strip formatting on paste**: new **Editor** section in Settings panel; persists to `localStorage` key `syncpad_strip_paste`; intercepts `paste` events on the editor and substitutes `text/plain` data only
+- `search.spec.js`: 3 new tests — Aa button visible, case-sensitive toggle (3→1→3 matches), Replace All respects case mode
+- `settings.spec.js`: 2 new tests — strip-paste button visible, On/Off toggle
+
+#### Changed
+- Search hint text from "Case-insensitive · Replace requires edit access." → "Replace requires edit access. Aa = case-sensitive."
+
+---
+
 ### Phase 6 — Documentation
 
 #### Added
