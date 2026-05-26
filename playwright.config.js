@@ -40,6 +40,9 @@ export default defineConfig({
     /* Supabase calls are real API calls – give them enough time */
     actionTimeout: 10_000,
     navigationTimeout: 15_000,
+    /* Block service workers so clients.claim() cannot disrupt page.evaluate()
+     * calls mid-flight. Tests exercise the app logic; PWA caching is irrelevant. */
+    serviceWorkers: 'block',
   },
 
   projects: [
