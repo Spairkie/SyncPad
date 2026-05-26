@@ -3,9 +3,13 @@
 // save as template, custom template delete.
 
 import { test, expect } from '@playwright/test';
-import { createRoom, waitForToast } from './helpers.js';
+import { createRoom, openPanel, waitForToast } from './helpers.js';
 
 async function openTemplatesModal(page) {
+  if (await page.locator('#templates-modal.visible').isVisible().catch(() => false)) return;
+  await page.waitForTimeout(250);
+  if (await page.locator('#templates-modal.visible').isVisible().catch(() => false)) return;
+  await openPanel(page, 'tools');
   // Try direct button first; may be in "more" dropdown
   const directBtn = page.locator('#tool-templates');
   if (await directBtn.isVisible()) {
@@ -20,9 +24,6 @@ async function openTemplatesModal(page) {
 test.describe('Templates modal', () => {
   test('opens from tools panel', async ({ page }) => {
     await createRoom(page);
-    // Open tools panel
-    await page.locator('#btn-tools, [aria-controls="tools-panel"]').first().click();
-    await page.waitForSelector('#tools-panel.open', { timeout: 5000 });
     await openTemplatesModal(page);
     await expect(page.locator('#templates-modal')).toBeVisible();
   });
@@ -78,7 +79,7 @@ test.describe('Templates modal', () => {
     await page.evaluate(() => localStorage.removeItem('syncpad_custom_templates'));
     await openTemplatesModal(page);
     await page.locator('.tmpl-tab[data-tab="custom"]').click();
-    await expect(page.locator('.empty-state-title')).toContainText('No custom templates');
+    await expect(page.locator('#templates-modal .empty-state-title')).toContainText('No custom templates');
   });
 
   test('save note as template and see it in My Templates', async ({ page }) => {
@@ -113,10 +114,10 @@ test.describe('Templates modal', () => {
     // Click the first non-blank template
     const buttons = page.locator('.template-btn');
     // Find Checklist button
-    const checklistBtn = page.locator('.template-btn').filter({ hasText: 'Checklist' });
+    const checklistBtn = page.locator('.template-btn[data-key="checklist"]');
     await checklistBtn.click();
     // Should close modal and insert content
-    await expect(page.locator('#templates-modal')).toBeHidden({ timeout: 3000 });
+    await expect(page.locator('#templates-modal')).not.toHaveClass(/visible/);
     const content = await page.locator('#note-editor').inputValue();
     expect(content.trim().length).toBeGreaterThan(0);
   });
@@ -125,6 +126,6 @@ test.describe('Templates modal', () => {
     await createRoom(page);
     await openTemplatesModal(page);
     await page.locator('.templates-close').first().click();
-    await expect(page.locator('#templates-modal')).toBeHidden({ timeout: 3000 });
+    await expect(page.locator('#templates-modal')).not.toHaveClass(/visible/);
   });
 });

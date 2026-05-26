@@ -151,10 +151,10 @@ Use this checklist before publishing a new version or sharing the demo link.
 - [ ] `supabase-setup.sql` applied successfully in Supabase SQL Editor
 - [ ] `syncpad-files` Storage bucket exists and is **private**
 - [ ] Storage policies applied (upload, read, delete for `anon`)
-- [ ] Storage cleanup warning acknowledged: deleting expired room/file metadata does not remove physical `syncpad-files` objects
-- [ ] Before public file uploads at scale, storage cleanup process is defined (scheduled Edge Function or manual bucket pruning job)
+- [ ] Storage cleanup warning acknowledged: SQL-only room deletion does not remove physical `syncpad-files` objects
+- [ ] Optional `syncpad-cleanup` Edge Function deployed or manual bucket pruning process documented
 - [ ] GitHub Pages is serving from the correct branch and folder
-- [ ] `service-worker.js` cache name is intentionally bumped when cached assets change (currently `syncpad-v8`)
+- [x] `service-worker.js` cache name is intentionally bumped when cached assets change (currently `syncpad-v10`)
 - [ ] Hard refresh (`Ctrl+Shift+R`) loads fresh content, no stale cache issues
 - [ ] `404.html` is deployed and room URL redirect works
 - [ ] Mobile browser tested (iOS Safari, Android Chrome)
@@ -181,7 +181,7 @@ Use this checklist before publishing a new version or sharing the demo link.
 
 - [ ] **View-once caveat is visible** — docs/UX copy clearly says view-once is convenience-only, not secure destruction
 - [ ] README.md describes only **actually implemented** features
-- [ ] No claims of CSV sorting, syntax highlighting, or automatic storage cleanup
+- [ ] Storage cleanup claims distinguish admin UI deletion from optional service-role Edge Function cleanup
 - [ ] Known Limitations section is present and accurate
 - [ ] DEPLOYMENT.md has correct SQL and storage setup steps
 - [ ] DEPLOYMENT.md security disclaimer is present
@@ -198,10 +198,10 @@ Use this checklist before publishing a new version or sharing the demo link.
 - [ ] Share-link table remains RPC-only for `anon` users (no direct select/update/delete)
 
 
-### Future storage cleanup (not implemented in this release)
+### Optional service-role storage cleanup
 
-- Scheduled Supabase Edge Function runs daily
-- Finds objects in `syncpad-files` with no matching `syncpad_files` row or expired/deleted room
-- Deletes orphaned physical objects
-- Logs count-only metrics (no file content)
-- Uses dry-run mode on first execution
+- [ ] `supabase/functions/syncpad-cleanup` deployed when backend cleanup is needed
+- [ ] Dry-run output reviewed before `dryRun:false`
+- [ ] Finds objects in `syncpad-files` with no matching `syncpad_files` row
+- [ ] Deletes physical objects for encrypted expired rooms before DB deletion
+- [ ] Logs count-only metrics (no file content)

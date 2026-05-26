@@ -2,7 +2,7 @@
 // Keyboard navigation, ARIA roles, focus management, and confirm dialog.
 
 import { test, expect } from '@playwright/test';
-import { createRoom, goToLanding } from './helpers.js';
+import { createRoom, goToLanding, openPanel } from './helpers.js';
 
 test.describe('Accessibility & keyboard', () => {
   test('landing page is keyboard-navigable (Tab reaches key buttons)', async ({ page }) => {
@@ -29,9 +29,7 @@ test.describe('Accessibility & keyboard', () => {
   test('file list items have role=listitem', async ({ page }) => {
     await createRoom(page);
     // #btn-files is inside the #more-dropdown — open the dropdown first
-    await page.locator('#btn-more').click();
-    await page.locator('#btn-files').click();
-    await page.waitForSelector('#files-panel.open', { timeout: 5000 });
+    await openPanel(page, 'files');
     // The list should have role=list
     const filesList = page.locator('#files-list');
     const role = await filesList.getAttribute('role');
@@ -41,9 +39,7 @@ test.describe('Accessibility & keyboard', () => {
   test('devices list has role=list', async ({ page }) => {
     await createRoom(page);
     // #btn-presence is inside the #more-dropdown — open the dropdown first
-    await page.locator('#btn-more').click();
-    await page.locator('#btn-presence').click();
-    await page.waitForSelector('#presence-panel.open', { timeout: 5000 });
+    await openPanel(page, 'presence');
     const devList = page.locator('#devices-list');
     const role = await devList.getAttribute('role');
     expect(role).toBe('list');
@@ -177,9 +173,7 @@ test.describe('Accessibility & keyboard', () => {
   test('exp-custom-value input has aria-label', async ({ page }) => {
     await createRoom(page);
     // #btn-settings is inside the #more-dropdown — open the dropdown first
-    await page.locator('#btn-more').click();
-    await page.locator('#btn-settings').click();
-    await page.waitForSelector('#settings-panel.open', { timeout: 5000 });
+    await openPanel(page, 'settings');
     await page.locator('#setting-exp-btn').click();
     await page.locator('[data-exp-preset="custom"]').click();
     const input = page.locator('#exp-custom-value');
@@ -191,9 +185,7 @@ test.describe('Accessibility & keyboard', () => {
   test('exp-custom-unit select has aria-label', async ({ page }) => {
     await createRoom(page);
     // #btn-settings is inside the #more-dropdown — open the dropdown first
-    await page.locator('#btn-more').click();
-    await page.locator('#btn-settings').click();
-    await page.waitForSelector('#settings-panel.open', { timeout: 5000 });
+    await openPanel(page, 'settings');
     await page.locator('#setting-exp-btn').click();
     await page.locator('[data-exp-preset="custom"]').click();
     const select = page.locator('#exp-custom-unit');

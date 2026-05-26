@@ -144,12 +144,32 @@ When a room is deleted, Postgres cascade-deletes the `syncpad_files` metadata ro
 
 Orphaned objects (files in the bucket with no matching metadata row) can accumulate over time.
 
+### Automated cleanup
+
+The optional Supabase Edge Function at `supabase/functions/syncpad-cleanup` can run with a service-role key to:
+
+- delete physical Storage objects for expired rooms before encrypted expired rooms are deleted
+- call the existing `cleanup_expired_syncpad_rooms()` database function
+- list bucket objects and remove confirmed orphans whose `file_path` no longer exists in `syncpad_files`
+- run in dry-run mode first
+
+Example manual invocation after deployment:
+
+```bash
+curl -X POST "https://YOUR-PROJECT-REF.functions.supabase.co/syncpad-cleanup" \
+  -H "Authorization: Bearer $SYNCPAD_CLEANUP_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"mode":"all","dryRun":true}'
+```
+
+Set `dryRun` to `false` only after reviewing the dry-run counts.
+
 ### Manual cleanup steps
 
-1. **List metadata paths** — query `syncpad_files` for all `file_path` values.
-2. **List storage objects** — use Supabase Dashboard → Storage → `syncpad-files` bucket, or the Storage REST API.
-3. **Cross-reference** — identify objects in storage with no matching `file_path` in metadata.
-4. **Delete orphans** — remove only confirmed orphaned objects.
+1. **List metadata paths** - query `syncpad_files` for all `file_path` values.
+2. **List storage objects** - use Supabase Dashboard -> Storage -> `syncpad-files` bucket, or the Storage REST API.
+3. **Cross-reference** - identify objects in storage with no matching `file_path` row.
+4. **Delete orphans** - remove only confirmed orphaned objects.
 
 ```sql
 -- Step 1: all file paths tracked in metadata
@@ -161,9 +181,7 @@ ORDER  BY room_id, uploaded_at;
 -- Use the Supabase Dashboard or the Storage Management API for step 2.
 ```
 
-> ⚠️ Always back up before deleting. Deleted storage objects cannot be recovered.
-
-Full automated cleanup (listing bucket objects and deleting orphans programmatically) requires a Supabase Edge Function or service-role script. This is a planned roadmap item.
+> Always back up before deleting. Deleted storage objects cannot be recovered.
 
 ---
 
@@ -190,7 +208,7 @@ Full automated cleanup (listing bucket objects and deleting orphans programmatic
 | View-once is convenience-only | Not a secure destruction guarantee; viewers can still copy or capture content before it clears |
 | Files are not end-to-end encrypted | Text encryption covers note content only unless file encryption is explicitly added |
 | Passcode is a convenience gate | Hash is checked client-side; not server-enforced |
-| Storage orphan cleanup is manual | Deleting expired room/file metadata does not remove physical `syncpad-files` objects; use scheduled Edge Function or manual bucket pruning before public upload scale |
+| Storage cleanup needs service-role maintenance | Admin room deletion removes known physical objects first; backend cleanup paths need the optional `syncpad-cleanup` Edge Function because SQL cannot delete Storage objects |
 | File upload is one file at a time | Multi-file upload not implemented |
 
 ---
@@ -298,20 +316,25 @@ See [`docs/playwright.md`](docs/playwright.md) for the full test guide.
 - [x] Playwright test suite — ~75 scenarios across 6 spec files, 4 browser projects
 - [x] Editor modernization — floating card layout, comfortable max writing width, split-view divider
 
-### Near-term
+### Takeover roadmap completed
 
-- [ ] Editor polish and mobile QA — verify all modes on iOS Safari and small viewports
-- [ ] Admin user setup documentation — step-by-step guide for adding a user to `syncpad_admins`
-- [ ] Release checklist pass — work through `RELEASE_CHECKLIST.md` in full
-- [ ] Web3Forms domain allowlist + anti-spam verification
-- [ ] Service worker cache version audit — confirm `syncpad-vN` version is bumped after each deploy
+- [x] Keep SyncPad as a transparent demo project and document frontend-only permission boundaries
+- [x] Keep file attachments unencrypted and document Storage behavior
+- [x] Allow read-only viewers to unlock passcode/encrypted rooms when they separately have the secret
+- [x] Keep GitHub Pages `/SyncPad` as the permanent target while centralizing runtime base-path handling
+- [x] Delete known physical Storage objects during admin room deletion paths
+- [x] Add optional service-role Edge Function for backend Storage cleanup and orphan cleanup
+- [x] Batch admin expired-room cleanup queries for larger room sets
+- [x] Add real `/share/:token` protected-room regression tests
+- [x] Add admin user setup documentation in `docs/admin-setup.md`
+- [x] Bump service worker cache version for this release (`syncpad-v10`)
 
-### Future
+### Outside current demo scope
 
-- [ ] Storage orphan cleanup Edge Function — automate bucket cleanup when rooms with attachments are deleted or expired (requires service-role key; currently manual)
-- [ ] Optional multi-file upload — select multiple files in one picker action
-- [ ] Read-only link PIN — separate passcode for the read-only share URL
-- [ ] Stronger backend authorization — rate limiting, room ID entropy hardening, PBKDF2 iterations increase
+- Optional multi-file upload
+- Read-only link PIN
+- Production-grade backend authorization and rate limiting
+- Live deployment verification after Supabase/GitHub Pages secrets are configured
 
 ---
 

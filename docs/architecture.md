@@ -68,7 +68,7 @@ Implements a safe, custom Markdown renderer without relying on an external libra
 Provides AES-256-GCM encryption and decryption using the Web Crypto API, with PBKDF2 key derivation. It exposes functions to encrypt/decrypt room content given a passphrase and salt. It does NOT store keys or passphrases — key material is held in `app.js` module-level state and never written to disk or the database.
 
 ### `permissions.js`
-Maintains the frontend permission context for the current session (e.g. read-only vs. read-write, owner status). It exposes getter functions used throughout the app to gate UI actions. It does NOT enforce permissions on the server — that is handled by Supabase RLS policies.
+Maintains the frontend permission context for the current session (e.g. read-only vs. read-write, owner status). It exposes getter functions used throughout the app to gate UI actions. It does NOT enforce permissions on the server; SyncPad intentionally keeps normal room/file RLS broad for a transparent demo project.
 
 ### `settings.js`
 Implements handlers for the room settings panel: expiry presets, passcode changes, read-only toggles, and share-link management. It does NOT own the settings UI structure — the DOM is defined in `ui.js` and `index.html`.
@@ -98,7 +98,7 @@ Collects small, stateless helper functions (string formatting, date utilities, d
 4. **Other tabs/devices** receive the Broadcast event via `live-broadcast.js`, which dispatches it to `sync.js` on the receiving side.
 5. `sync.js` (receiver) calls `ui.js` to update the textarea with the incoming content, carefully avoiding a cursor-jump for the local user.
 6. Back on the **originating tab**, a 1-second debounce timer is (re)started on every keystroke.
-7. When the debounce fires, `sync.js` → **Durable lane**: the content is written to the `syncpad_rooms` row in Postgres (encrypted if the room has a passcode).
+7. When the debounce fires, `sync.js` → **Durable lane**: the content is written to the `syncpad_rooms` row in Postgres (encrypted if text encryption is enabled).
 8. Supabase **Postgres Realtime** fires an `UPDATE` event on all other subscribers.
 9. `sync.js` (receiver, durable lane) receives the Realtime event and performs a **conflict check**: if the incoming `updated_at` timestamp is older than the local last-save timestamp, the update is discarded to avoid overwriting a more recent local edit.
 10. If the conflict check passes, `ui.js` updates the textarea on the remote tab.
@@ -111,7 +111,7 @@ Collects small, stateless helper functions (string formatting, date utilities, d
 2. The **router** in `app.js` parses the URL path to extract the room ID (e.g. `/r/<roomId>`).
 3. `app.js` calls **`joinRoom(roomId)`**.
 4. `joinRoom()` issues a Supabase query against `syncpad_rooms` for the given ID.
-5. If the room has a passcode, `ui.js` renders the passcode prompt. The submitted passcode is passed to `encryption.js` (PBKDF2 derivation) to produce `_encKey` and `_encSalt`, which are stored in `app.js` module-level state.
+5. If the room has a passcode, `ui.js` renders the passcode prompt and verifies a PBKDF2 hash client-side. If the room has text encryption, the submitted passphrase is passed to `encryption.js` to derive `_encKey` and `_encSalt`, which are stored in `app.js` module-level state.
 6. `permissions.js` is updated with the resolved permission context (owner, read-only, anonymous, etc.).
 7. `app.js` calls **`wireEvents()`** to attach all editor, toolbar, and settings event listeners for this room session.
 8. Three Supabase subscriptions are started:
@@ -131,7 +131,7 @@ Collects small, stateless helper functions (string formatting, date utilities, d
 | `_roomId` | Active room identifier |
 | `_room` | Full room row object fetched from Supabase |
 | `_encKey` | Derived AES-256-GCM CryptoKey (null if unencrypted) |
-| `_encSalt` | PBKDF2 salt for the current passcode |
+| `_encSalt` | PBKDF2 salt for the current encryption passphrase |
 | `_markdownMode` | Boolean — whether Markdown rendering is enabled |
 | `_showPreview` | Boolean — whether the Markdown preview pane is visible |
 | `_expPreset` | Selected expiry preset string |
@@ -209,7 +209,9 @@ The `/admin` route activates `admin.js` exclusively and is completely isolated f
 |---|---|---|
 | **Rooms** | 50 most recent `syncpad_rooms` rows; client-side search filter; flag badges for reported rooms | Clear content, Delete room |
 | **Reports** | 100 most recent `syncpad_room_reports` rows | Dismiss report, Delete reported room |
-| **Cleanup** | — | Invoke `run_cleanup_expired_syncpad_rooms_as_admin` Postgres RPC |
+| **Cleanup** | — | Remove known Storage objects in admin deletion paths, then invoke/delete via Supabase |
+
+Backend cleanup paths that run without the admin UI can use the optional `supabase/functions/syncpad-cleanup` Edge Function. It runs with a service-role key, deletes known Storage objects for encrypted expired rooms before DB cleanup, and can remove orphaned bucket objects after a dry run.
 
 ---
 
@@ -217,7 +219,7 @@ The `/admin` route activates `admin.js` exclusively and is completely isolated f
 
 `service-worker.js` implements a **network-first** caching strategy for all same-origin assets.
 
-- **Cache name**: `syncpad-v8`
+- **Cache name**: `syncpad-v9`
 - **Strategy**: Every request is attempted over the network first. On success, the response is cloned and stored in the cache. On network failure, the cache is used as a fallback.
 - **Bypass**: All requests to Supabase endpoints (different origin) bypass the service worker entirely and go directly to the network.
 - **Cache invalidation**: Increment `CACHE_NAME` (e.g. `syncpad-v9`) to force all clients to discard the old cache on next activation.

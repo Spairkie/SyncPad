@@ -5,6 +5,20 @@
 import { getSupabaseClient } from './supabase.js';
 import { escapeHtml, formatFileSize, formatTimestamp } from './utils.js';
 
+const FILES_BUCKET = 'syncpad-files';
+const STORAGE_REMOVE_BATCH_SIZE = 100;
+const ADMIN_QUERY_BATCH_SIZE = 100;
+
+function _basePath() {
+  const raw = String(window.SYNCPAD_CONFIG?.basePath ?? '/SyncPad').trim();
+  if (!raw || raw === '/') return '';
+  return `/${raw.replace(/^\/+|\/+$/g, '')}`;
+}
+
+function _homePath() {
+  return `${_basePath() || ''}/`;
+}
+
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 export async function initAdmin() {
@@ -41,13 +55,16 @@ function _renderUnavailable() {
           Could not connect to Supabase. Check your network connection and try again.
         </p>
         <button onclick="window.location.reload()" class="auth-btn" style="margin-top:14px">Retry</button>
-        <button onclick="window.location.href='/SyncPad/'" class="auth-btn"
+        <button id="admin-unavailable-home" class="auth-btn"
           style="margin-top:10px;background:var(--bg-elevated);color:var(--text-primary);border:1px solid var(--border)">
           Back to SyncPad
         </button>
       </div>
     </div>
   `;
+  document.getElementById('admin-unavailable-home')?.addEventListener('click', () => {
+    window.location.href = _homePath();
+  });
 }
 
 // ── Login form ────────────────────────────────────────────────────────────────
@@ -64,7 +81,7 @@ function _renderLogin(sb) {
         <input id="admin-password" class="auth-input" type="password" placeholder="Password" autocomplete="current-password" style="margin-top:10px" />
         <div id="admin-login-error" style="font-size:12px;color:var(--red);margin-top:6px;min-height:16px"></div>
         <button id="admin-login-btn" class="auth-btn" style="margin-top:14px">Sign in</button>
-        <button onclick="window.location.href='/SyncPad/'" class="auth-btn" style="margin-top:10px;background:var(--bg-elevated);color:var(--text-primary);border:1px solid var(--border)">Back to SyncPad</button>
+        <button id="admin-login-home" class="auth-btn" style="margin-top:10px;background:var(--bg-elevated);color:var(--text-primary);border:1px solid var(--border)">Back to SyncPad</button>
       </div>
     </div>
   `;
@@ -96,6 +113,9 @@ function _renderLogin(sb) {
   }
 
   loginBtn.addEventListener('click', doLogin);
+  document.getElementById('admin-login-home')?.addEventListener('click', () => {
+    window.location.href = _homePath();
+  });
   passwordEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
   emailEl.addEventListener('keydown',    (e) => { if (e.key === 'Enter') passwordEl.focus(); });
 }
@@ -350,7 +370,7 @@ async function _renderRoomsTab(sb, contentEl) {
         );
         if (!ok) return;
         btn.disabled = true;
-        const { error } = await sb.from('syncpad_rooms').delete().eq('room_id', roomId);
+        const { error } = await _deleteRoomAndStorage(sb, roomId);
         if (error) {
           await _adminAlert(`Error deleting room: ${error.message}`);
           btn.disabled = false;
@@ -491,7 +511,7 @@ async function _renderReportsTab(sb, contentEl) {
         );
         if (!ok) return;
         btn.disabled = true;
-        const { error } = await sb.from('syncpad_rooms').delete().eq('room_id', roomId);
+        const { error } = await _deleteRoomAndStorage(sb, roomId);
         if (error) {
           await _adminAlert(`Error deleting room: ${error.message}`);
           btn.disabled = false;
@@ -595,11 +615,7 @@ async function _renderCleanupTab(sb, contentEl) {
     resultEl.classList.add('hidden');
     resultEl.className = 'admin-cleanup-result';
 
-    const { data, error, count } = await sb
-      .from('syncpad_rooms')
-      .delete({ count: 'exact' })
-      .lt('expires_at', new Date().toISOString())
-      .not('expires_at', 'is', null);
+    const { error, count } = await _deleteExpiredRoomsAndStorage(sb);
 
     btn.disabled    = false;
     btn.textContent = 'Delete all expired rooms now';
@@ -617,6 +633,82 @@ async function _renderCleanupTab(sb, contentEl) {
     resultEl.textContent = `✓ Deleted ${deleted} expired room${deleted !== 1 ? 's' : ''}.`;
     await _loadStats(sb);
   });
+}
+
+async function _listRoomFilePaths(sb, roomId) {
+  const { data, error } = await sb
+    .from('syncpad_files')
+    .select('file_path')
+    .eq('room_id', roomId);
+  if (error) return { paths: [], error };
+  return { paths: (data || []).map(row => row.file_path).filter(Boolean), error: null };
+}
+
+async function _removeStorageObjects(sb, paths) {
+  const uniquePaths = Array.from(new Set((paths || []).filter(Boolean)));
+  for (let i = 0; i < uniquePaths.length; i += STORAGE_REMOVE_BATCH_SIZE) {
+    const batch = uniquePaths.slice(i, i + STORAGE_REMOVE_BATCH_SIZE);
+    const { error } = await sb.storage.from(FILES_BUCKET).remove(batch);
+    if (error) return { error };
+  }
+  return { error: null };
+}
+
+function _chunks(items, size) {
+  const out = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
+async function _deleteRoomAndStorage(sb, roomId) {
+  const { paths, error: listError } = await _listRoomFilePaths(sb, roomId);
+  if (listError) return { error: listError };
+
+  const { error: storageError } = await _removeStorageObjects(sb, paths);
+  if (storageError) return { error: storageError };
+
+  const { error } = await sb.from('syncpad_rooms').delete().eq('room_id', roomId);
+  return { error };
+}
+
+async function _deleteExpiredRoomsAndStorage(sb) {
+  const nowIso = new Date().toISOString();
+  const { data: rooms, error: roomsError } = await sb
+    .from('syncpad_rooms')
+    .select('room_id')
+    .lt('expires_at', nowIso)
+    .not('expires_at', 'is', null);
+  if (roomsError) return { error: roomsError, count: null };
+
+  const roomIds = (rooms || []).map(row => row.room_id).filter(Boolean);
+  if (!roomIds.length) return { error: null, count: 0 };
+
+  const files = [];
+  for (const batch of _chunks(roomIds, ADMIN_QUERY_BATCH_SIZE)) {
+    const { data, error: filesError } = await sb
+      .from('syncpad_files')
+      .select('file_path')
+      .in('room_id', batch);
+    if (filesError) return { error: filesError, count: null };
+    files.push(...(data || []));
+  }
+
+  const { error: storageError } = await _removeStorageObjects(
+    sb,
+    (files || []).map(row => row.file_path),
+  );
+  if (storageError) return { error: storageError, count: null };
+
+  let deletedCount = 0;
+  for (const batch of _chunks(roomIds, ADMIN_QUERY_BATCH_SIZE)) {
+    const { error, count } = await sb
+      .from('syncpad_rooms')
+      .delete({ count: 'exact' })
+      .in('room_id', batch);
+    if (error) return { error, count: null };
+    deletedCount += count || 0;
+  }
+  return { error: null, count: deletedCount };
 }
 
 // ── Admin dialog helpers ──────────────────────────────────────────────────────

@@ -2,17 +2,14 @@
 // Export and copy behavior: empty warning, file downloads, copy to clipboard.
 
 import { test, expect } from '@playwright/test';
-import { createRoom, typeInEditor, waitForToast } from './helpers.js';
+import { createRoom, openMoreMenu, typeInEditor, waitForToast } from './helpers.js';
 
 test.describe('Export — empty note guard', () => {
   // Helper: open the tools panel and confirm the export sub-section is accessible
   async function openExportPanel(page) {
-    // Try the tools panel first
-    const toolsBtn = page.locator('#btn-tools, [data-panel="tools-panel"]').first();
-    if (await toolsBtn.count() > 0) {
-      await toolsBtn.click();
-      await page.waitForTimeout(300);
-    }
+    await openMoreMenu(page);
+    await page.locator('#btn-export').click();
+    await expect(page.locator('#export-modal')).toBeVisible();
   }
 
   test('exporting txt with empty note shows warning toast', async ({ page }) => {
@@ -62,10 +59,9 @@ test.describe('Copy to clipboard', () => {
     await createRoom(page);
     await page.locator('#note-editor').fill('');
 
-    // Open tools panel
-    const toolsBtn = page.locator('#btn-tools, [data-panel="tools-panel"]').first();
-    if (await toolsBtn.count() > 0) await toolsBtn.click();
-    await page.waitForTimeout(300);
+    await openMoreMenu(page);
+    await page.locator('#btn-export').click();
+    await expect(page.locator('#export-modal')).toBeVisible();
 
     const copyBtn = page.locator('#export-copy-text');
     if (await copyBtn.count() > 0) {

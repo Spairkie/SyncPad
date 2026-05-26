@@ -7,7 +7,8 @@ const fs = require('fs');
 const path = require('path');
 
 const PORT = process.env.PORT || 5555;
-const ROOT = path.resolve(__dirname, '..', '..'); // /home/user/ (parent of SyncPad)
+const APP_ROOT = path.resolve(__dirname, '..');
+const BASE = '/SyncPad';
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -22,11 +23,16 @@ const MIME = {
   '.md':   'text/markdown',
 };
 
-const SPA_INDEX = path.join(ROOT, 'SyncPad', 'index.html');
+const SPA_INDEX = path.join(APP_ROOT, 'index.html');
 
 http.createServer((req, res) => {
   const urlPath = req.url.split('?')[0];
-  const filePath = path.join(ROOT, urlPath);
+  const relativePath = urlPath === BASE
+    ? '/'
+    : urlPath.startsWith(`${BASE}/`)
+      ? urlPath.slice(BASE.length)
+      : urlPath;
+  const filePath = path.join(APP_ROOT, relativePath);
 
   const tryServe = (fp) => {
     const ext = path.extname(fp).toLowerCase();
@@ -43,7 +49,7 @@ http.createServer((req, res) => {
   if (!tryServe(filePath)) {
     if (!tryServe(path.join(filePath, 'index.html'))) {
       // SPA fallback: serve /SyncPad/index.html for all /SyncPad/* routes
-      if (urlPath.startsWith('/SyncPad/') || urlPath === '/SyncPad') {
+      if (urlPath.startsWith(`${BASE}/`) || urlPath === BASE) {
         tryServe(SPA_INDEX) || (res.writeHead(404), res.end('404'));
       } else {
         res.writeHead(404); res.end('Not Found');

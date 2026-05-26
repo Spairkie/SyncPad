@@ -36,6 +36,7 @@ export async function createRoom(page) {
   }
   await page.click('.landing-create-btn');
   await page.waitForSelector('#app-screen:not(.hidden)', { timeout: 15_000 });
+  await page.waitForFunction(() => window.__syncpadEventsWired === true, null, { timeout: 5000 });
   // Extract room ID from URL
   const url = page.url();
   const match = url.match(/\/SyncPad\/([^/?#]+)/);
@@ -60,12 +61,78 @@ export async function getEditorContent(page) {
 
 /** Open a named side panel (tools, files, presence, settings, search). */
 export async function openPanel(page, panelId) {
+  if (!panelId.endsWith('-panel')) panelId = `${panelId}-panel`;
   const panel = page.locator(`#${panelId}`);
   if (await panel.evaluate(el => el.classList.contains('open'))) return;
-  // Find the toggle button by its aria-controls or data attribute
+
+  const desktopButtons = {
+    'tools-panel': '#btn-tools',
+    'files-panel': '#btn-files',
+    'presence-panel': '#btn-presence',
+    'settings-panel': '#btn-settings',
+  };
+  const mobileButtons = {
+    'tools-panel': '#mob-btn-tools',
+    'files-panel': '#mob-btn-files',
+    'presence-panel': '#mob-btn-presence',
+    'settings-panel': '#mob-btn-settings',
+  };
+
+  const mobileSelector = mobileButtons[panelId];
+  const mobileBtn = mobileSelector ? page.locator(mobileSelector) : null;
+  if (mobileBtn && await mobileBtn.isVisible().catch(() => false)) {
+    await mobileBtn.click();
+    await expect(panel).toHaveClass(/open/);
+    return;
+  }
+
+  if (desktopButtons[panelId]) {
+    await openMoreMenu(page);
+    await page.locator(desktopButtons[panelId]).click();
+    await expect(panel).toHaveClass(/open/);
+    return;
+  }
+
   const btn = page.locator(`[aria-controls="${panelId}"], [data-panel="${panelId}"]`).first();
   await btn.click();
   await expect(panel).toHaveClass(/open/);
+}
+
+export async function openMoreMenu(page) {
+  const moreBtn = page.locator('#btn-more');
+  const dropdown = page.locator('#more-dropdown');
+  await expect(moreBtn).toBeVisible();
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    if (await dropdown.evaluate(el => el.classList.contains('open')).catch(() => false)) return;
+    await moreBtn.click();
+    try {
+      await expect(dropdown).toHaveClass(/open/, { timeout: 1000 });
+      return;
+    } catch {
+      await page.waitForTimeout(250);
+    }
+  }
+  await expect(dropdown).toHaveClass(/open/);
+}
+
+export async function setEditorMode(page, mode) {
+  const button = page.locator(`.md-seg-btn[data-mode="${mode}"]`);
+  const wrap = page.locator('.editor-wrap');
+  await expect(button).toBeVisible();
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const classes = await wrap.getAttribute('class').catch(() => '') || '';
+    if (classes.includes(`mode-${mode}`)) return;
+    await button.click();
+    try {
+      await expect(wrap).toHaveClass(new RegExp(`mode-${mode}`), { timeout: 1000 });
+      return;
+    } catch {
+      await page.waitForTimeout(250);
+    }
+  }
+  await expect(wrap).toHaveClass(new RegExp(`mode-${mode}`));
 }
 
 /** Wait for a toast notification containing the given text. */

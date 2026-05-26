@@ -3,11 +3,11 @@
 // theme switching, file sort.
 
 import { test, expect } from '@playwright/test';
-import { createRoom, openPanel, waitForToast } from './helpers.js';
+import { createRoom, openPanel, openMoreMenu, waitForToast } from './helpers.js';
 
 async function openSettingsPanel(page) {
-  const btn = page.locator('[aria-controls="settings-panel"], #btn-settings').first();
-  await btn.click();
+  await openMoreMenu(page);
+  await page.locator('#btn-settings').click();
   await page.waitForSelector('#settings-panel.open', { timeout: 5000 });
 }
 

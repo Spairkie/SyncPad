@@ -3,7 +3,7 @@
 // split/preview mode, export actions.
 
 import { test, expect } from '@playwright/test';
-import { createRoom, typeInEditor, getEditorContent, waitForToast } from './helpers.js';
+import { createRoom, openMoreMenu, setEditorMode, waitForToast } from './helpers.js';
 
 test.describe('Editor', () => {
   test('displays the text area and accepts input', async ({ page }) => {
@@ -32,8 +32,7 @@ test.describe('Editor', () => {
   test('preview mode hides editor and shows preview pane', async ({ page }) => {
     await createRoom(page);
     await page.locator('#note-editor').fill('# Preview heading');
-    // Click the Preview segment button
-    await page.locator('.md-seg-btn[data-mode="preview"]').click();
+    await setEditorMode(page, 'preview');
     await expect(page.locator('#note-editor')).toBeHidden();
     await expect(page.locator('#note-preview')).toBeVisible();
     await expect(page.locator('#note-preview')).toContainText('Preview heading');
@@ -42,7 +41,7 @@ test.describe('Editor', () => {
   test('split mode shows both editor and preview', async ({ page }) => {
     await createRoom(page);
     await page.locator('#note-editor').fill('**bold** text');
-    await page.locator('.md-seg-btn[data-mode="split"]').click();
+    await setEditorMode(page, 'split');
     await expect(page.locator('#note-editor')).toBeVisible();
     await expect(page.locator('#note-preview')).toBeVisible();
     await expect(page.locator('#note-preview')).toContainText('bold');
@@ -50,9 +49,9 @@ test.describe('Editor', () => {
 
   test('returning to write mode hides preview', async ({ page }) => {
     await createRoom(page);
-    await page.locator('.md-seg-btn[data-mode="preview"]').click();
+    await setEditorMode(page, 'preview');
     await expect(page.locator('#note-preview')).toBeVisible();
-    await page.locator('.md-seg-btn[data-mode="write"]').click();
+    await setEditorMode(page, 'write');
     await expect(page.locator('#note-preview')).toBeHidden();
     await expect(page.locator('#note-editor')).toBeVisible();
   });
@@ -61,7 +60,7 @@ test.describe('Editor', () => {
     await createRoom(page);
     await page.locator('#note-editor').fill('export me');
     // #btn-export lives inside #more-dropdown; open it via #btn-more first.
-    await page.locator('#btn-more').click();
+    await openMoreMenu(page);
     await page.locator('#btn-export').click();
     await expect(page.locator('#export-modal')).toBeVisible({ timeout: 3000 });
   });
@@ -71,7 +70,7 @@ test.describe('Editor', () => {
     // Clear editor
     await page.locator('#note-editor').fill('');
     // #btn-export lives inside #more-dropdown; open it via #btn-more first.
-    await page.locator('#btn-more').click();
+    await openMoreMenu(page);
     await page.locator('#btn-export').click();
     // Click export .txt button in modal
     await page.locator('#export-txt').click();

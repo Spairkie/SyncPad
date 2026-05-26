@@ -99,9 +99,21 @@ let _selectedFiles   = new Set(); // Set<file.id>
 let _filesSort       = 'newest';  // sort order for the files panel (not room-scoped)
 
 
-const BASE = '/SyncPad';
+const BASE = _normalizeBasePath(window.SYNCPAD_CONFIG?.basePath ?? '/SyncPad');
 const EXPIRATION_TIMER_MAX_DELAY_MS = 2147483647;
 
+function _normalizeBasePath(basePath) {
+  const raw = String(basePath || '').trim();
+  if (!raw || raw === '/') return '';
+  return `/${raw.replace(/^\/+|\/+$/g, '')}`;
+}
+
+function _stripBasePath(pathname) {
+  if (!BASE) return pathname;
+  return pathname === BASE || pathname.startsWith(`${BASE}/`)
+    ? pathname.slice(BASE.length) || '/'
+    : pathname;
+}
 
 // Use REPORT_REASONS imported from rooms.js to keep client and server in sync.
 const REPORT_REASON_OPTIONS = REPORT_REASONS;
@@ -124,7 +136,7 @@ function _resetReportRoomModal() {
 const RESERVED_ROOM_PATHS = new Set(['admin', 'contact', 'privacy', 'terms', 'share', 'assets', 'src', 'styles', 'docs']);
 
 function _parseRoute() {
-  const cleaned = location.pathname.replace(BASE, '').replace(/^\/+|\/+$/g, '');
+  const cleaned = _stripBasePath(location.pathname).replace(/^\/+|\/+$/g, '');
   if (!cleaned) return { type: 'landing' };
 
   if (cleaned === 'contact') return { type: 'contact' };
@@ -293,7 +305,7 @@ function wireLandingEvents() {
     let id;
     try {
       const url = new URL(raw);
-      id = url.pathname.replace(BASE, '').replace(/^\/+|\/+$/g, '');
+      id = _stripBasePath(url.pathname).replace(/^\/+|\/+$/g, '');
     } catch {
       id = raw;
     }
@@ -436,18 +448,6 @@ async function joinRoom(roomId) {
       'Could not load room — check your connection and try again.',
       () => joinRoom(roomId),  // retry callback
     );
-    return;
-  }
-
-  // Read-only share links cannot satisfy passcode or encryption prompts —
-  // the viewer doesn't have the credentials. Show a clear info screen instead
-  // of leaving them stuck at an auth form they can never complete.
-  if (_isReadOnly && (_room.passcode_hash || _room.encryption_enabled)) {
-    UI.setInfoScreen({
-      title: 'Room is locked',
-      message: 'This read-only link points to a room protected by a passcode or encryption key. Contact the room owner for access.',
-    });
-    UI.showScreen('info');
     return;
   }
 
@@ -1099,6 +1099,53 @@ function _updateExpirationPreview() {
   preview.textContent = `Preview: This room will clear around ${new Date(Date.now() + ms).toLocaleString()}.`;
 }
 // ── Event wiring (guarded against double-wire) ────────────────────────────────
+
+function _openTemplatesModalFresh() {
+  UI.openTemplatesModal(
+    TEMPLATES,
+    getCustomTemplates(),
+    _onTemplateChosen,
+    (key) => { deleteCustomTemplate(key); },
+    (key, label) => { renameCustomTemplate(key, label); },
+    {
+      onExport: () => {
+        const json = exportCustomTemplates();
+        const blob = new Blob([json], { type: 'application/json' });
+        const a    = Object.assign(document.createElement('a'), {
+          href: URL.createObjectURL(blob), download: 'syncpad-templates.json',
+        });
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        URL.revokeObjectURL(a.href);
+        UI.showToast('Templates exported.', 'success');
+      },
+      onImport: () => {
+        const inp = Object.assign(document.createElement('input'), {
+          type: 'file', accept: 'application/json,.json',
+        });
+        inp.onchange = () => {
+          const f = inp.files[0]; if (!f) return;
+          if (f.size > 1024 * 1024) { UI.showToast('File too large (max 1 MB for template import).', 'error'); return; }
+          const r = new FileReader();
+          r.onerror = () => UI.showToast('Could not read file.', 'error');
+          r.onload = (e) => {
+            let count;
+            try { count = importCustomTemplates(String(e.target.result)); }
+            catch (err) {
+              if (err?.code === 'QUOTA_EXCEEDED') { UI.showToast('Browser storage is full - could not import templates.', 'error'); return; }
+              UI.showToast('Import failed.', 'error'); return;
+            }
+            if (count < 0) { UI.showToast('Invalid file - expected a JSON object of templates.', 'error'); return; }
+            UI.showToast(`Imported ${count} template${count !== 1 ? 's' : ''}.`, 'success');
+            UI.closeModal('templates-modal');
+            setTimeout(_openTemplatesModalFresh, 150);
+          };
+          r.readAsText(f);
+        };
+        inp.click();
+      },
+    }
+  );
+}
 
 function wireEvents() {
   // Shortcuts are always re-wired: they were destroyed in teardownRealtimeSession()
@@ -1863,6 +1910,10 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
           : `Saved as template "${label.trim()}".`,
         'success',
       );
+      if (document.getElementById('templates-modal')?.classList.contains('visible')) {
+        UI.closeModal('templates-modal');
+        setTimeout(_openTemplatesModalFresh, 150);
+      }
     } catch (err) {
       if (err?.code === 'QUOTA_EXCEEDED') { UI.showToast('Browser storage is full — template could not be saved.', 'error'); return; }
       UI.showToast('Could not save template.', 'error');
@@ -1907,11 +1958,8 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
     if (_searchMatches.length > 0) {
       _searchIndex = 0;
       _jumpToMatch(0);
-    }
-    if (searchCount) {
-      searchCount.textContent = _searchMatches.length > 0
-        ? `${_searchMatches.length} match${_searchMatches.length !== 1 ? 'es' : ''}`
-        : 'No matches';
+    } else if (searchCount) {
+      searchCount.textContent = 'No results';
     }
     _syncReplaceButtons();
   };
@@ -2061,6 +2109,7 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
     );
   });
 
+  window.__syncpadEventsWired = true;
 }
 
 function teardownRealtimeSession() {

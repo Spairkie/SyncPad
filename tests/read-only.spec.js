@@ -2,7 +2,15 @@
 // Read-only share link behavior: access, editor disabled, no upload/delete.
 
 import { test, expect } from '@playwright/test';
-import { createRoom, goToLanding, typeInEditor, getEditorContent } from './helpers.js';
+import { closePanels, createRoom, openPanel, typeInEditor, waitForToast } from './helpers.js';
+
+async function getReadOnlyShareUrl(page) {
+  await closePanels(page);
+  await page.locator('#btn-share').click();
+  const input = page.locator('#share-readonly-text');
+  await expect(input).toHaveValue(/\/SyncPad\/share\//, { timeout: 15_000 });
+  return input.inputValue();
+}
 
 test.describe('Read-only links', () => {
   test('direct URL with ?mode=read shows app in read-only state', async ({ page }) => {
@@ -101,5 +109,87 @@ test.describe('Read-only links', () => {
     if (infoVisible) {
       await expect(infoScreen).not.toHaveClass(/hidden/);
     }
+  });
+
+  test('read-only viewer can unlock a passcode-protected room and remains read-only', async ({ page }) => {
+    const roomId = await createRoom(page);
+    await openPanel(page, 'settings');
+
+    page.once('dialog', async (dialog) => {
+      await dialog.accept('reader-secret');
+    });
+    await page.locator('#setting-passcode-btn').click();
+    await waitForToast(page, 'Passcode set.');
+
+    await page.goto(`/SyncPad/${roomId}?mode=read`);
+    await page.waitForSelector('#passcode-screen:not(.hidden)', { timeout: 15_000 });
+    await page.locator('#passcode-input').fill('reader-secret');
+    await page.locator('#passcode-submit-btn').click();
+
+    await page.waitForSelector('#app-screen:not(.hidden)', { timeout: 15_000 });
+    await expect(page.locator('#note-editor')).toHaveJSProperty('readOnly', true);
+  });
+
+  test('read-only share link can unlock a passcode-protected room and remains read-only', async ({ page }) => {
+    await createRoom(page);
+    await openPanel(page, 'settings');
+
+    page.once('dialog', async (dialog) => {
+      await dialog.accept('shared-reader-secret');
+    });
+    await page.locator('#setting-passcode-btn').click();
+    await waitForToast(page, 'Passcode set.');
+
+    const readOnlyUrl = await getReadOnlyShareUrl(page);
+    await page.goto(readOnlyUrl);
+    await page.waitForSelector('#passcode-screen:not(.hidden)', { timeout: 15_000 });
+    await page.locator('#passcode-input').fill('shared-reader-secret');
+    await page.locator('#passcode-submit-btn').click();
+
+    await page.waitForSelector('#app-screen:not(.hidden)', { timeout: 15_000 });
+    await expect(page.locator('#note-editor')).toHaveJSProperty('readOnly', true);
+  });
+
+  test('read-only viewer can decrypt an encrypted room and remains read-only', async ({ page }) => {
+    const roomId = await createRoom(page);
+    await typeInEditor(page, 'encrypted read-only content');
+    await openPanel(page, 'settings');
+
+    page.once('dialog', async (dialog) => {
+      await dialog.accept('reader-passphrase');
+    });
+    await page.locator('#setting-enc-btn').click();
+    await waitForToast(page, 'Encryption enabled.', { timeout: 15_000 });
+
+    await page.goto(`/SyncPad/${roomId}?mode=read`);
+    await page.waitForSelector('#encryption-screen:not(.hidden)', { timeout: 15_000 });
+    await page.locator('#encryption-input').fill('reader-passphrase');
+    await page.locator('#encryption-submit-btn').click();
+
+    await page.waitForSelector('#app-screen:not(.hidden)', { timeout: 15_000 });
+    await expect(page.locator('#note-editor')).toHaveValue('encrypted read-only content');
+    await expect(page.locator('#note-editor')).toHaveJSProperty('readOnly', true);
+  });
+
+  test('read-only share link can decrypt an encrypted room and remains read-only', async ({ page }) => {
+    await createRoom(page);
+    await typeInEditor(page, 'encrypted share-link content');
+    await openPanel(page, 'settings');
+
+    page.once('dialog', async (dialog) => {
+      await dialog.accept('shared-reader-passphrase');
+    });
+    await page.locator('#setting-enc-btn').click();
+    await waitForToast(page, 'Encryption enabled.', { timeout: 15_000 });
+
+    const readOnlyUrl = await getReadOnlyShareUrl(page);
+    await page.goto(readOnlyUrl);
+    await page.waitForSelector('#encryption-screen:not(.hidden)', { timeout: 15_000 });
+    await page.locator('#encryption-input').fill('shared-reader-passphrase');
+    await page.locator('#encryption-submit-btn').click();
+
+    await page.waitForSelector('#app-screen:not(.hidden)', { timeout: 15_000 });
+    await expect(page.locator('#note-editor')).toHaveValue('encrypted share-link content');
+    await expect(page.locator('#note-editor')).toHaveJSProperty('readOnly', true);
   });
 });

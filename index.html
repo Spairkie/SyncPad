@@ -47,7 +47,8 @@
 
   <!-- ⚠️  Replace with your Supabase project credentials -->
   <script>
-    window.SYNCPAD_CONFIG = {
+  window.SYNCPAD_CONFIG = {
+      basePath:        '/SyncPad',
       supabaseUrl:     'https://ddehkgdssdhhwpqljbiq.supabase.co',
       supabaseAnonKey: 'sb_publishable_ElR85NRU23YFtFaCHqu4qw_gzGMaN_r',
       web3FormsAccessKey: '8fcb1063-d426-4062-a5d9-067749be79d0',
@@ -215,7 +216,7 @@
     <div class="auth-card-icon">ℹ️</div>
     <h2 id="info-title">Info</h2>
     <p id="info-message"></p>
-    <button class="auth-btn" onclick="window.location.href='/SyncPad/'">Back to SyncPad</button>
+    <a class="auth-btn" href="/SyncPad/">Back to SyncPad</a>
   </div>
 </div>
 
@@ -515,8 +516,8 @@
       <select class="files-sort-select" id="files-sort" aria-label="Sort files">
         <option value="newest">Newest</option>
         <option value="oldest">Oldest</option>
-        <option value="name-asc">A → Z</option>
-        <option value="name-desc">Z → A</option>
+        <option value="name-asc">Name A → Z</option>
+        <option value="name-desc">Name Z → A</option>
         <option value="size-desc">Largest</option>
         <option value="size-asc">Smallest</option>
       </select>

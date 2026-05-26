@@ -27,7 +27,7 @@ These features exist as UX conveniences. They do not constitute security boundar
 
 | Feature | How It Works | Bypass |
 |---|---|---|
-| Read-only share links | Bearer token embedded in link; share link record contains a `read_only` flag | Anyone with the anon key can call the Supabase REST API directly and write to the room |
+| Read-only share links | Bearer token embedded in `/share/:token`; token resolves to a room and the frontend enters read-only mode | Anyone with the anon key can call the Supabase REST API directly and write to the room |
 | Room lock | `is_locked` is a JavaScript-checked flag in the room record | Calling the API directly ignores the lock |
 | Passcode protection | PBKDF2 hash of the passcode is stored in `syncpad_rooms`; the client computes and compares the hash | The hash is readable by anyone with the anon key; the passcode itself is not stored, but a determined attacker can attempt offline brute-force against the hash |
 | View-once rooms | Server clears content after the first non-creator editable view | A viewer can still copy or screenshot content before the server clears it; the clearing is not atomic with the act of viewing |
@@ -52,7 +52,7 @@ SyncPad supports optional in-browser AES-256-GCM encryption for room text conten
 ### Algorithm and Key Derivation
 
 - **Cipher:** AES-256-GCM (authenticated encryption — provides both confidentiality and integrity)
-- **Key derivation:** PBKDF2 with SHA-256, 100,000 iterations
+- **Key derivation:** PBKDF2 with SHA-256, 200,000 iterations for text encryption
 - **Salt:** Generated per room, stored in `syncpad_rooms.encryption_salt`
 - **Passphrase:** Provided by the user — never stored anywhere
 
@@ -180,7 +180,7 @@ If SyncPad is ever deployed for broader use, the following items should be addre
 
 **Web3Forms allowed domain.** The contact/report form uses Web3Forms. Configure the allowed domain in the Web3Forms dashboard to restrict form submissions to your production domain. Without this, anyone can submit forms using your Web3Forms key from any origin.
 
-**RLS audit.** Review every RLS policy against the intended access matrix in the [Supabase RLS Summary](#supabase-rls-summary) section. Pay particular attention to UPDATE policies on `syncpad_rooms` — verify that a room's `is_locked`, `is_read_only`, and passcode hash fields cannot be overwritten by an anon request that bypasses frontend checks.
+**RLS audit.** SyncPad intentionally keeps room and file RLS broad for a transparent demo project. If the project ever changes direction toward real backend-enforced sharing, redesign room access around server-verifiable room/share tokens before tightening policies.
 
 **Storage bucket review.** Confirm the `syncpad-files` bucket has no public access enabled. Review the storage policies to ensure that file SELECT and INSERT are tied to room membership in a way that RLS enforces, not just frontend logic.
 
@@ -188,7 +188,7 @@ If SyncPad is ever deployed for broader use, the following items should be addre
 
 **Room ID entropy.** If room IDs are short, consider increasing their length or character space to raise the cost of brute-force enumeration.
 
-**PBKDF2 iterations.** 100,000 iterations is a reasonable floor as of 2024, but the appropriate value increases over time. Review the current OWASP recommendation before launch and adjust if needed.
+**PBKDF2 iterations.** Passcode hashes use 100,000 PBKDF2 iterations and text encryption uses 200,000. Review current OWASP guidance before any broader launch and adjust if needed.
 
 **Content Security Policy.** Add a `Content-Security-Policy` header that restricts script sources to your own origin. This hardens the XSS mitigations already present in the code by providing a browser-enforced second line of defense.
 

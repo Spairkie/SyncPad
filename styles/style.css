@@ -312,7 +312,7 @@ svg { display: block; flex-shrink: 0; }
   display: flex; align-items: center; gap: 10px;
   padding: 10px 14px;
   background: var(--bg-surface); border-bottom: 1px solid var(--border);
-  flex-shrink: 0; position: relative; z-index: 20;
+  flex-shrink: 0; position: relative; z-index: 120;
 }
 .header-logo {
   font-size: 16px; font-weight: 600; color: var(--text-primary);
@@ -410,7 +410,7 @@ svg { display: block; flex-shrink: 0; }
   min-width: 182px;
   background: var(--bg-surface); border: 1px solid var(--border);
   border-radius: var(--radius-md); box-shadow: var(--shadow-lg);
-  z-index: 100; overflow: hidden;
+  z-index: 130; overflow: hidden;
   transform-origin: top right;
   transform: scale(0.9) translateY(-4px); opacity: 0; pointer-events: none;
   transition: transform 0.15s ease, opacity 0.15s ease;

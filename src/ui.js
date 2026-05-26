@@ -832,7 +832,11 @@ export function setViewOnceConsumedPanel({
 
   startBtn.classList.toggle('hidden', !!readOnly);
   startBtn.onclick = readOnly ? null : onStartNew;
-  homeBtn.onclick = () => { window.location.href = '/SyncPad/'; };
+  homeBtn.onclick = () => {
+    const raw = String(window.SYNCPAD_CONFIG?.basePath ?? '/SyncPad').trim();
+    const base = (!raw || raw === '/') ? '' : `/${raw.replace(/^\/+|\/+$/g, '')}`;
+    window.location.href = `${base}/`;
+  };
 }
 
 // ── File upload zone ──────────────────────────────────────────────────────────
