@@ -1029,7 +1029,7 @@ body.lock-mode .note-preview li.md-task input[type="checkbox"] { cursor: not-all
 .share-native-btn:hover { background: var(--bg-base); border-color: var(--accent); }
 
 /* ── Templates modal ────────────────────────────────────────── */
-.templates-modal { max-width: 480px; }
+.templates-modal { max-width: 680px; }
 .templates-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
 .templates-header h3 { margin: 0; }
 .templates-close {
@@ -1040,16 +1040,69 @@ body.lock-mode .note-preview li.md-task input[type="checkbox"] { cursor: not-all
 .templates-close svg { width: 16px; height: 16px; }
 .templates-close:hover { background: var(--bg-elevated); color: var(--text-primary); }
 .templates-body { min-height: 80px; }
+
+/* Search bar */
+.tmpl-search-wrap { margin-bottom: 10px; }
+.tmpl-search-input {
+  width: 100%; padding: 8px 12px; font-size: 13px;
+  background: var(--bg-input); border: 1px solid var(--border);
+  border-radius: var(--radius-md); color: var(--text-primary); outline: none;
+  transition: border-color var(--transition);
+}
+.tmpl-search-input:focus { border-color: var(--accent); }
+.tmpl-search-input::placeholder { color: var(--text-muted); }
+.tmpl-no-results {
+  grid-column: 1 / -1; font-size: 13px; color: var(--text-muted);
+  text-align: center; padding: 18px 0;
+}
+
+/* Two-column layout: list + preview */
+.tmpl-two-col {
+  display: grid; grid-template-columns: 1fr 200px; gap: 12px;
+  max-height: 340px;
+}
+.tmpl-list-col { overflow-y: auto; min-width: 0; }
+.tmpl-preview-col {
+  overflow-y: auto;
+  background: var(--bg-input); border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md); padding: 10px;
+}
+.tmpl-preview-body {
+  font-family: var(--font-mono); font-size: 11px;
+  color: var(--text-secondary); line-height: 1.5;
+  white-space: pre-wrap; word-break: break-word; margin: 0;
+}
+
+/* Template list */
 .templates-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .template-btn {
-  display: flex; align-items: center; padding: 12px 14px;
+  display: flex; flex-direction: column; align-items: flex-start;
+  padding: 10px 12px;
   background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-md);
   color: var(--text-primary); font-size: 13px; font-weight: 500;
-  cursor: pointer; text-align: left;
+  cursor: pointer; text-align: left; gap: 3px;
   transition: background var(--transition), border-color var(--transition);
 }
 .template-btn:hover  { background: var(--bg-base); border-color: var(--accent); }
+.template-btn:hover .template-desc { color: var(--text-secondary); }
+.template-btn:focus  { border-color: var(--accent); outline: none; }
 .template-btn:active { transform: scale(0.97); }
+.template-desc {
+  font-size: 11px; font-weight: 400; color: var(--text-muted);
+  line-height: 1.4; transition: color var(--transition);
+}
+
+/* Export/import bar in custom tab */
+.tmpl-io-bar { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+.tmpl-io-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 6px 12px; font-size: 12px; font-weight: 500;
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: var(--radius-md); color: var(--text-secondary);
+  transition: background var(--transition), border-color var(--transition), color var(--transition);
+}
+.tmpl-io-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--text-primary); }
+.tmpl-io-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .template-choice-msg { font-size: 14px; color: var(--text-primary); margin: 6px 0 16px; line-height: 1.5; }
 .template-choice-actions { display: flex; flex-direction: column; gap: 8px; }
 .template-choice-btn {
@@ -1215,6 +1268,8 @@ body.lock-mode .note-preview li.md-task input[type="checkbox"] { cursor: not-all
   .auth-card { padding: 28px 20px; }
   .tools-grid { grid-template-columns: 1fr 1fr 1fr; }
   .templates-list { grid-template-columns: 1fr; }
+  .tmpl-two-col { grid-template-columns: 1fr; max-height: unset; }
+  .tmpl-preview-col { display: none; }
   .share-modal { padding: 18px 16px; }
   .share-url-box { align-items: stretch; flex-direction: column; gap: 7px; }
   .share-copy-btn { width: 100%; min-height: 36px; }
