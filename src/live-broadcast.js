@@ -24,7 +24,6 @@ export function initBroadcast(roomId, handlers) {
     .on('broadcast', { event: 'settings' },         (m) => { const p = m.payload; if (!p || p.device_id === deviceId) return; _handlers.onRemoteSettings?.(p); })
     .on('broadcast', { event: 'files' },            (m) => { const p = m.payload; if (!p || p.device_id === deviceId) return; _handlers.onRemoteFiles?.(p); })
     .on('broadcast', { event: 'clear' },            (m) => { const p = m.payload; if (!p || p.device_id === deviceId) return; _handlers.onRemoteClear?.(p); })
-    .on('broadcast', { event: 'expired' },          (m) => { const p = m.payload; if (!p || p.device_id === deviceId) return; _handlers.onRemoteExpired?.(p); })
     .on('broadcast', { event: 'view_once_cleared' },(m) => { const p = m.payload; if (!p || p.device_id === deviceId) return; _handlers.onRemoteViewOnce?.(p); })
     .subscribe();
 
@@ -97,11 +96,6 @@ export function broadcastFilesChange() {
 /** Signal other devices that the note was manually cleared. */
 export function broadcastClear(reason) {
   _send('clear', { reason: reason || 'manual', ts: Date.now() });
-}
-
-/** Signal other devices that the note expired. */
-export function broadcastExpired() {
-  _send('expired', { ts: Date.now() });
 }
 
 /** Signal other devices that a view-once note was consumed. */

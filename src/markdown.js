@@ -168,16 +168,22 @@ function _renderInline(raw) {
   // 2. Escape everything else
   text = escapeHtml(text);
 
-  // 3. Bold then italic (non-greedy)
+  // 3. Bold then italic (non-greedy).
+  // Word-boundary guards (negative lookbehind/ahead on [a-zA-Z0-9]) prevent
+  // underscore-based markers from matching inside identifiers like snake_case.
+  // Asterisk markers are left without boundary guards (less common in code).
   text = text.replace(/\*\*([^*\n]+?)\*\*/g, '<strong>$1</strong>');
-  text = text.replace(/__([^_\n]+?)__/g,     '<strong>$1</strong>');
+  text = text.replace(/(?<![a-zA-Z0-9])__([^_\n]+?)__(?![a-zA-Z0-9])/g, '<strong>$1</strong>');
   text = text.replace(/\*([^*\n]+?)\*/g,     '<em>$1</em>');
-  text = text.replace(/_([^_\n]+?)_/g,       '<em>$1</em>');
+  text = text.replace(/(?<![a-zA-Z0-9])_([^_\n]+?)_(?![a-zA-Z0-9])/g,   '<em>$1</em>');
 
   // 4. Links — http/https/mailto only.
+  // NOTE: `url` here comes from step-2-escaped text, so special chars like &
+  // are already encoded as &amp;. Do NOT call escapeHtml() again — that would
+  // produce double-encoded hrefs like &amp;amp; for URLs with query params.
   text = text.replace(/\[([^\]\n]+)\]\(([^)\s]+)\)/g, (full, label, url) => {
     if (!/^(?:https?:|mailto:)/i.test(url)) return full;
-    return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+    return `<a href="${url}" target="_blank" rel="noopener noreferrer">${label}</a>`;
   });
 
   // 5. Hard line breaks
