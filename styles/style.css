@@ -1322,6 +1322,20 @@ button:focus:not(:focus-visible) { outline: none; }
   color: var(--text-primary); font-size: 14px; font-family: inherit;
 }
 .search-count { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+
+/* Aa case-sensitive toggle inside the search bar */
+.search-case-btn {
+  flex-shrink: 0; background: transparent; border: 1px solid transparent;
+  border-radius: 4px; padding: 2px 5px; color: var(--text-muted);
+  font-size: 11px; font-weight: 700; letter-spacing: 0.03em; cursor: pointer;
+  line-height: 1; transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.search-case-btn:hover { border-color: var(--border); color: var(--text-secondary); }
+.search-case-btn.is-active {
+  border-color: var(--accent); color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.10);
+}
+
 .search-actions { display: flex; gap: 8px; margin-bottom: 14px; }
 .search-nav-btn {
   flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px;

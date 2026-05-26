@@ -96,4 +96,28 @@ test.describe('Settings panel', () => {
     expect(htmlTheme).toBeTruthy();
     expect(htmlTheme).not.toBe('');
   });
+
+  test('strip formatting on paste toggle is visible', async ({ page }) => {
+    await createRoom(page);
+    await openSettingsPanel(page);
+    const btn = page.locator('#setting-strip-paste-btn');
+    await expect(btn).toBeVisible();
+  });
+
+  test('strip formatting on paste toggles between On and Off', async ({ page }) => {
+    await createRoom(page);
+    await openSettingsPanel(page);
+    const btn = page.locator('#setting-strip-paste-btn');
+
+    // Default state is Off
+    await expect(btn).toHaveText('Off');
+
+    // Click to enable
+    await btn.click();
+    await expect(btn).toHaveText('On');
+
+    // Click to disable
+    await btn.click();
+    await expect(btn).toHaveText('Off');
+  });
 });

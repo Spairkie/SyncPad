@@ -654,6 +654,19 @@
       </div>
     </div>
 
+    <!-- Editor preferences -->
+    <div class="settings-section">
+      <div class="settings-section-title">Editor</div>
+
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Strip formatting on paste</div>
+          <div class="setting-sub">Always paste as plain text</div>
+        </div>
+        <button class="setting-btn" id="setting-strip-paste-btn" aria-pressed="false">Off</button>
+      </div>
+    </div>
+
     <!-- About -->
     <div class="settings-section">
       <div class="settings-section-title">About</div>
@@ -813,6 +826,7 @@
     <div class="search-bar">
       <input id="search-input" class="search-input" type="search" placeholder="Find…" autocomplete="off" spellcheck="false" aria-label="Search text" />
       <span class="search-count" id="search-count" aria-live="polite"></span>
+      <button class="search-case-btn" id="search-case" title="Case-sensitive search" aria-label="Toggle case-sensitive search" aria-pressed="false">Aa</button>
     </div>
     <div class="search-actions">
       <button class="search-nav-btn" id="search-prev" title="Previous match" aria-label="Previous match">
@@ -831,7 +845,7 @@
       <button class="replace-btn" id="replace-one" disabled title="Replace current match">Replace</button>
       <button class="replace-btn replace-btn--all" id="replace-all" disabled title="Replace all matches">Replace All</button>
     </div>
-    <p class="search-hint">Case-insensitive · Replace requires edit access.</p>
+    <p class="search-hint">Replace requires edit access. Aa = case-sensitive.</p>
   </div>
 </div>
 

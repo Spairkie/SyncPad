@@ -84,9 +84,14 @@ let _previewObserverWired = false;
 let _expPreset = '30s';
 
 // ── Search state ──────────────────────────────────────────────────────────────
-let _searchMatches = []; // [{start,end}]
-let _searchIndex   = -1;
-let _searchTerm    = '';
+let _searchMatches    = []; // [{start,end}]
+let _searchIndex      = -1;
+let _searchTerm       = '';
+let _caseSensitive    = false; // toggled by Aa button in F&R panel; reset on nav
+
+// ── Editor preferences (user-global, persisted to localStorage) ───────────────
+const _STRIP_PASTE_KEY = 'syncpad_strip_paste';
+let _stripPaste = localStorage.getItem(_STRIP_PASTE_KEY) === 'true';
 
 // ── Files bulk-select state ───────────────────────────────────────────────────
 let _filesSelectMode = false;
@@ -1840,7 +1845,8 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
   };
 
   const _runSearch = () => {
-    _searchTerm = (searchInput?.value || '').toLowerCase();
+    const raw = searchInput?.value || '';
+    _searchTerm = _caseSensitive ? raw : raw.toLowerCase();
     _searchMatches = [];
     _searchIndex   = -1;
     if (!_searchTerm || !editor) {
@@ -1851,7 +1857,7 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
       _syncReplaceButtons();
       return;
     }
-    const text = editor.value.toLowerCase();
+    const text = _caseSensitive ? editor.value : editor.value.toLowerCase();
     let pos = 0;
     while (true) {
       const idx = text.indexOf(_searchTerm, pos);
@@ -1957,9 +1963,12 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
     if (!_searchMatches.length || !_searchTerm || !editor) return;
     const count = _searchMatches.length;
     const replacement = replaceInput?.value ?? '';
-    // Escape the raw search term so it can be used in a RegExp safely.
-    const escaped = _searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    editor.value = editor.value.replace(new RegExp(escaped, 'gi'), replacement);
+    // Escape the raw search term for safe use in RegExp.
+    // Use the un-lowercased raw input for the pattern when case-sensitive.
+    const rawTerm = searchInput?.value || '';
+    const escaped = rawTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const flags   = _caseSensitive ? 'g' : 'gi';
+    editor.value = editor.value.replace(new RegExp(escaped, flags), replacement);
     editor.dispatchEvent(new Event('input', { bubbles: true }));
     UI.updateWordCount(editor.value);
     _refreshPreviewIfActive();
@@ -1967,6 +1976,50 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
     UI.showToast(`Replaced ${count} match${count !== 1 ? 'es' : ''}.`, 'success');
     // Return focus to search so the user can start a new query.
     searchInput?.focus();
+  });
+
+  // ── Case-sensitive toggle (Aa button) ─────────────────────────────────────
+  const caseBtn = document.getElementById('search-case');
+  caseBtn?.addEventListener('click', () => {
+    _caseSensitive = !_caseSensitive;
+    caseBtn.setAttribute('aria-pressed', String(_caseSensitive));
+    caseBtn.classList.toggle('is-active', _caseSensitive);
+    _runSearch();
+    searchInput?.focus();
+  });
+
+  // ── Paste sanitization ─────────────────────────────────────────────────────
+  // Strip HTML/RTF formatting on paste when the user preference is enabled.
+  // We intercept the paste event on the editor and substitute plain-text only.
+  editor?.addEventListener('paste', (e) => {
+    if (!_stripPaste) return;
+    const plain = e.clipboardData?.getData('text/plain');
+    if (plain === undefined) return;
+    e.preventDefault();
+    const start   = editor.selectionStart;
+    const end     = editor.selectionEnd;
+    editor.value  = editor.value.slice(0, start) + plain + editor.value.slice(end);
+    editor.setSelectionRange(start + plain.length, start + plain.length);
+    editor.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+
+  // ── Strip-paste setting button ─────────────────────────────────────────────
+  const _updateStripPasteUI = () => {
+    const btn = document.getElementById('setting-strip-paste-btn');
+    if (!btn) return;
+    btn.textContent = _stripPaste ? 'On' : 'Off';
+    btn.setAttribute('aria-pressed', String(_stripPaste));
+  };
+  _updateStripPasteUI();
+
+  document.getElementById('setting-strip-paste-btn')?.addEventListener('click', () => {
+    _stripPaste = !_stripPaste;
+    try { localStorage.setItem(_STRIP_PASTE_KEY, String(_stripPaste)); } catch {}
+    _updateStripPasteUI();
+    UI.showToast(
+      _stripPaste ? 'Paste formatting strip: On' : 'Paste formatting strip: Off',
+      'info', 2000
+    );
   });
 
 }
@@ -1990,10 +2043,14 @@ function teardownRealtimeSession() {
   _searchMatches = [];
   _searchIndex   = -1;
   _searchTerm    = '';
+  _caseSensitive = false;
   const _scEl = document.getElementById('search-count');
   if (_scEl) _scEl.textContent = '';
   const _siEl = document.getElementById('search-input');
   if (_siEl) _siEl.value = '';
+  // Reset the Aa toggle to case-insensitive so the next room starts fresh.
+  const _caseEl = document.getElementById('search-case');
+  if (_caseEl) { _caseEl.classList.remove('is-active'); _caseEl.setAttribute('aria-pressed', 'false'); }
   // Cancel any pending expiration timer. The callback closes over the
   // module-level _roomId / _room which will be updated to the NEXT room
   // before the timer fires — letting a stale timer run risks expiring the
