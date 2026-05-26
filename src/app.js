@@ -711,7 +711,21 @@ async function _decodeLocalDraft(draft) {
     return draft.content ?? '';
   }
 
-  if (!_encKey) return null;
+  if (!_encKey) {
+    // Draft is encrypted but we have no key. The most common cause is that
+    // encryption was removed from the room after the draft was saved — the
+    // ciphertext is now permanently unreadable. Clear it and warn the user so
+    // they know work may have been lost.
+    if (!_room?.encryption_enabled) {
+      clearDraft(_roomId);
+      UI.showToast(
+        'A local draft from when this room was encrypted could not be restored (encryption has since been removed). Draft discarded.',
+        'warning',
+        8000,
+      );
+    }
+    return null;
+  }
   try { return await decryptContent(draft.content || '', _encKey); }
   catch {
     // Wrong/corrupt local draft ciphertext should not block room loading.
@@ -1862,6 +1876,17 @@ window.addEventListener('beforeinstallprompt', (e) => {
     () => { localStorage.setItem(INSTALL_DISMISSED_KEY, '1'); }
   );
 });
+
+// ── Draft storage warning ─────────────────────────────────────────────────────
+// Fires at most once per page load when offline.js detects QuotaExceededError.
+// Using { once: true } so repeated keystrokes don't re-show the toast.
+window.addEventListener('syncpad:draft-storage-full', () => {
+  UI.showToast(
+    'Browser storage is full — local drafts cannot be saved. Your notes still sync to the server.',
+    'warning',
+    8000,
+  );
+}, { once: true });
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 
