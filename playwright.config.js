@@ -42,7 +42,19 @@ export default defineConfig({
   },
 
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    {
+      name: 'chromium',
+      use: {
+        ...devices['Desktop Chrome'],
+        // Use the locally-available Chromium binary. The npm-installed browser
+        // revision may differ from what's pre-cached in the environment;
+        // specifying executablePath bypasses the revision check.
+        launchOptions: {
+          executablePath: process.env.CHROMIUM_PATH || undefined,
+          args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+        },
+      },
+    },
     { name: 'firefox',  use: { ...devices['Desktop Firefox'] } },
     { name: 'webkit',   use: { ...devices['Desktop Safari'] } },
     {
@@ -51,11 +63,13 @@ export default defineConfig({
     },
   ],
 
-  /* Start a simple static server before tests */
+  /* Start a simple static server before tests.
+   * Must run from the *parent* directory so that /SyncPad/ maps to the
+   * repo root (matching the GitHub Pages deployment path). */
   webServer: {
-    command: 'npx serve . -l 5555 --no-clipboard',
-    url: 'http://localhost:5555',
+    command: 'cd .. && npx serve . -l 5555 --no-clipboard',
+    url: 'http://localhost:5555/SyncPad/',
     reuseExistingServer: !process.env.CI,
-    timeout: 20_000,
+    timeout: 30_000,
   },
 });
