@@ -174,6 +174,13 @@ svg { display: block; flex-shrink: 0; }
   border-radius: 50%; animation: spin 0.8s linear infinite;
 }
 .loading-message { font-size: 13px; color: var(--text-secondary); }
+.loading-retry-btn {
+  margin-top: 12px; padding: 8px 20px;
+  background: var(--accent); color: #000; font-weight: 600; font-size: 13px;
+  border: none; border-radius: var(--radius-md); cursor: pointer;
+  transition: opacity var(--transition);
+}
+.loading-retry-btn:hover { opacity: .85; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ══════════════════════════════════════════════════════════════
@@ -2197,8 +2204,9 @@ kbd {
 .admin-badge--pass { background: rgba(251,191,36,0.15);  color: var(--yellow); }
 .admin-badge--once { background: rgba(74,222,128,0.15);  color: var(--green); }
 .admin-badge--exp  { background: rgba(248,113,113,0.15); color: var(--red); }
-.admin-badge--alert { background: rgba(248,113,113,0.15); color: var(--red); }
-.admin-badge--muted { background: var(--bg-elevated); color: var(--text-muted); }
+.admin-badge--alert    { background: rgba(248,113,113,0.15); color: var(--red); }
+.admin-badge--muted    { background: var(--bg-elevated); color: var(--text-muted); }
+.admin-badge--reviewed { background: rgba(74,222,128,0.12); color: var(--green); }
 
 /* ── Cleanup tab ──────────────────────────────────────────── */
 .admin-cleanup { max-width: 640px; }
@@ -2220,6 +2228,38 @@ kbd {
 .admin-access-denied-icon  { font-size: 36px; margin-bottom: 12px; }
 .admin-access-denied-title { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
 .admin-access-denied-detail { font-size: 12px; color: var(--text-muted); }
+
+/* ── Refresh icon button ──────────────────────────────────── */
+.admin-icon-btn {
+  font-size: 18px; line-height: 1; padding: 4px 8px;
+  background: transparent; border: 1px solid var(--border);
+  border-radius: var(--radius-md); color: var(--text-secondary);
+  cursor: pointer; transition: background var(--transition), color var(--transition);
+}
+.admin-icon-btn:hover  { background: var(--bg-elevated); color: var(--text-primary); }
+.admin-icon-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+/* ── Skeleton loading ────────────────────────────────────── */
+@keyframes admin-shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position:  400px 0; }
+}
+.admin-skeleton {
+  background: linear-gradient(90deg, var(--bg-elevated) 25%, var(--bg-surface) 50%, var(--bg-elevated) 75%);
+  background-size: 800px 100%;
+  animation: admin-shimmer 1.4s infinite;
+  border-radius: 4px; color: transparent !important; min-width: 40px;
+}
+.admin-skeleton-bar {
+  display: inline-block;
+  background: linear-gradient(90deg, var(--bg-elevated) 25%, var(--bg-surface) 50%, var(--bg-elevated) 75%);
+  background-size: 800px 100%;
+  animation: admin-shimmer 1.4s infinite;
+}
+.admin-skeleton-row {
+  display: flex; gap: 12px; align-items: center;
+  padding: 10px 0; border-bottom: 1px solid var(--border);
+}
 
 /* ── Responsive ───────────────────────────────────────────── */
 @media (max-width: 639px) {
