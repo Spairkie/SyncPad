@@ -4,7 +4,7 @@ import { logSupabaseError, getDeviceId } from './utils.js';
 
 const TABLE = 'syncpad_rooms';
 
-const REPORT_REASONS = new Set(['Spam', 'Abuse or harassment', 'Illegal or harmful content', 'Private information', 'Other']);
+export const REPORT_REASONS = new Set(['Spam', 'Abuse or harassment', 'Illegal or harmful content', 'Private information', 'Other']);
 const REPORTS_TABLE = 'syncpad_room_reports';
 
 // ── Read ─────────────────────────────────────────────────────────────────────

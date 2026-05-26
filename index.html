@@ -203,11 +203,10 @@
 ═══════════════════════════════════════════════════════════════ -->
 
 <div id="admin-screen" class="auth-screen hidden">
-  <div class="auth-card">
-    <div class="auth-card-icon">🛠️</div>
-    <h2>Admin dashboard temporarily unavailable</h2>
-    <p>The admin dashboard is being rebuilt. Normal SyncPad rooms and share links are still available.</p>
-    <button class="auth-btn" onclick="window.location.href='/SyncPad/'">Back to SyncPad</button>
+  <!-- Replaced at runtime by admin.js initAdmin(); this is only shown briefly while JS loads -->
+  <div class="auth-card" style="text-align:center">
+    <div class="loading-spinner" style="margin:0 auto 12px"></div>
+    <p style="color:var(--text-secondary);font-size:14px">Loading admin…</p>
   </div>
 </div>
 

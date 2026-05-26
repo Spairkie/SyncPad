@@ -220,11 +220,18 @@ function _wireModalControls(file, onDownload) {
 
   const doClose = () => modal?.classList.remove('open');
 
+  // Use onclick for close/download (single-use buttons — assignment is fine here).
   if (close)  close.onclick  = doClose;
   if (dlBtn)  dlBtn.onclick  = () => { onDownload(file); doClose(); };
 
-  // Close on backdrop click
-  if (modal) modal.onclick = (e) => { if (e.target === modal) doClose(); };
+  // Use addEventListener for the backdrop so we don't stomp any other listener
+  // already registered on the modal element. We replace our own handler each
+  // time by storing and removing the previous one.
+  if (modal) {
+    if (modal._backdropHandler) modal.removeEventListener('click', modal._backdropHandler);
+    modal._backdropHandler = (e) => { if (e.target === modal) doClose(); };
+    modal.addEventListener('click', modal._backdropHandler);
+  }
 }
 
 // ── Ensure modal HTML exists in the DOM ───────────────────────────────────────

@@ -2,10 +2,14 @@
 // Room load error states, retry button, and read-only share link handling.
 
 import { test, expect } from '@playwright/test';
-import { createRoom, goToLanding, roomIdFromUrl } from './helpers.js';
+import { createRoom, goToLanding, roomIdFromUrl, supabaseAvailable } from './helpers.js';
 
 test.describe('Room load retry button', () => {
   test('loading screen retry button is hidden on normal load', async ({ page }) => {
+    if (!(await supabaseAvailable(page))) {
+      test.skip(true, 'Supabase JS CDN blocked — room creation requires network access');
+      return;
+    }
     await goToLanding(page);
     await page.click('.landing-create-btn');
     await page.waitForSelector('#app-screen:not(.hidden)', { timeout: 15_000 });
@@ -47,6 +51,10 @@ test.describe('Read-only share link handling', () => {
 
 test.describe('Room creation and navigation', () => {
   test('creating a room navigates to app screen with a valid room ID', async ({ page }) => {
+    if (!(await supabaseAvailable(page))) {
+      test.skip(true, 'Supabase JS CDN blocked — room creation requires network access');
+      return;
+    }
     await goToLanding(page);
     await page.click('.landing-create-btn');
     await page.waitForSelector('#app-screen:not(.hidden)', { timeout: 15_000 });
@@ -70,6 +78,10 @@ test.describe('Room creation and navigation', () => {
   });
 
   test('loading screen shows "Loading room…" then transitions to app', async ({ page }) => {
+    if (!(await supabaseAvailable(page))) {
+      test.skip(true, 'Supabase JS CDN blocked — room loading requires network access');
+      return;
+    }
     // Navigate directly to a room — loading screen should appear then resolve
     await page.goto('/SyncPad/test-load-transition');
     // May briefly see loading screen
@@ -80,6 +92,10 @@ test.describe('Room creation and navigation', () => {
   });
 
   test('joining room via ID input on landing page', async ({ page }) => {
+    if (!(await supabaseAvailable(page))) {
+      test.skip(true, 'Supabase JS CDN blocked — room joining requires network access');
+      return;
+    }
     await goToLanding(page);
     const testRoomId = `join-test-${Date.now()}`;
     await page.fill('.landing-join-input', testRoomId);

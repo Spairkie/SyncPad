@@ -115,7 +115,7 @@ export async function listFiles(roomId) {
   const { data, error } = await getSupabaseClient()
     .from(TABLE).select('*').eq('room_id', roomId)
     .order('uploaded_at', { ascending: false });
-  if (error) { logSupabaseError('listFiles', error, { room_id: roomId }); return []; }
+  if (error) { logSupabaseError('listFiles', error, { room_id: roomId }); throw error; }
   return data || [];
 }
 

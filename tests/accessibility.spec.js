@@ -2,7 +2,7 @@
 // Keyboard navigation, ARIA roles, focus management, and confirm dialog.
 
 import { test, expect } from '@playwright/test';
-import { createRoom } from './helpers.js';
+import { createRoom, goToLanding } from './helpers.js';
 
 test.describe('Accessibility & keyboard', () => {
   test('landing page is keyboard-navigable (Tab reaches key buttons)', async ({ page }) => {
@@ -28,9 +28,9 @@ test.describe('Accessibility & keyboard', () => {
 
   test('file list items have role=listitem', async ({ page }) => {
     await createRoom(page);
-    // Open files panel
-    const filesBtn = page.locator('[aria-controls="files-panel"], #btn-files').first();
-    await filesBtn.click();
+    // #btn-files is inside the #more-dropdown — open the dropdown first
+    await page.locator('#btn-more').click();
+    await page.locator('#btn-files').click();
     await page.waitForSelector('#files-panel.open', { timeout: 5000 });
     // The list should have role=list
     const filesList = page.locator('#files-list');
@@ -40,9 +40,9 @@ test.describe('Accessibility & keyboard', () => {
 
   test('devices list has role=list', async ({ page }) => {
     await createRoom(page);
-    // Open presence panel
-    const presenceBtn = page.locator('[aria-controls="presence-panel"], #btn-presence').first();
-    await presenceBtn.click();
+    // #btn-presence is inside the #more-dropdown — open the dropdown first
+    await page.locator('#btn-more').click();
+    await page.locator('#btn-presence').click();
     await page.waitForSelector('#presence-panel.open', { timeout: 5000 });
     const devList = page.locator('#devices-list');
     const role = await devList.getAttribute('role');
@@ -50,18 +50,17 @@ test.describe('Accessibility & keyboard', () => {
   });
 
   test('custom confirm modal accessible: has role=dialog and aria-modal', async ({ page }) => {
-    await createRoom(page);
+    // Confirm modal only needs the SyncPad app loaded — goToLanding avoids
+    // the Supabase room-creation call that createRoom() requires.
+    await goToLanding(page);
 
-    // Trigger the custom confirm via showConfirm() in the page context
-    const confirmPromise = page.evaluate(() => {
-      // Call showConfirm directly if exported; otherwise trigger via bulk-delete
-      return new Promise((resolve) => {
-        // Use postMessage to signal the test; but simpler: call the module
-        import('/SyncPad/src/ui.js').then(({ showConfirm }) => {
-          showConfirm('Test confirm message?', { confirmLabel: 'OK', danger: false }).then(resolve);
-        });
-      });
-    });
+    // Trigger the custom confirm via showConfirm() in the page context.
+    // The evaluate() returns a Promise that resolves when OK/Cancel is clicked.
+    const confirmPromise = page.evaluate(() =>
+      import('/SyncPad/src/ui.js').then(({ showConfirm }) =>
+        showConfirm('Test confirm message?', { confirmLabel: 'OK', danger: false })
+      )
+    );
 
     // Wait for the modal to appear
     await page.waitForSelector('#sp-confirm-modal.visible', { timeout: 5000 });
@@ -70,27 +69,29 @@ test.describe('Accessibility & keyboard', () => {
     await expect(modal).toHaveAttribute('aria-modal', 'true');
     await expect(page.locator('#sp-confirm-message')).toContainText('Test confirm message');
 
-    // Cancel the dialog
-    await page.locator('#sp-confirm-cancel').click();
+    // Use DOM .click() via evaluate — this fires the onclick handler reliably
+    // regardless of z-index/pointer-events, unlike Playwright's synthesized events.
+    await page.evaluate(() => document.getElementById('sp-confirm-cancel').click());
     const result = await confirmPromise;
     expect(result).toBe(false);
   });
 
   test('custom confirm modal: OK button resolves true', async ({ page }) => {
-    await createRoom(page);
+    await goToLanding(page);
     const confirmPromise = page.evaluate(() =>
       import('/SyncPad/src/ui.js').then(({ showConfirm }) =>
         showConfirm('Are you sure?', { confirmLabel: 'Yes', danger: false })
       )
     );
     await page.waitForSelector('#sp-confirm-modal.visible', { timeout: 5000 });
-    await page.locator('#sp-confirm-ok').click();
+    // Use DOM .click() via evaluate — fires onclick handler reliably
+    await page.evaluate(() => document.getElementById('sp-confirm-ok').click());
     const result = await confirmPromise;
     expect(result).toBe(true);
   });
 
   test('custom confirm modal: Escape closes and resolves false', async ({ page }) => {
-    await createRoom(page);
+    await goToLanding(page);
     const confirmPromise = page.evaluate(() =>
       import('/SyncPad/src/ui.js').then(({ showConfirm }) =>
         showConfirm('Escape test', {})
@@ -103,17 +104,18 @@ test.describe('Accessibility & keyboard', () => {
   });
 
   test('danger confirm modal focuses Cancel by default', async ({ page }) => {
-    await createRoom(page);
-    page.evaluate(() =>
-      import('/SyncPad/src/ui.js').then(({ showConfirm }) =>
-        showConfirm('Delete?', { danger: true, confirmLabel: 'Delete' })
-      )
-    );
+    await goToLanding(page);
+    // Await the evaluate so the import completes and showConfirm() is called
+    // before waitForSelector runs. Don't await showConfirm itself (would deadlock).
+    await page.evaluate(async () => {
+      const { showConfirm } = await import('/SyncPad/src/ui.js');
+      showConfirm('Delete?', { danger: true, confirmLabel: 'Delete' }); // intentionally not awaited
+    });
     await page.waitForSelector('#sp-confirm-modal.visible', { timeout: 5000 });
-    // Cancel button should be focused
+    // Cancel button should be focused (danger: true focuses Cancel by default)
     await expect(page.locator('#sp-confirm-cancel')).toBeFocused();
-    // Clean up
-    await page.locator('#sp-confirm-cancel').click();
+    // Clean up — use DOM .click() to fire onclick handler reliably
+    await page.evaluate(() => document.getElementById('sp-confirm-cancel').click());
   });
 
   test('note editor has accessible label or placeholder', async ({ page }) => {
@@ -174,9 +176,9 @@ test.describe('Accessibility & keyboard', () => {
 
   test('exp-custom-value input has aria-label', async ({ page }) => {
     await createRoom(page);
-    // Navigate to settings and expand expiry controls
-    const settingsBtn = page.locator('[aria-controls="settings-panel"], #btn-settings').first();
-    await settingsBtn.click();
+    // #btn-settings is inside the #more-dropdown — open the dropdown first
+    await page.locator('#btn-more').click();
+    await page.locator('#btn-settings').click();
     await page.waitForSelector('#settings-panel.open', { timeout: 5000 });
     await page.locator('#setting-exp-btn').click();
     await page.locator('[data-exp-preset="custom"]').click();
@@ -188,8 +190,9 @@ test.describe('Accessibility & keyboard', () => {
 
   test('exp-custom-unit select has aria-label', async ({ page }) => {
     await createRoom(page);
-    const settingsBtn = page.locator('[aria-controls="settings-panel"], #btn-settings').first();
-    await settingsBtn.click();
+    // #btn-settings is inside the #more-dropdown — open the dropdown first
+    await page.locator('#btn-more').click();
+    await page.locator('#btn-settings').click();
     await page.waitForSelector('#settings-panel.open', { timeout: 5000 });
     await page.locator('#setting-exp-btn').click();
     await page.locator('[data-exp-preset="custom"]').click();

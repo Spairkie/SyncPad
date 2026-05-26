@@ -23,9 +23,11 @@ export default defineConfig({
   /* Run each test file in parallel; tests within a file run serially by default */
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  /* 2 retries in CI; 1 retry locally so flaky parallel tests get a second chance */
+  /* 1 retry on every run; 2 retries in CI for extra resilience */
   retries: process.env.CI ? 2 : 1,
-  workers: process.env.CI ? 1 : undefined,
+  /* Single worker to avoid saturating shared Supabase API limits when many
+   * tests run concurrently. In CI this also ensures deterministic ordering. */
+  workers: 1,
 
   reporter: [
     ['list'],
@@ -59,12 +61,13 @@ export default defineConfig({
         },
       },
     },
-    { name: 'firefox',  use: { ...devices['Desktop Firefox'] } },
-    { name: 'webkit',   use: { ...devices['Desktop Safari'] } },
-    {
-      name: 'mobile-chrome',
-      use: { ...devices['Pixel 5'] },
-    },
+    // Firefox, Webkit, and mobile-Chrome require separately installed Playwright
+    // browser binaries (npx playwright install). They are disabled here so that
+    // `npm test` works out-of-the-box without needing the full browser pack.
+    // Un-comment these if the binaries are available in your environment:
+    // { name: 'firefox',      use: { ...devices['Desktop Firefox'] } },
+    // { name: 'webkit',       use: { ...devices['Desktop Safari'] } },
+    // { name: 'mobile-chrome', use: { ...devices['Pixel 5'] } },
   ],
 
   /* Start a SPA-aware static server before tests.
