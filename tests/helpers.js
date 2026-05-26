@@ -1,7 +1,7 @@
 // tests/helpers.js
 // Shared Playwright helpers for SyncPad tests.
 
-import { expect } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 
 /** Navigate to the SyncPad root and wait for the landing screen. */
 export async function goToLanding(page) {
@@ -10,12 +10,30 @@ export async function goToLanding(page) {
 }
 
 /**
+ * Returns true if the Supabase JS library loaded successfully from CDN.
+ * When the environment's network policy blocks cdn.jsdelivr.net or the
+ * Supabase API host, window.supabase is undefined and all room operations fail.
+ * Use this to skip tests gracefully rather than timing out.
+ */
+export async function supabaseAvailable(page) {
+  await page.goto('/SyncPad/');
+  return page.evaluate(() => typeof window.supabase !== 'undefined');
+}
+
+/**
  * Create a new room via the landing page "New room" button.
- * Waits for the app screen to be visible.
+ * Automatically skips the calling test when Supabase is not reachable
+ * (CDN blocked, network policy) so flaky timeouts become clean skips.
  * @returns {string} The room path (e.g. "abc123")
  */
 export async function createRoom(page) {
   await goToLanding(page);
+  // Detect CDN-blocked environments early so tests skip gracefully instead
+  // of spending 15–30 s waiting for a timeout they can never win.
+  const sbAvail = await page.evaluate(() => typeof window.supabase !== 'undefined');
+  if (!sbAvail) {
+    test.skip(true, 'Supabase JS CDN blocked — room creation requires network access');
+  }
   await page.click('.landing-create-btn');
   await page.waitForSelector('#app-screen:not(.hidden)', { timeout: 15_000 });
   // Extract room ID from URL

@@ -54,16 +54,13 @@ test.describe('Accessibility & keyboard', () => {
     // the Supabase room-creation call that createRoom() requires.
     await goToLanding(page);
 
-    // Trigger the custom confirm via showConfirm() in the page context
-    const confirmPromise = page.evaluate(() => {
-      // Call showConfirm directly if exported; otherwise trigger via bulk-delete
-      return new Promise((resolve) => {
-        // Use postMessage to signal the test; but simpler: call the module
-        import('/SyncPad/src/ui.js').then(({ showConfirm }) => {
-          showConfirm('Test confirm message?', { confirmLabel: 'OK', danger: false }).then(resolve);
-        });
-      });
-    });
+    // Trigger the custom confirm via showConfirm() in the page context.
+    // The evaluate() returns a Promise that resolves when OK/Cancel is clicked.
+    const confirmPromise = page.evaluate(() =>
+      import('/SyncPad/src/ui.js').then(({ showConfirm }) =>
+        showConfirm('Test confirm message?', { confirmLabel: 'OK', danger: false })
+      )
+    );
 
     // Wait for the modal to appear
     await page.waitForSelector('#sp-confirm-modal.visible', { timeout: 5000 });
@@ -72,8 +69,9 @@ test.describe('Accessibility & keyboard', () => {
     await expect(modal).toHaveAttribute('aria-modal', 'true');
     await expect(page.locator('#sp-confirm-message')).toContainText('Test confirm message');
 
-    // Cancel the dialog — force:true bypasses the landing-inner pointer-event overlay
-    await page.locator('#sp-confirm-cancel').click({ force: true });
+    // Use DOM .click() via evaluate — this fires the onclick handler reliably
+    // regardless of z-index/pointer-events, unlike Playwright's synthesized events.
+    await page.evaluate(() => document.getElementById('sp-confirm-cancel').click());
     const result = await confirmPromise;
     expect(result).toBe(false);
   });
@@ -86,8 +84,8 @@ test.describe('Accessibility & keyboard', () => {
       )
     );
     await page.waitForSelector('#sp-confirm-modal.visible', { timeout: 5000 });
-    // force:true bypasses the landing-inner pointer-event overlay
-    await page.locator('#sp-confirm-ok').click({ force: true });
+    // Use DOM .click() via evaluate — fires onclick handler reliably
+    await page.evaluate(() => document.getElementById('sp-confirm-ok').click());
     const result = await confirmPromise;
     expect(result).toBe(true);
   });
@@ -107,16 +105,17 @@ test.describe('Accessibility & keyboard', () => {
 
   test('danger confirm modal focuses Cancel by default', async ({ page }) => {
     await goToLanding(page);
-    page.evaluate(() =>
-      import('/SyncPad/src/ui.js').then(({ showConfirm }) =>
-        showConfirm('Delete?', { danger: true, confirmLabel: 'Delete' })
-      )
-    );
+    // Await the evaluate so the import completes and showConfirm() is called
+    // before waitForSelector runs. Don't await showConfirm itself (would deadlock).
+    await page.evaluate(async () => {
+      const { showConfirm } = await import('/SyncPad/src/ui.js');
+      showConfirm('Delete?', { danger: true, confirmLabel: 'Delete' }); // intentionally not awaited
+    });
     await page.waitForSelector('#sp-confirm-modal.visible', { timeout: 5000 });
-    // Cancel button should be focused
+    // Cancel button should be focused (danger: true focuses Cancel by default)
     await expect(page.locator('#sp-confirm-cancel')).toBeFocused();
-    // Clean up — force:true bypasses the landing-inner pointer-event overlay
-    await page.locator('#sp-confirm-cancel').click({ force: true });
+    // Clean up — use DOM .click() to fire onclick handler reliably
+    await page.evaluate(() => document.getElementById('sp-confirm-cancel').click());
   });
 
   test('note editor has accessible label or placeholder', async ({ page }) => {
