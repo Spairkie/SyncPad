@@ -347,7 +347,15 @@ export function renderFilesList(files, onDownload, onDelete, opts = {}) {
     }
     if (!selectMode) {
       if (onPreview) item.querySelector('.preview').addEventListener('click', () => onPreview(file));
-      item.querySelector('.download').addEventListener('click', () => onDownload(file));
+      const dlBtn = item.querySelector('.download');
+      if (dlBtn) {
+        dlBtn.addEventListener('click', async () => {
+          // Briefly disable the button while the signed URL is fetched so
+          // double-clicks don't fire two simultaneous download requests.
+          dlBtn.disabled = true;
+          try { await onDownload(file); } finally { dlBtn.disabled = false; }
+        });
+      }
       if (canDelete) {
         item.querySelector('.delete').addEventListener('click', () => onDelete(file));
       }
@@ -554,9 +562,12 @@ function _wireNativeShare(btnId, url, label) {
 // ── Auth error helpers ────────────────────────────────────────────────────────
 
 export function showPasscodeError(msg) {
-  const el = document.getElementById('passcode-error');
+  const el    = document.getElementById('passcode-error');
+  const input = document.getElementById('passcode-input');
   if (el) el.textContent = msg;
-  document.getElementById('passcode-input')?.classList.add('error');
+  input?.classList.add('error');
+  // Clear the red outline on the next keystroke so the user gets instant feedback.
+  input?.addEventListener('input', () => clearPasscodeError(), { once: true });
 }
 export function clearPasscodeError() {
   const el = document.getElementById('passcode-error');
@@ -565,9 +576,12 @@ export function clearPasscodeError() {
 }
 
 export function showEncryptionError(msg) {
-  const el = document.getElementById('encryption-error');
+  const el    = document.getElementById('encryption-error');
+  const input = document.getElementById('encryption-input');
   if (el) el.textContent = msg;
-  document.getElementById('encryption-input')?.classList.add('error');
+  input?.classList.add('error');
+  // Clear the red outline on the next keystroke so the user gets instant feedback.
+  input?.addEventListener('input', () => clearEncryptionError(), { once: true });
 }
 export function clearEncryptionError() {
   const el = document.getElementById('encryption-error');

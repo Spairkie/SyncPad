@@ -1417,6 +1417,8 @@ kbd {
 
 /* ── CSV preview ── */
 .preview-csv-wrap { padding: 0; overflow-x: auto; }
+/* Scroll wrapper prevents wide tables from breaking the modal on mobile */
+.preview-csv-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: var(--radius-md); }
 .preview-csv-table {
   border-collapse: collapse; width: 100%; font-size: 13px;
   background: var(--bg-base);

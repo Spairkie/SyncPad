@@ -7,7 +7,7 @@ import {
   copyToClipboard, insertTimestamp,
   isMobile, isOnline, onOnlineChange,
   buildRoomUrl, buildReadOnlyUrl, getUrlMode, parseDuration,
-  escapeHtml,
+  escapeHtml, debounce,
 } from './utils.js';
 
 import { loadRoom, createRoom, clearRoomContent, subscribeToRoom, getOrCreateReadOnlyShareLink, resolveReadOnlyShareLink, updateRoomDisplayName, normalizeRoomDisplayName, submitRoomReport } from './rooms.js';
@@ -489,7 +489,10 @@ async function onEncryptionSubmit() {
 
   UI.clearEncryptionError();
   const btn = document.getElementById('encryption-submit-btn');
-  if (btn) btn.disabled = true;
+  // PBKDF2 key derivation takes 1-3 s — show a spinner so the UI doesn't
+  // look frozen. Preserve the button label so we can restore it on error.
+  const origLabel = btn?.textContent ?? 'Decrypt & Open';
+  if (btn) { btn.disabled = true; btn.textContent = 'Decrypting…'; }
 
   try {
     const key = await unlockEncryption(passphrase, _room.encryption_salt);
@@ -500,11 +503,11 @@ async function onEncryptionSubmit() {
     _encKey  = key;
     _encSalt = _room.encryption_salt;
   } catch {
-    if (btn) btn.disabled = false;
+    if (btn) { btn.disabled = false; btn.textContent = origLabel; }
     UI.showEncryptionError('Wrong passphrase. Could not decrypt the note.');
+    input?.focus(); input?.select();
     return;
   }
-  if (btn) btn.disabled = false;
   await startApp();
 }
 
@@ -1117,6 +1120,8 @@ function wireEvents() {
     onLocalInput(); // returns a Promise — intentional fire-and-forget
     setTyping(true);
     UI.updateWordCount(UI.getEditorValue());
+    // Debounced so large documents don't re-render markdown on every keystroke.
+    _debouncedRefreshPreview();
   });
   editor?.addEventListener('blur', () => onEditorBlur());
 
@@ -1208,6 +1213,8 @@ function wireEvents() {
       UI.setRoomTitleEditMode(false);
       return;
     }
+    const saveBtn = document.getElementById('room-title-save-btn');
+    if (saveBtn) saveBtn.disabled = true;
     try {
       await updateRoomDisplayName(_roomId, normalized);
       _room.room_name = normalized;
@@ -1215,7 +1222,11 @@ function wireEvents() {
       UI.setRoomTitleEditMode(false);
       UI.showToast('Room title updated.', 'success');
     } catch {
-      UI.showToast('Could not save room title.', 'error');
+      // Keep edit mode open so the user can retry without clicking Edit again.
+      if (saveBtn) saveBtn.disabled = false;
+      input?.focus();
+      input?.select();
+      UI.showToast('Could not save title — check your connection and try again.', 'error');
     }
   };
   document.getElementById('room-title-save-btn')?.addEventListener('click', saveTitle);
@@ -1504,6 +1515,7 @@ function wireEvents() {
 
   document.getElementById('setting-enc-btn')?.addEventListener('click', async () => {
     if (!canChangeSettings()) { UI.showToast(editBlockedReason() || 'Settings are disabled.', 'warning'); return; }
+    const encBtn = document.getElementById('setting-enc-btn');
     if (_room.encryption_enabled) {
       if (!confirm('Disable encryption? Content will be stored in plaintext.')) return;
       await flushSave();
@@ -1511,6 +1523,8 @@ function wireEvents() {
       cancelPendingLiveContentBroadcast();
       const pp = prompt('Enter the current encryption passphrase to confirm:');
       if (!pp) return;
+      // PBKDF2 key derivation takes 1-3 s — indicate progress on the button.
+      if (encBtn) { encBtn.disabled = true; encBtn.textContent = 'Decrypting…'; }
       try {
         // Pass plaintext (editor value), passphrase, stored salt, and current DB ciphertext
         await disableEncryption(_roomId, UI.getEditorValue(), pp, _encSalt, _room.content);
@@ -1527,6 +1541,7 @@ function wireEvents() {
         broadcastSettingsChange();
         UI.showToast('Encryption disabled.', 'success');
       } catch (err) {
+        UI.renderSettingsPanel(_room); // restore button state
         UI.showToast(err.message || 'Could not disable encryption.', 'error', 4000);
       }
     } else {
@@ -1537,6 +1552,8 @@ function wireEvents() {
       if (existingFiles.length && !confirm('This room has file attachments. SyncPad v1 encrypts note text only, not files. Continue enabling text encryption?')) return;
       const pp = prompt('Set an encryption passphrase (share it with anyone who needs to read this note):');
       if (!pp?.trim()) return;
+      // PBKDF2 key derivation takes 1-3 s — indicate progress on the button.
+      if (encBtn) { encBtn.disabled = true; encBtn.textContent = 'Encrypting…'; }
       try {
         const { salt, key } = await enableEncryption(_roomId, UI.getEditorValue(), pp.trim());
         _encKey = key; _encSalt = salt;
@@ -1553,7 +1570,10 @@ function wireEvents() {
         UI.setEncryptionBadge(true);
         broadcastSettingsChange();
         UI.showToast('Encryption enabled.', 'success');
-      } catch { UI.showToast('Could not enable encryption.', 'error'); }
+      } catch {
+        UI.renderSettingsPanel(_room); // restore button state
+        UI.showToast('Could not enable encryption.', 'error');
+      }
     }
   });
 
@@ -1970,6 +1990,10 @@ function getSavedTheme_() {
 function _refreshPreviewIfActive() {
   if (_markdownMode !== 'write') UI.refreshPreview(() => renderMarkdown(UI.getEditorValue()));
 }
+
+// Debounced variant — used on every keystroke so heavy markdown docs
+// (50 KB+) don't re-render on every character and cause frame drops.
+const _debouncedRefreshPreview = debounce(_refreshPreviewIfActive, 300);
 
 function _wirePreviewClickOnce() {
   if (_previewObserverWired) return;
