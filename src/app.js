@@ -61,6 +61,7 @@ import { initShortcuts, destroyShortcuts }     from './shortcuts.js';
 
 import * as UI from './ui.js';
 import { openFilePreview } from './file-preview.js';
+import { initAdmin } from './admin.js';
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
@@ -186,6 +187,9 @@ async function boot() {
 
   if (route.type === 'admin') {
     UI.showScreen('admin');
+    initAdmin().catch((err) => {
+      console.error('[admin] initAdmin failed:', err);
+    });
     return;
   }
 
