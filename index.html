@@ -372,20 +372,21 @@
 
       <!-- Markdown preview pane -->
       <div id="note-preview" class="note-preview hidden" aria-live="polite"></div>
+    </div>
 
-      <!-- Remote update notice -->
-      <div class="remote-notice hidden" id="remote-notice" role="alert">
-        <div class="remote-notice-header">
-          <span class="remote-notice-label">Another device updated this note</span>
-          <span class="remote-notice-meta" id="remote-notice-meta"></span>
-        </div>
-        <div class="remote-notice-counts hidden" id="remote-notice-counts"></div>
-        <div class="remote-notice-actions">
-          <button class="remote-notice-btn primary" id="remote-apply-btn"   title="Replace your local version with the incoming update">Apply</button>
-          <button class="remote-notice-btn"          id="remote-keep-btn"    title="Keep your local version and discard the incoming update">Keep mine</button>
-          <button class="remote-notice-btn"          id="remote-copy-btn"    title="Copy the incoming content to clipboard">Copy remote</button>
-          <button class="remote-notice-btn subtle"   id="remote-dismiss-btn" title="Hide this notice (the update is still available)">Dismiss</button>
-        </div>
+    <!-- Remote update notice — sibling of .editor-wrap so it isn't clipped
+         by overflow:hidden on the card; positioned relative to .editor-area -->
+    <div class="remote-notice hidden" id="remote-notice" role="alert">
+      <div class="remote-notice-header">
+        <span class="remote-notice-label">Another device updated this note</span>
+        <span class="remote-notice-meta" id="remote-notice-meta"></span>
+      </div>
+      <div class="remote-notice-counts hidden" id="remote-notice-counts"></div>
+      <div class="remote-notice-actions">
+        <button class="remote-notice-btn primary" id="remote-apply-btn"   title="Replace your local version with the incoming update">Apply</button>
+        <button class="remote-notice-btn"          id="remote-keep-btn"    title="Keep your local version and discard the incoming update">Keep mine</button>
+        <button class="remote-notice-btn"          id="remote-copy-btn"    title="Copy the incoming content to clipboard">Copy remote</button>
+        <button class="remote-notice-btn subtle"   id="remote-dismiss-btn" title="Hide this notice (the update is still available)">Dismiss</button>
       </div>
     </div>
 

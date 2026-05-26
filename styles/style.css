@@ -489,32 +489,35 @@ svg { display: block; flex-shrink: 0; }
 ══════════════════════════════════════════════════════════════ */
 .editor-area { flex: 1; display: flex; flex-direction: column; min-height: 0; position: relative; }
 
-/* Grid-based editor wrap — auto-stacks on narrow screens, side-by-side on wide.
-   gap: 2rem handles all spacing between panes; child margins removed.
-   padding: clamp() gives fluid outer gutters; width + margin-inline center
-   the content area and cap it at 1400 px on very wide viewports. */
+/* Floating card editor — fills height, centered with all-around margins.
+   overflow:hidden clips textarea/preview to the card border-radius.
+   No position:relative — .remote-notice is now a sibling in .editor-area. */
 .editor-wrap {
   /* Flex child: fill remaining height inside .editor-area */
   flex: 1;
   min-height: 0;
-  position: relative;
+  /* Floating card look */
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
   /* Grid container: auto-columns for write / preview / split modes */
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr));
   grid-template-rows: minmax(0, 1fr);
-  gap: 2rem;
-  /* Fluid outer gutters */
-  padding: clamp(1rem, 3vw, 3rem);
-  /* Centered, max-width content area — logical properties */
+  gap: 0;
+  /* Centered with uniform margins on all sides */
   width: min(100% - 2rem, 1400px);
   margin-inline: auto;
-  margin-block-start: 1.5rem;
+  margin-block: 1rem;
 }
 
 #note-editor {
-  /* No flex: 1 or margin: auto — grid handles sizing */
-  width: 100%; min-height: 0; padding: 24px 20px;
-  background: var(--bg-base); border: none; resize: none;
+  /* Fill the grid cell fully — grid-template-rows handles height */
+  width: 100%; height: 100%; min-height: 0;
+  padding: 1.25rem 1rem;
+  background: var(--bg-surface); border: none; resize: none; overflow-y: auto;
   color: var(--text-primary); font-size: 15px; line-height: 1.7;
   font-family: var(--font-ui); outline: none;
   transition: font-family var(--transition), box-shadow var(--transition);
@@ -523,25 +526,28 @@ svg { display: block; flex-shrink: 0; }
 #note-editor.remote-typing { box-shadow: inset 0 0 0 2px rgba(245,166,35,0.15); }
 #note-editor::placeholder  { color: var(--text-muted); }
 @media (min-width: 768px) {
-  /* Increased padding and font on desktop — no max-width/margin: grid controls width */
-  #note-editor { padding: 32px; font-size: 16px; }
+  /* Generous padding; max() formula keeps readable text ≤ 800px wide on large panes */
+  #note-editor { padding: 2rem max(5%, calc((100% - 800px) / 2)); font-size: 16px; }
 }
 
-/* Split mode: the .split-mode class is still toggled by JS for aria-pressed state.
-   Layout is handled entirely by auto-fit grid — no flex overrides needed. */
+/* Split mode: 1px border divider instead of heavy gap between panes */
+.editor-wrap.split-mode #note-editor {
+  border-right: 1px solid var(--border);
+}
 
 /* Markdown preview */
 .note-preview {
-  /* No flex: 1 or margin: auto — grid handles sizing */
-  width: 100%; min-height: 0; padding: 24px 20px;
-  background: var(--bg-base); color: var(--text-primary);
+  /* Fill the grid cell fully — independent scroll */
+  width: 100%; height: 100%; min-height: 0;
+  padding: 1.25rem 1rem;
+  background: var(--bg-surface); color: var(--text-primary);
   font-size: 15px; line-height: 1.7; font-family: var(--font-ui); overflow-y: auto;
 }
 .note-preview.monospace { font-family: var(--font-mono); font-size: 14px; }
 .note-preview.hidden    { display: none; }
 @media (min-width: 768px) {
-  /* Increased padding on desktop — no max-width/margin: grid controls width */
-  .note-preview { padding: 32px; }
+  /* Generous padding; max() keeps readable text ≤ 800px wide on large panes */
+  .note-preview { padding: 2rem max(5%, calc((100% - 800px) / 2)); }
 }
 .note-preview h1,.note-preview h2,.note-preview h3,
 .note-preview h4,.note-preview h5,.note-preview h6 { margin: 1.2em 0 0.5em; line-height: 1.25; }
