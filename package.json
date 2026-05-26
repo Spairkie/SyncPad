@@ -4,12 +4,12 @@
   "description": "> **A temporary shared notepad for fast handoff between devices.**   > Create a room, share an editable or read-only link, and sync notes and files in real time — no account needed.",
   "main": "service-worker.js",
   "scripts": {
-    "test":         "playwright test",
-    "test:ui":      "playwright test --ui",
-    "test:headed":  "playwright test --headed",
-    "test:report":  "playwright show-report",
-    "test:chrome":  "playwright test --project=chromium",
-    "serve":        "npx serve . -l 5555 --no-clipboard"
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:headed": "playwright test --headed",
+    "test:report": "playwright show-report",
+    "test:chrome": "playwright test --project=chromium",
+    "serve": "npx serve . -l 5555 --no-clipboard"
   },
   "repository": {
     "type": "git",
@@ -19,6 +19,6 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "@playwright/test": "^1.60.0"
+    "@playwright/test": "^1.49.1"
   }
 }
