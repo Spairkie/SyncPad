@@ -3,7 +3,7 @@
 // so that the ESM modules can be imported in the browser context.
 
 import { test, expect } from '@playwright/test';
-import { createRoom } from './helpers.js';
+import { goToLanding } from './helpers.js';
 
 /**
  * Import a SyncPad module in the browser context and return the result of fn.
@@ -21,7 +21,7 @@ async function inBrowser(page, modulePath, fn) {
 
 test.describe('escapeHtml()', () => {
   test('escapes < > & " characters', async ({ page }) => {
-    await createRoom(page);
+    await goToLanding(page);
     const result = await inBrowser(page, '/SyncPad/src/utils.js', (mod) =>
       mod.escapeHtml('<script>alert("xss")</script>&')
     );
@@ -29,7 +29,7 @@ test.describe('escapeHtml()', () => {
   });
 
   test('returns empty string for null/undefined', async ({ page }) => {
-    await createRoom(page);
+    await goToLanding(page);
     const r1 = await inBrowser(page, '/SyncPad/src/utils.js', (mod) => mod.escapeHtml(null));
     const r2 = await inBrowser(page, '/SyncPad/src/utils.js', (mod) => mod.escapeHtml(undefined));
     expect(r1).toBe('');
@@ -37,7 +37,7 @@ test.describe('escapeHtml()', () => {
   });
 
   test('leaves safe strings unchanged', async ({ page }) => {
-    await createRoom(page);
+    await goToLanding(page);
     const result = await inBrowser(page, '/SyncPad/src/utils.js', (mod) =>
       mod.escapeHtml('Hello World 123')
     );
@@ -47,7 +47,7 @@ test.describe('escapeHtml()', () => {
 
 test.describe('formatFileSize()', () => {
   test('formats bytes', async ({ page }) => {
-    await createRoom(page);
+    await goToLanding(page);
     const result = await inBrowser(page, '/SyncPad/src/utils.js', (mod) =>
       mod.formatFileSize(500)
     );
@@ -55,7 +55,7 @@ test.describe('formatFileSize()', () => {
   });
 
   test('formats kilobytes', async ({ page }) => {
-    await createRoom(page);
+    await goToLanding(page);
     const result = await inBrowser(page, '/SyncPad/src/utils.js', (mod) =>
       mod.formatFileSize(2048)
     );
@@ -63,7 +63,7 @@ test.describe('formatFileSize()', () => {
   });
 
   test('formats megabytes', async ({ page }) => {
-    await createRoom(page);
+    await goToLanding(page);
     const result = await inBrowser(page, '/SyncPad/src/utils.js', (mod) =>
       mod.formatFileSize(5 * 1024 * 1024)
     );
@@ -73,7 +73,7 @@ test.describe('formatFileSize()', () => {
 
 test.describe('countWords()', () => {
   test('counts words correctly', async ({ page }) => {
-    await createRoom(page);
+    await goToLanding(page);
     const result = await inBrowser(page, '/SyncPad/src/utils.js', (mod) =>
       mod.countWords('hello world foo bar')
     );
@@ -81,7 +81,7 @@ test.describe('countWords()', () => {
   });
 
   test('returns 0 for empty string', async ({ page }) => {
-    await createRoom(page);
+    await goToLanding(page);
     const result = await inBrowser(page, '/SyncPad/src/utils.js', (mod) =>
       mod.countWords('')
     );
@@ -89,7 +89,7 @@ test.describe('countWords()', () => {
   });
 
   test('handles leading/trailing whitespace', async ({ page }) => {
-    await createRoom(page);
+    await goToLanding(page);
     const result = await inBrowser(page, '/SyncPad/src/utils.js', (mod) =>
       mod.countWords('   three words here   ')
     );
@@ -99,7 +99,7 @@ test.describe('countWords()', () => {
 
 test.describe('Templates module', () => {
   test('TEMPLATES has at least 13 entries', async ({ page }) => {
-    await createRoom(page);
+    await goToLanding(page);
     const count = await inBrowser(page, '/SyncPad/src/templates.js', (mod) =>
       Object.keys(mod.TEMPLATES).length
     );
@@ -107,13 +107,13 @@ test.describe('Templates module', () => {
   });
 
   test('BODY_MAX is 50000', async ({ page }) => {
-    await createRoom(page);
+    await goToLanding(page);
     const bodyMax = await inBrowser(page, '/SyncPad/src/templates.js', (mod) => mod.BODY_MAX);
     expect(bodyMax).toBe(50_000);
   });
 
   test('getTemplate returns built-in template body', async ({ page }) => {
-    await createRoom(page);
+    await goToLanding(page);
     const body = await inBrowser(page, '/SyncPad/src/templates.js', (mod) =>
       mod.getTemplate('checklist')
     );
@@ -122,7 +122,7 @@ test.describe('Templates module', () => {
   });
 
   test('importCustomTemplates returns -1 for invalid JSON', async ({ page }) => {
-    await createRoom(page);
+    await goToLanding(page);
     const count = await inBrowser(page, '/SyncPad/src/templates.js', (mod) =>
       mod.importCustomTemplates('not valid json')
     );
@@ -130,7 +130,7 @@ test.describe('Templates module', () => {
   });
 
   test('importCustomTemplates returns -1 for JSON array', async ({ page }) => {
-    await createRoom(page);
+    await goToLanding(page);
     const count = await inBrowser(page, '/SyncPad/src/templates.js', (mod) =>
       mod.importCustomTemplates('[]')
     );
@@ -138,7 +138,7 @@ test.describe('Templates module', () => {
   });
 
   test('exportCustomTemplates returns valid JSON string', async ({ page }) => {
-    await createRoom(page);
+    await goToLanding(page);
     const json = await inBrowser(page, '/SyncPad/src/templates.js', (mod) =>
       mod.exportCustomTemplates()
     );
@@ -148,7 +148,7 @@ test.describe('Templates module', () => {
 
 test.describe('Markdown renderer', () => {
   test('renderMarkdown returns safe HTML', async ({ page }) => {
-    await createRoom(page);
+    await goToLanding(page);
     const html = await inBrowser(page, '/SyncPad/src/markdown.js', (mod) =>
       mod.renderMarkdown('**bold** and <script>xss</script>')
     );
@@ -158,7 +158,7 @@ test.describe('Markdown renderer', () => {
   });
 
   test('toggleChecklistItem toggles checked state', async ({ page }) => {
-    await createRoom(page);
+    await goToLanding(page);
     const result = await inBrowser(page, '/SyncPad/src/markdown.js', (mod) =>
       mod.toggleChecklistItem('- [ ] Item one\n- [ ] Item two\n', 0, true)
     );
