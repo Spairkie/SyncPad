@@ -1653,9 +1653,19 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
     UI.showToast(`Saved as template "${label.trim()}".`, 'success');
   });
 
-  // ── Search panel ───────────────────────────────────────────────────────────
-  const searchInput = document.getElementById('search-input');
-  const searchCount = document.getElementById('search-count');
+  // ── Find & Replace panel ───────────────────────────────────────────────────
+  const searchInput  = document.getElementById('search-input');
+  const searchCount  = document.getElementById('search-count');
+  const replaceInput = document.getElementById('replace-input');
+  const replaceOne   = document.getElementById('replace-one');
+  const replaceAll   = document.getElementById('replace-all');
+
+  // Enable/disable replace buttons based on edit permission and match count.
+  const _syncReplaceButtons = () => {
+    const enabled = canEdit() && _searchMatches.length > 0;
+    if (replaceOne) replaceOne.disabled = !enabled;
+    if (replaceAll) replaceAll.disabled = !enabled;
+  };
 
   const _runSearch = () => {
     _searchTerm = (searchInput?.value || '').toLowerCase();
@@ -1666,6 +1676,7 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
       // Collapse any selection left by the previous _jumpToMatch() call so the
       // editor doesn't keep showing a stale highlighted range.
       if (editor) editor.setSelectionRange(editor.selectionEnd, editor.selectionEnd);
+      _syncReplaceButtons();
       return;
     }
     const text = editor.value.toLowerCase();
@@ -1685,6 +1696,7 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
         ? `${_searchMatches.length} match${_searchMatches.length !== 1 ? 'es' : ''}`
         : 'No matches';
     }
+    _syncReplaceButtons();
   };
 
   const _jumpToMatch = (idx) => {
@@ -1718,6 +1730,14 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
     }
     if (e.key === 'Escape') { UI.closeAllPanels(); editor?.focus(); }
   });
+  // Tab from search input moves focus to replace input (natural keyboard flow).
+  searchInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Tab' && !e.shiftKey) { e.preventDefault(); replaceInput?.focus(); }
+  });
+  replaceInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter')  { e.preventDefault(); replaceOne?.click(); }
+    if (e.key === 'Escape') { UI.closeAllPanels(); editor?.focus(); }
+  });
 
   document.getElementById('search-next')?.addEventListener('click', () => {
     if (!_searchMatches.length) return;
@@ -1728,6 +1748,41 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
     if (!_searchMatches.length) return;
     _searchIndex = (_searchIndex - 1 + _searchMatches.length) % _searchMatches.length;
     _jumpToMatch(_searchIndex);
+  });
+
+  // Replace current match and advance to the next one.
+  replaceOne?.addEventListener('click', () => {
+    if (!canEdit()) { UI.showToast(editBlockedReason() || 'Editing is disabled.', 'warning'); return; }
+    if (!_searchMatches.length || !editor) return;
+    const m = _searchMatches[Math.max(0, _searchIndex)];
+    if (!m) return;
+    const replacement = replaceInput?.value ?? '';
+    editor.value = editor.value.slice(0, m.start) + replacement + editor.value.slice(m.end);
+    editor.dispatchEvent(new Event('input', { bubbles: true }));
+    UI.updateWordCount(editor.value);
+    _refreshPreviewIfActive();
+    // Re-index so positions reflect the changed content, then advance.
+    _runSearch();
+    if (_searchMatches.length > 0) {
+      _searchIndex = Math.min(_searchIndex, _searchMatches.length - 1);
+      _jumpToMatch(_searchIndex);
+    }
+  });
+
+  // Replace every match at once.
+  replaceAll?.addEventListener('click', () => {
+    if (!canEdit()) { UI.showToast(editBlockedReason() || 'Editing is disabled.', 'warning'); return; }
+    if (!_searchMatches.length || !_searchTerm || !editor) return;
+    const count = _searchMatches.length;
+    const replacement = replaceInput?.value ?? '';
+    // Escape the raw search term so it can be used in a RegExp safely.
+    const escaped = _searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    editor.value = editor.value.replace(new RegExp(escaped, 'gi'), replacement);
+    editor.dispatchEvent(new Event('input', { bubbles: true }));
+    UI.updateWordCount(editor.value);
+    _refreshPreviewIfActive();
+    _runSearch();
+    UI.showToast(`Replaced ${count} match${count !== 1 ? 'es' : ''}.`, 'success');
   });
 
 }

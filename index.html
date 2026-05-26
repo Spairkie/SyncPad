@@ -783,14 +783,14 @@
 <!-- Search panel -->
 <div class="side-panel" id="search-panel">
   <div class="panel-header">
-    <h3>Find in Note</h3>
+    <h3>Find &amp; Replace</h3>
     <button class="panel-close" aria-label="Close">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
     </button>
   </div>
   <div class="panel-body">
     <div class="search-bar">
-      <input id="search-input" class="search-input" type="search" placeholder="Search…" autocomplete="off" spellcheck="false" aria-label="Search text" />
+      <input id="search-input" class="search-input" type="search" placeholder="Find…" autocomplete="off" spellcheck="false" aria-label="Search text" />
       <span class="search-count" id="search-count" aria-live="polite"></span>
     </div>
     <div class="search-actions">
@@ -803,7 +803,14 @@
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
       </button>
     </div>
-    <p class="search-hint">Case-insensitive. Works in the raw note text.</p>
+    <div class="replace-bar" id="replace-bar">
+      <input id="replace-input" class="search-input" type="text" placeholder="Replace with…" autocomplete="off" spellcheck="false" aria-label="Replace text" />
+    </div>
+    <div class="replace-actions" id="replace-actions">
+      <button class="replace-btn" id="replace-one" disabled title="Replace current match">Replace</button>
+      <button class="replace-btn replace-btn--all" id="replace-all" disabled title="Replace all matches">Replace All</button>
+    </div>
+    <p class="search-hint">Case-insensitive · Replace requires edit access.</p>
   </div>
 </div>
 
@@ -875,7 +882,7 @@
       <div class="shortcuts-group">
         <div class="shortcuts-group-title">View</div>
         <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>S</kbd> <span>Save note</span></div>
-        <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>F</kbd> <span>Find in note</span></div>
+        <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>F</kbd> <span>Find &amp; Replace</span></div>
         <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>P</kbd> <span>Toggle Preview</span></div>
         <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>S</kbd> <span>Split view</span></div>
         <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>M</kbd> <span>Toggle Monospace</span></div>
