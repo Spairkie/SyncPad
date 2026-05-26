@@ -63,13 +63,14 @@ export default defineConfig({
     },
   ],
 
-  /* Start a simple static server before tests.
-   * Must run from the *parent* directory so that /SyncPad/ maps to the
-   * repo root (matching the GitHub Pages deployment path). */
+  /* Start a SPA-aware static server before tests.
+   * tests/spa-server.js serves the repo root at /SyncPad/ (matching the
+   * GitHub Pages deployment path) with SPA fallback so all /SyncPad/*
+   * routes serve index.html rather than returning 404. */
   webServer: {
-    command: 'cd .. && npx serve . -l 5555 --no-clipboard',
+    command: 'node tests/spa-server.js',
     url: 'http://localhost:5555/SyncPad/',
     reuseExistingServer: !process.env.CI,
-    timeout: 30_000,
+    timeout: 10_000,
   },
 });
