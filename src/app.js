@@ -56,7 +56,7 @@ import {
   saveCustomTemplate, renameCustomTemplate, deleteCustomTemplate,
   exportCustomTemplates, importCustomTemplates,
 } from './templates.js';
-import { loadSavedTheme, applyTheme, THEMES }  from './theme.js';
+import { loadSavedTheme, applyTheme, THEMES, getSavedTheme }  from './theme.js';
 import { initShortcuts, destroyShortcuts }     from './shortcuts.js';
 
 import * as UI from './ui.js';
@@ -578,7 +578,7 @@ async function startApp() {
   // since _markdownMode was reset to 'write' in teardownRealtimeSession().
   UI.setMarkdownMode('write', null);
   UI.setLockedMode(!!_room.editing_locked);
-  UI.renderThemePicker(THEMES, getSavedTheme_(), (id) => applyTheme(id));
+  UI.renderThemePicker(THEMES, getSavedTheme(), (id) => applyTheme(id));
 
   initSync({
     roomId:           _roomId,
@@ -1131,7 +1131,7 @@ function _openTemplatesModalFresh() {
             let count;
             try { count = importCustomTemplates(String(e.target.result)); }
             catch (err) {
-              if (err?.code === 'QUOTA_EXCEEDED') { UI.showToast('Browser storage is full - could not import templates.', 'error'); return; }
+              if (err?.code === 'QUOTA_EXCEEDED') { UI.showToast('Browser storage is full — could not import templates.', 'error'); return; }
               UI.showToast('Import failed.', 'error'); return;
             }
             if (count < 0) { UI.showToast('Invalid file - expected a JSON object of templates.', 'error'); return; }
@@ -1612,55 +1612,7 @@ function wireEvents() {
     'tool-find':       () => { UI.openPanel('search-panel'); document.getElementById('search-input')?.focus(); },
     'tool-templates': () => {
       if (!canUseTemplates()) { UI.showToast(editBlockedReason() || 'Templates are disabled.', 'warning'); return; }
-
-      const _openTemplates = () => {
-        UI.openTemplatesModal(
-          TEMPLATES,
-          getCustomTemplates(),
-          _onTemplateChosen,
-          (key) => { deleteCustomTemplate(key); },
-          (key, label) => { renameCustomTemplate(key, label); },
-          {
-            onExport: () => {
-              const json = exportCustomTemplates();
-              const blob = new Blob([json], { type: 'application/json' });
-              const a    = Object.assign(document.createElement('a'), {
-                href: URL.createObjectURL(blob), download: 'syncpad-templates.json',
-              });
-              document.body.appendChild(a); a.click(); document.body.removeChild(a);
-              URL.revokeObjectURL(a.href);
-              UI.showToast('Templates exported.', 'success');
-            },
-            onImport: () => {
-              const inp = Object.assign(document.createElement('input'), {
-                type: 'file', accept: 'application/json,.json',
-              });
-              inp.onchange = () => {
-                const f = inp.files[0]; if (!f) return;
-                if (f.size > 1024 * 1024) { UI.showToast('File too large (max 1 MB for template import).', 'error'); return; }
-                const r = new FileReader();
-                r.onerror = () => UI.showToast('Could not read file.', 'error');
-                r.onload = (e) => {
-                  let count;
-                  try { count = importCustomTemplates(String(e.target.result)); }
-                  catch (err) {
-                    if (err?.code === 'QUOTA_EXCEEDED') { UI.showToast('Browser storage is full — could not import templates.', 'error'); return; }
-                    UI.showToast('Import failed.', 'error'); return;
-                  }
-                  if (count < 0) { UI.showToast('Invalid file — expected a JSON object of templates.', 'error'); return; }
-                  UI.showToast(`Imported ${count} template${count !== 1 ? 's' : ''}.`, 'success');
-                  UI.closeModal('templates-modal');
-                  setTimeout(_openTemplates, 150); // reopen with fresh data
-                };
-                r.readAsText(f);
-              };
-              inp.click();
-            },
-          }
-        );
-      };
-
-      _openTemplates();
+      _openTemplatesModalFresh();
     },
   };
 
@@ -2228,8 +2180,6 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
       'info', 2000
     );
   });
-
-  window.__syncpadEventsWired = true;
 }
 
 // ── Editor preference helpers ─────────────────────────────────────────────────
@@ -2442,12 +2392,6 @@ function _onTemplateChosen(key, mode) {
   UI.showToast(mode === 'append' ? 'Template appended.' : 'Template applied.', 'success');
 }
 
-// ── Theme helper (avoids importing getSavedTheme into app.js separately) ─────
-
-function getSavedTheme_() {
-  try { return localStorage.getItem('syncpad_theme') || 'charcoal-amber'; } catch {}
-  return 'charcoal-amber';
-}
 
 // ── Preview helpers ───────────────────────────────────────────────────────────
 

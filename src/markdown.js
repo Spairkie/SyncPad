@@ -23,6 +23,10 @@
 
 import { escapeHtml } from './utils.js';
 
+// ── Constants ─────────────────────────────────────────────────────────────────
+/** Matches GFM horizontal rule lines: ---, ***, ___ (with optional spaces). */
+const HR_RE = /^(?:-[ \t]*){3,}$|^(?:\*[ \t]*){3,}$|^(?:_[ \t]*){3,}$/;
+
 // ── Public API ───────────────────────────────────────────────────────────────
 
 /**
@@ -85,7 +89,7 @@ function _splitBlocks(src) {
 
     // Horizontal rule — 3+ dashes, asterisks, or underscores, nothing else
     // Must be checked before headings/lists to avoid mis-parsing "---"
-    if (/^(?:-[ \t]*){3,}$|^(?:\*[ \t]*){3,}$|^(?:_[ \t]*){3,}$/.test(line.trim())) {
+    if (HR_RE.test(line.trim())) {
       blocks.push({ type: 'hr' });
       i++; continue;
     }
@@ -154,7 +158,7 @@ function _splitBlocks(src) {
       !/^#{1,6}\s+/.test(lines[i]) &&
       !/^>/.test(lines[i]) &&
       !/^\|/.test(lines[i]) &&
-      !/^(?:-[ \t]*){3,}$|^(?:\*[ \t]*){3,}$|^(?:_[ \t]*){3,}$/.test(lines[i].trim()) &&
+      !HR_RE.test(lines[i].trim()) &&
       !/^[ \t]*(?:[-*+]|\d+\.)[ \t]+/.test(lines[i])
     ) {
       para.push(lines[i]); i++;

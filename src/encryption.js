@@ -4,6 +4,11 @@
 // deriveKey() converts passphrase + salt → CryptoKey.
 import { bufToBase64, base64ToBuf } from './utils.js';
 
+// ── Constants ─────────────────────────────────────────────────────────────────
+/** PBKDF2 iteration count. 200k is the OWASP 2023 minimum for SHA-256. */
+const PBKDF2_ITERATIONS = 200_000;
+const PBKDF2_HASH       = 'SHA-256';
+
 /** Generate a random 32-byte hex salt string. */
 export function generateSalt() {
   const b = crypto.getRandomValues(new Uint8Array(32));
@@ -20,7 +25,7 @@ export async function deriveKey(passphrase, saltHex) {
   if (!saltHex || saltHex.length % 2 !== 0 || !/^[0-9a-fA-F]+$/.test(saltHex)) {
     throw new Error('Invalid salt: expected a non-empty even-length hex string');
   }
-  const saltBytes = new Uint8Array(saltHex.match(/.{2}/g).map(h => parseInt(h, 16)));
+  const saltBytes = new Uint8Array(saltHex.match(/.{2}/g).map(hexByte => parseInt(hexByte, 16)));
   const keyMaterial = await crypto.subtle.importKey(
     'raw',
     new TextEncoder().encode(passphrase),
@@ -29,7 +34,7 @@ export async function deriveKey(passphrase, saltHex) {
     ['deriveKey']
   );
   return crypto.subtle.deriveKey(
-    { name: 'PBKDF2', salt: saltBytes, iterations: 200_000, hash: 'SHA-256' },
+    { name: 'PBKDF2', salt: saltBytes, iterations: PBKDF2_ITERATIONS, hash: PBKDF2_HASH },
     keyMaterial,
     { name: 'AES-GCM', length: 256 },
     false,

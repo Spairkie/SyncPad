@@ -20,15 +20,23 @@ export function initBroadcast(roomId, handlers) {
 
   // Each handler is wrapped in try/catch so a bug in a downstream callback
   // cannot abort the Supabase Realtime subscription for the whole session.
-  const _safeCall = (fn, p) => { try { fn?.(p); } catch (e) { console.error('[broadcast] handler error', e); } };
+  const _safeCall = (callback, payload) => {
+    try { callback?.(payload); } catch (err) { console.error('[broadcast] handler error', err); }
+  };
+  // Build a self-filtering listener: ignore messages we sent ourselves.
+  const _on = (event, handlerKey) => (message) => {
+    const payload = message.payload;
+    if (!payload || payload.device_id === deviceId) return;
+    _safeCall(_handlers[handlerKey], payload);
+  };
 
   _channel = sb.channel(`room:${roomId}`, { config: { broadcast: { self: false } } })
-    .on('broadcast', { event: 'typing' },           (m) => { const p = m.payload; if (!p || p.device_id === deviceId) return; _safeCall(_handlers.onRemoteTyping, p); })
-    .on('broadcast', { event: 'content_live' },     (m) => { const p = m.payload; if (!p || p.device_id === deviceId) return; _safeCall(_handlers.onRemoteLiveContent, p); })
-    .on('broadcast', { event: 'settings' },         (m) => { const p = m.payload; if (!p || p.device_id === deviceId) return; _safeCall(_handlers.onRemoteSettings, p); })
-    .on('broadcast', { event: 'files' },            (m) => { const p = m.payload; if (!p || p.device_id === deviceId) return; _safeCall(_handlers.onRemoteFiles, p); })
-    .on('broadcast', { event: 'clear' },            (m) => { const p = m.payload; if (!p || p.device_id === deviceId) return; _safeCall(_handlers.onRemoteClear, p); })
-    .on('broadcast', { event: 'view_once_cleared' },(m) => { const p = m.payload; if (!p || p.device_id === deviceId) return; _safeCall(_handlers.onRemoteViewOnce, p); })
+    .on('broadcast', { event: 'typing' },           _on('typing',           'onRemoteTyping'))
+    .on('broadcast', { event: 'content_live' },     _on('content_live',     'onRemoteLiveContent'))
+    .on('broadcast', { event: 'settings' },         _on('settings',         'onRemoteSettings'))
+    .on('broadcast', { event: 'files' },            _on('files',            'onRemoteFiles'))
+    .on('broadcast', { event: 'clear' },            _on('clear',            'onRemoteClear'))
+    .on('broadcast', { event: 'view_once_cleared' },_on('view_once_cleared','onRemoteViewOnce'))
     .subscribe();
 
   return _channel;

@@ -617,15 +617,14 @@ export function showPasscodeError(msg) {
   const el    = document.getElementById('passcode-error');
   const input = document.getElementById('passcode-input');
   if (el) el.textContent = msg;
-  input?.classList.add('error');
   // Use .oninput (not addEventListener) so repeated calls never accumulate listeners.
   // The handler clears itself after firing once.
-  if (input) input.oninput = () => { clearPasscodeError(); input.oninput = null; };
+  if (input) { input.classList.add('error'); input.oninput = () => { clearPasscodeError(); input.oninput = null; }; }
 }
 export function clearPasscodeError() {
-  const el = document.getElementById('passcode-error');
-  if (el) el.textContent = '';
+  const el    = document.getElementById('passcode-error');
   const input = document.getElementById('passcode-input');
+  if (el) el.textContent = '';
   if (input) { input.classList.remove('error'); input.oninput = null; }
 }
 
@@ -633,9 +632,8 @@ export function showEncryptionError(msg) {
   const el    = document.getElementById('encryption-error');
   const input = document.getElementById('encryption-input');
   if (el) el.textContent = msg;
-  input?.classList.add('error');
   // Use .oninput so repeated calls never accumulate listeners.
-  if (input) input.oninput = () => { clearEncryptionError(); input.oninput = null; };
+  if (input) { input.classList.add('error'); input.oninput = () => { clearEncryptionError(); input.oninput = null; }; }
 }
 export function clearEncryptionError() {
   const el = document.getElementById('encryption-error');
@@ -1027,10 +1025,7 @@ function _wireScrollSync(editor, preview) {
   });
 }
 
-/** Backward-compatible shim — delegates to setMarkdownMode. */
-export function setPreviewMode(showPreview, renderFn) {
-  setMarkdownMode(showPreview ? 'preview' : 'write', renderFn);
-}
+
 
 export function refreshPreview(renderFn) {
   const preview = document.getElementById('note-preview');

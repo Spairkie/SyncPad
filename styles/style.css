@@ -327,6 +327,9 @@ svg { display: block; flex-shrink: 0; }
 .auth-card-icon { font-size: 36px; text-align: center; margin-bottom: 16px; }
 .auth-card h2 { font-size: 20px; font-weight: 600; text-align: center; margin-bottom: 6px; }
 .auth-card p  { font-size: 14px; color: var(--text-secondary); text-align: center; margin-bottom: 24px; line-height: 1.5; }
+.auth-card--centered  { text-align: center; }
+.loading-spinner--spaced { margin: 0 auto 12px; }
+.auth-loading-text    { color: var(--text-secondary); font-size: 14px; margin: 0; }
 .auth-card .room-badge {
   background: var(--accent-dim); color: var(--accent);
   font-size: 12px; font-family: var(--font-mono);
@@ -743,17 +746,17 @@ body.lock-mode .md-toolbar { opacity: 0.4; pointer-events: none; }
 .expiration-bar .exp-time { font-family: var(--font-mono); font-weight: 500; }
 .expiration-bar .exp-cancel { margin-left: auto; font-size: 11px; color: var(--text-secondary); transition: color var(--transition); }
 .expiration-bar .exp-cancel:hover { color: var(--text-primary); }
-.setting-stack { display:flex; flex-direction:column; gap:10px; margin-top:10px; }
-.exp-presets { display:flex; flex-wrap:wrap; gap:8px; }
-.setting-chip { padding:6px 10px; border:1px solid var(--border); border-radius:999px; font-size:12px; color:var(--text-secondary); }
+.setting-stack  { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+.exp-presets    { display: flex; flex-wrap: wrap; gap: 8px; }
+.setting-chip   { padding: 6px 10px; border: 1px solid var(--border); border-radius: 999px; font-size: 12px; color: var(--text-secondary); }
 .setting-chip.is-active { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
-.exp-custom-row { display:flex; gap:8px; }
+.exp-custom-row { display: flex; gap: 8px; }
 .exp-custom-input { max-width: 120px; }
-.exp-custom-unit { flex:1; }
-.setting-error { font-size: 12px; color: var(--red); }
-.exp-actions { display:flex; gap:8px; flex-wrap:wrap; }
-.share-security-notes { display:flex; flex-wrap:wrap; gap:8px; margin: 8px 0 6px; }
-.share-security-chip { font-size:11px; padding:4px 8px; border-radius:999px; border:1px solid rgba(251,191,36,0.35); background:rgba(251,191,36,0.12); color:var(--yellow); }
+.exp-custom-unit  { flex: 1; }
+.setting-error    { font-size: 12px; color: var(--red); }
+.exp-actions      { display: flex; gap: 8px; flex-wrap: wrap; }
+.share-security-notes { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 6px; }
+.share-security-chip  { font-size: 11px; padding: 4px 8px; border-radius: 999px; border: 1px solid rgba(251,191,36,0.35); background: rgba(251,191,36,0.12); color: var(--yellow); }
 
 /* Footer */
 .app-footer {
@@ -986,6 +989,7 @@ body.lock-mode .md-toolbar { opacity: 0.4; pointer-events: none; }
   transition: border-color var(--transition);
 }
 .device-name-edit:focus { border-color: var(--accent); }
+.devices-help-text { font-size: 12px; color: var(--text-muted); margin-top: 14px; }
 
 /* Settings Panel */
 .settings-section { margin-bottom: 24px; }
@@ -999,6 +1003,7 @@ body.lock-mode .md-toolbar { opacity: 0.4; pointer-events: none; }
 }
 .setting-row:last-child { border-bottom: none; }
 .setting-label { font-size: 13px; color: var(--text-primary); }
+.setting-label--about { color: var(--text-secondary); font-size: 13px; line-height: 1.6; }
 .setting-sub   { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
 .setting-btn {
   padding: 5px 13px; border-radius: var(--radius-sm);
