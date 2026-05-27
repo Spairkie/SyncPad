@@ -83,12 +83,12 @@ function _renderUnavailable() {
   if (!screen) return;
   screen.innerHTML = `
     <div class="admin-login-wrap">
-      <div class="auth-card auth-card--centered" style="max-width:360px">
+      <div class="auth-card auth-card--centered admin-login-card">
         <div class="auth-card-icon">⚠️</div>
         <h2>Admin unavailable</h2>
         <p>Could not connect to Supabase. Check your network connection and try again.</p>
         <button onclick="window.location.reload()" class="auth-btn" style="margin-top:14px">Retry</button>
-        <button id="admin-unavailable-home" class="auth-btn" style="margin-top:10px;background:var(--bg-elevated);color:var(--text-primary);border:1px solid var(--border)">Back to SyncPad</button>
+        <button id="admin-unavailable-home" class="auth-btn admin-secondary-btn">Back to SyncPad</button>
       </div>
     </div>`;
   document.getElementById('admin-unavailable-home')?.addEventListener('click', () => {
@@ -102,15 +102,15 @@ function _renderLogin(sb) {
   const screen = document.getElementById('admin-screen');
   screen.innerHTML = `
     <div class="admin-login-wrap">
-      <div class="auth-card" style="max-width:360px">
+      <div class="auth-card admin-login-card">
         <div class="auth-card-icon">🔐</div>
         <h2>Admin Sign In</h2>
         <p>Sign in with your admin account to access the dashboard.</p>
         <input id="admin-email"    class="auth-input" type="email"    placeholder="Email"    autocomplete="email" />
         <input id="admin-password" class="auth-input" type="password" placeholder="Password" autocomplete="current-password" style="margin-top:10px" />
-        <div id="admin-login-error" style="font-size:12px;color:var(--red);margin-top:6px;min-height:16px"></div>
+        <div id="admin-login-error" class="admin-login-error"></div>
         <button id="admin-login-btn"  class="auth-btn" style="margin-top:14px">Sign in</button>
-        <button id="admin-login-home" class="auth-btn" style="margin-top:10px;background:var(--bg-elevated);color:var(--text-primary);border:1px solid var(--border)">Back to SyncPad</button>
+        <button id="admin-login-home" class="auth-btn admin-secondary-btn">Back to SyncPad</button>
       </div>
     </div>`;
 
@@ -1404,14 +1404,14 @@ async function _renderAuditTab(contentEl) {
   if (!_hasAuditTable) {
     contentEl.innerHTML = `
       <div class="admin-tab-content">
-        <div class="admin-empty" style="padding:32px 20px;text-align:center">
-          <div style="font-size:32px;margin-bottom:12px">📋</div>
-          <div style="font-size:15px;font-weight:600;margin-bottom:8px">Audit log not configured</div>
-          <div style="font-size:13px;color:var(--text-muted);max-width:480px;margin:0 auto;line-height:1.6">
+        <div class="admin-empty admin-audit-empty">
+          <div class="admin-audit-empty-icon">📋</div>
+          <div class="admin-audit-empty-title">Audit log not configured</div>
+          <div class="admin-audit-empty-body">
             The <code>syncpad_admin_audit_logs</code> table does not exist yet.
             Run the migration to enable audit logging for all admin actions.
           </div>
-          <div style="margin-top:16px">
+          <div class="admin-audit-empty-actions">
             <a class="admin-action-btn admin-action-primary" href="https://github.com/Spairkie/SyncPad/blob/main/docs/migrations/admin-dashboard-improvements.sql" target="_blank" rel="noopener">View migration SQL</a>
           </div>
         </div>
