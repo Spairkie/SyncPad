@@ -14,7 +14,11 @@ export async function setPasscode(roomId, passcode) {
 
 export async function checkPasscode(room, passcode) {
   if (!room.passcode_hash) return true;
-  const hash = await hashPasscode(passcode, room.passcode_salt || null);
+  // Guard: if a passcode is set but the salt is missing (data corruption),
+  // refuse rather than silently computing an unsalted hash that will never
+  // match the PBKDF2 hash stored in the DB, causing correct codes to fail.
+  if (!room.passcode_salt) return false;
+  const hash = await hashPasscode(passcode, room.passcode_salt);
   return hash === room.passcode_hash;
 }
 

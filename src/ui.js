@@ -332,8 +332,8 @@ export function renderDevicesList(devices, myDeviceId, onNameChange) {
       <div class="device-dot"></div>
       <div class="device-info">
         ${isMe
-          ? `<input class="device-name device-name-edit" value="${escapeHtml(device.device_name)}" maxlength="32" title="Tap to rename your device" aria-label="Your device name" />`
-          : `<div class="device-name device-name-text">${escapeHtml(device.device_name)}</div>`
+          ? `<input class="device-name device-name-edit" value="${escapeHtml(device.device_name || '')}" maxlength="32" title="Tap to rename your device" aria-label="Your device name" />`
+          : `<div class="device-name device-name-text">${escapeHtml(device.device_name || 'Unknown device')}</div>`
         }
         <div class="device-meta">${roBadge}${activityHtml}</div>
       </div>

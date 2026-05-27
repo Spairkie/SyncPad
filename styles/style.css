@@ -35,6 +35,11 @@
   --font-ui:        'DM Sans', system-ui, sans-serif;
   --font-mono:      'DM Mono', 'Fira Code', monospace;
   --transition:     0.18s ease;
+  /* Syntax-highlight token colours (bright variants for dark themes) */
+  --syntax-string:  #4ade80;
+  --syntax-number:  #fb923c;
+  --syntax-fn:      #60a5fa;
+  --syntax-regex:   #f472b6;
   --panel-width:    340px;
   --landing-glow:   rgba(245,166,35,0.08);
 }
@@ -102,6 +107,11 @@
   --shadow-md:      0 4px 16px rgba(0,0,0,0.12);
   --shadow-lg:      0 12px 40px rgba(0,0,0,0.15);
   --landing-glow:   rgba(193,125,46,0.05);
+  /* Syntax colours — darker shades for legibility on light backgrounds */
+  --syntax-string:  #15803d;
+  --syntax-number:  #c2410c;
+  --syntax-fn:      #1d4ed8;
+  --syntax-regex:   #9d174d;
 }
 
 /* ── Theme: Terminal ───────────────────────────────────────── */
@@ -168,6 +178,11 @@
   --shadow-md:      0 4px 16px rgba(0,0,0,0.1);
   --shadow-lg:      0 12px 40px rgba(0,0,0,0.12);
   --landing-glow:   rgba(124,92,191,0.06);
+  /* Syntax colours — darker shades for legibility on light backgrounds */
+  --syntax-string:  #15803d;
+  --syntax-number:  #c2410c;
+  --syntax-fn:      #1d4ed8;
+  --syntax-regex:   #9d174d;
 }
 
 /* ── Reset ─────────────────────────────────────────────────── */
@@ -418,7 +433,7 @@ svg { display: block; flex-shrink: 0; }
   position: fixed;
   inset: 68px 0 0 0;
   background: rgba(0,0,0,0.45);
-  z-index: 35;
+  z-index: 55; /* above side-panels (50) so the overlay can't be bypassed */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -949,17 +964,17 @@ body.lock-mode .md-toolbar { opacity: 0.4; pointer-events: none; }
 .note-preview .token.attr-name { color: var(--accent); }
 .note-preview .token.string,
 .note-preview .token.char,
-.note-preview .token.attr-value { color: #4ade80; }  /* green */
+.note-preview .token.attr-value { color: var(--syntax-string); }
 .note-preview .token.number,
 .note-preview .token.boolean,
-.note-preview .token.unit { color: #fb923c; }         /* orange */
+.note-preview .token.unit { color: var(--syntax-number); }
 .note-preview .token.function,
-.note-preview .token.class-name { color: #60a5fa; }   /* blue */
+.note-preview .token.class-name { color: var(--syntax-fn); }
 .note-preview .token.operator,
 .note-preview .token.entity,
 .note-preview .token.url { color: var(--text-secondary); }
-.note-preview .token.regex { color: #f472b6; }        /* pink */
-.note-preview .token.inserted { color: #4ade80; }
+.note-preview .token.regex { color: var(--syntax-regex); }
+.note-preview .token.inserted { color: var(--syntax-string); }
 .note-preview .token.deleted { color: var(--red); }
 
 /* Presence Panel */
