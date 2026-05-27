@@ -31,6 +31,24 @@ test.describe('Settings panel', () => {
     await expect(page.locator('[data-exp-preset]').first()).toBeVisible();
   });
 
+  test('30-second expiry preset is removed (B-2)', async ({ page }) => {
+    await createRoom(page);
+    await openSettingsPanel(page);
+    await page.locator('#setting-exp-btn').click();
+    // The 30s preset chip must not exist — it was below the 5-minute minimum
+    await expect(page.locator('[data-exp-preset="30s"]')).toHaveCount(0);
+  });
+
+  test('10-minute expiry preset is first and active by default (B-2)', async ({ page }) => {
+    await createRoom(page);
+    await openSettingsPanel(page);
+    await page.locator('#setting-exp-btn').click();
+    // First preset chip should be the 10m one
+    const firstChip = page.locator('[data-exp-preset]').first();
+    await expect(firstChip).toHaveAttribute('data-exp-preset', '10m');
+    await expect(firstChip).toHaveClass(/is-active/);
+  });
+
   test('custom expiration rejects values below 5 minutes', async ({ page }) => {
     await createRoom(page);
     await openSettingsPanel(page);
