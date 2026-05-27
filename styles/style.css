@@ -176,7 +176,7 @@ svg { display: block; flex-shrink: 0; }
 .loading-message { font-size: 13px; color: var(--text-secondary); }
 .loading-retry-btn {
   margin-top: 12px; padding: 8px 20px;
-  background: var(--accent); color: #000; font-weight: 600; font-size: 13px;
+  background: var(--accent); color: var(--text-inverse); font-weight: 600; font-size: 13px;
   border: none; border-radius: var(--radius-md); cursor: pointer;
   transition: opacity var(--transition);
 }
@@ -1344,7 +1344,7 @@ button:focus:not(:focus-visible) { outline: none; }
   font-size: 11px; color: var(--text-secondary); margin-bottom: 8px;
   padding: 4px 8px; background: var(--bg-elevated); border-radius: 4px;
 }
-.remote-notice-btn.primary { background: var(--accent); color: #000; font-weight: 600; }
+.remote-notice-btn.primary { background: var(--accent); color: var(--text-inverse); font-weight: 600; }
 .remote-notice-btn.primary:hover { opacity: 0.88; }
 .remote-notice-btn.subtle  { color: var(--text-muted); }
 .remote-notice-btn.subtle:hover { color: var(--text-secondary); background: transparent; }
@@ -1493,7 +1493,7 @@ kbd {
 .file-preview-dl-btn {
   display: flex; align-items: center; gap: 6px;
   padding: 6px 12px; border-radius: 6px;
-  background: var(--accent); color: #000;
+  background: var(--accent); color: var(--text-inverse);
   border: none; cursor: pointer;
   font-size: 13px; font-weight: 600;
   transition: opacity 0.15s;
@@ -1593,7 +1593,7 @@ kbd {
   margin-top: 8px;
   display: inline-flex; align-items: center; gap: 6px;
   padding: 8px 18px; border-radius: 8px;
-  background: var(--accent); color: #000;
+  background: var(--accent); color: var(--text-inverse);
   text-decoration: none; font-size: 13px; font-weight: 600;
   transition: opacity 0.15s;
 }

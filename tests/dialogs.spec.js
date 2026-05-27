@@ -21,14 +21,15 @@ test.describe('showPrompt dialog', () => {
     await page.evaluate(() => document.getElementById('sp-prompt-cancel').click());
   });
 
-  test('OK resolves with trimmed input value', async ({ page }) => {
+  test('OK resolves with the raw input value (no trimming)', async ({ page }) => {
+    // showPrompt does not trim — callers decide whether to trim at the point of use.
     await goToLanding(page);
     const resultPromise = page.evaluate(async () => {
       const { showPrompt } = await import('/SyncPad/src/ui.js');
       return showPrompt('Your name:', { confirmLabel: 'Save' });
     });
     await page.waitForSelector('#sp-prompt-modal.visible', { timeout: 5000 });
-    await page.locator('#sp-prompt-input').fill('  Alice  ');
+    await page.locator('#sp-prompt-input').fill('Alice');
     await page.evaluate(() => document.getElementById('sp-prompt-ok').click());
     const result = await resultPromise;
     expect(result).toBe('Alice');
@@ -96,6 +97,22 @@ test.describe('showPrompt dialog', () => {
     await page.evaluate(() => document.getElementById('sp-prompt-ok').click());
     const result = await resultPromise;
     expect(result).toBeNull();
+  });
+
+  test('showPrompt returns raw untrimmed value (passphrase preservation)', async ({ page }) => {
+    // Passphrases and tokens may have leading/trailing spaces that are meaningful.
+    // showPrompt must return the exact typed value — callers that want trimming
+    // do so themselves (e.g. template names, passcodes).
+    await goToLanding(page);
+    const resultPromise = page.evaluate(async () => {
+      const { showPrompt } = await import('/SyncPad/src/ui.js');
+      return showPrompt('Passphrase:');
+    });
+    await page.waitForSelector('#sp-prompt-modal.visible', { timeout: 5000 });
+    await page.locator('#sp-prompt-input').fill('  secret  ');
+    await page.evaluate(() => document.getElementById('sp-prompt-ok').click());
+    const result = await resultPromise;
+    expect(result).toBe('  secret  ');
   });
 });
 
