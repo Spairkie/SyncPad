@@ -802,7 +802,7 @@ async function _openRoomDetail(roomId) {
   const [roomRes, filesRes, reportsRes] = await Promise.allSettled([
     _sb.from('syncpad_rooms').select(selectCols).eq('room_id', roomId).single(),
     _sb.from('syncpad_files').select('id, filename, file_size, mime_type, uploaded_at').eq('room_id', roomId),
-    _sb.from('syncpad_room_reports').select('id, reason, status, created_at').eq('room_id', roomId).order('created_at', { ascending: false }).limit(5),
+    _sb.from('syncpad_room_reports').select('id, report_reason, status, created_at').eq('room_id', roomId).order('created_at', { ascending: false }).limit(5),
   ]);
 
   const room    = roomRes.status === 'fulfilled'    ? roomRes.value.data    : null;
@@ -882,7 +882,7 @@ async function _openRoomDetail(roomId) {
         </div>
         <div class="admin-detail-row">
           <span class="admin-detail-label">Reports</span>
-          <span class="admin-detail-value">${reports.length ? reports.map(r => `<span class="admin-badge admin-badge--${r.status === 'new' ? 'alert' : 'muted'}">${escapeHtml(r.reason || r.status)}</span>`).join(' ') : 'None'}</span>
+          <span class="admin-detail-value">${reports.length ? reports.map(r => `<span class="admin-badge admin-badge--${r.status === 'new' ? 'alert' : 'muted'}">${escapeHtml(r.report_reason || r.status)}</span>`).join(' ') : 'None'}</span>
         </div>
         ${!room.encryption_enabled && room.content ? `
         <div class="admin-detail-row admin-detail-row--vertical">

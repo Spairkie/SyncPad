@@ -2082,7 +2082,7 @@ kbd {
 .report-room-textarea { width:100%; resize: vertical; min-height: 92px; }
 .report-room-charcount { margin-top: 6px; font-size: 12px; color: var(--text-secondary); text-align: right; }
 .report-room-error { margin-top: 8px; font-size: 13px; color: var(--red); }
-.report-room-success { margin-top: 8px; font-size: 13px; color: #34d399; }
+.report-room-success { margin-top: 8px; font-size: 13px; color: var(--green); }
 #report-room-submit:disabled { opacity: .6; cursor: not-allowed; }
 
 /* ── UI modernization pass (visual-only) ───────────────────────────────────── */
