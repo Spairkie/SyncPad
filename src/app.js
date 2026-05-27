@@ -2369,6 +2369,12 @@ function teardownRealtimeSession() {
   // (e.g. settings callbacks that fire after teardown read _room for its values).
   _room   = null;
   _roomId = null;
+  // Defense-in-depth: clear URL-derived flags. Both are re-set from the URL on
+  // every room navigation (lines ~191–197) before being read, so there is no
+  // functional bug if they linger. Clearing here ensures no stale value is
+  // observable in the window between teardown and the next route resolution.
+  _isReadOnly = false;
+  _shareToken = null;
   // Reset the scroll-sync guard so it can re-wire on the next split-mode entry.
   UI.resetScrollSync();
 }
