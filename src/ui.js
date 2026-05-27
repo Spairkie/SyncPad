@@ -1453,10 +1453,14 @@ export function showPrompt(message, { defaultValue = '', placeholder = '', confi
     };
 
     inputEl.onkeydown = (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); const v = inputEl.value.trim(); cleanup(v || null); }
+      // Return the RAW (untrimmed) value so callers that use the result as a
+      // passphrase or password receive exactly what the user typed. Callers
+      // that want trimmed input (template names, passcodes) call .trim() at
+      // the point of use. Resolves null only when the field is truly empty.
+      if (e.key === 'Enter') { e.preventDefault(); cleanup(inputEl.value || null); }
     };
 
-    okBtn.onclick     = () => { const v = inputEl.value.trim(); cleanup(v || null); };
+    okBtn.onclick     = () => { cleanup(inputEl.value || null); };
     cancelBtn.onclick = () => cleanup(null);
     modal.onclick     = (e) => { if (e.target === modal) cleanup(null); };
     document.addEventListener('keydown', _onKey);
