@@ -1218,17 +1218,26 @@ function wireEvents() {
   editor?.addEventListener('keydown', (e) => {
     if (!canEdit() || e.isComposing || e.ctrlKey || e.metaKey || e.altKey) return;
 
-    // Tab / Shift+Tab — indent / dedent (2 spaces)
+    // Tab / Shift+Tab — indent/dedent only when there is a multi-character selection
+    // OR the cursor is at the start of a line with content (i.e. indenting makes sense).
+    // For a plain Tab on an empty/cursor-only position outside a list, fall through so
+    // the browser can move focus to the next element (keyboard accessibility).
     if (e.key === 'Tab') {
-      e.preventDefault();
       const val   = editor.value;
       const start = editor.selectionStart;
       const end   = editor.selectionEnd;
-      if (start === end) {
-        // No selection: insert 2 spaces at caret
-        editor.value = val.slice(0, start) + '  ' + val.slice(end);
-        editor.selectionStart = editor.selectionEnd = start + 2;
-      } else {
+      const hasSelection = start !== end;
+      // Determine if the cursor line has non-whitespace content or is part of a list
+      const lineStart = val.lastIndexOf('\n', start - 1) + 1;
+      const lineText  = val.slice(lineStart, start + (end - start));
+      const inList    = /^\s*[-*+]|\s*\d+\./.test(lineText);
+
+      // Only intercept Tab if: there's a multi-char selection to indent, OR cursor is in a list.
+      // Otherwise let Tab propagate so keyboard focus moves naturally.
+      if (!hasSelection && !inList) return;
+
+      e.preventDefault();
+      if (hasSelection) {
         // Multi-line selection: indent or dedent each line
         const lStart = val.lastIndexOf('\n', start - 1) + 1;
         const lEnd   = (() => { const n = val.indexOf('\n', end - 1); return n === -1 ? val.length : n; })();
@@ -1239,6 +1248,10 @@ function wireEvents() {
         editor.value = val.slice(0, lStart) + newBlock + val.slice(lEnd);
         editor.selectionStart = lStart;
         editor.selectionEnd   = lStart + newBlock.length;
+      } else {
+        // In a list: insert 2 spaces at caret
+        editor.value = val.slice(0, start) + '  ' + val.slice(end);
+        editor.selectionStart = editor.selectionEnd = start + 2;
       }
       editor.dispatchEvent(new Event('input', { bubbles: true }));
       return;
@@ -1596,8 +1609,7 @@ function wireEvents() {
       UI.insertAtCursor(insertTimestamp());
     },
     'tool-select-all': () => { editor?.focus(); editor?.setSelectionRange(0, editor.value.length); },
-    'tool-monospace':  () => { _toggleMonospace(); },
-    'tool-find':       () => { _onOpenSearch?.(); },
+    'tool-find':       () => { UI.openPanel('search-panel'); document.getElementById('search-input')?.focus(); },
     'tool-templates': () => {
       if (!canUseTemplates()) { UI.showToast(editBlockedReason() || 'Templates are disabled.', 'warning'); return; }
 
@@ -2399,6 +2411,8 @@ function teardownRealtimeSession() {
   // (e.g. settings callbacks that fire after teardown read _room for its values).
   _room   = null;
   _roomId = null;
+  // Reset the scroll-sync guard so it can re-wire on the next split-mode entry.
+  UI.resetScrollSync();
 }
 
 // ── Templates handler ─────────────────────────────────────────────────────────

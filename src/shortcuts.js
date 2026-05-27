@@ -147,8 +147,9 @@ function _wrapSelection(editor, prefix, suffix) {
   const end   = editor.selectionEnd;
   const sel   = editor.value.slice(start, end);
 
-  // If already wrapped, unwrap
-  if (sel.startsWith(prefix) && sel.endsWith(suffix)) {
+  // If already wrapped (and there's actual inner content), unwrap.
+  // Guard against sel === prefix+suffix (no inner content) to avoid producing empty string.
+  if (sel.startsWith(prefix) && sel.endsWith(suffix) && sel.length > prefix.length + suffix.length) {
     const inner = sel.slice(prefix.length, sel.length - suffix.length);
     editor.value = editor.value.slice(0, start) + inner + editor.value.slice(end);
     editor.selectionStart = start;

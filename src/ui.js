@@ -1002,6 +1002,9 @@ export function setMarkdownMode(mode, renderFn) {
 
 // ── Scroll synchronisation (split mode) ──────────────────────────────────────
 let _scrollSyncWired = false;
+/** Reset the scroll-sync guard so _wireScrollSync can re-attach on the next split-mode entry.
+ *  Must be called from teardownRealtimeSession so the guard doesn't persist across rooms. */
+export function resetScrollSync() { _scrollSyncWired = false; }
 function _wireScrollSync(editor, preview) {
   if (_scrollSyncWired) return;
   _scrollSyncWired = true;
