@@ -154,3 +154,45 @@ export function roomIdFromUrl(url) {
   const match = url.match(/\/SyncPad\/([^/?#]+)/);
   return match?.[1] ?? '';
 }
+
+/**
+ * Open the settings panel via the more-menu.
+ * Convenience wrapper used across multiple spec files.
+ */
+export async function openSettingsPanel(page) {
+  await openMoreMenu(page);
+  await page.locator('#btn-settings').click();
+  await page.waitForSelector('#settings-panel.open', { timeout: 5000 });
+}
+
+/**
+ * Wait for a modal with the given id to become visible.
+ * @param {import('@playwright/test').Page} page
+ * @param {string} id — the modal element id (without `#`)
+ * @param {number} [timeout=5000]
+ */
+export async function waitForModal(page, id, timeout = 5000) {
+  await page.waitForSelector(`#${id}.visible`, { timeout });
+}
+
+/**
+ * Close a modal with the given id by clicking the visible close/cancel button.
+ * @param {import('@playwright/test').Page} page
+ * @param {string} id — the modal element id
+ */
+export async function closeModal(page, id) {
+  const closeSelectors = [
+    `#${id} .modal-close`,
+    `#${id} [data-modal-close]`,
+    `#${id} .modal-btn-cancel`,
+    `#${id}-close`,
+  ];
+  for (const sel of closeSelectors) {
+    const btn = page.locator(sel).first();
+    if (await btn.isVisible().catch(() => false)) {
+      await btn.click();
+      await page.waitForSelector(`#${id}.visible`, { state: 'hidden', timeout: 3000 }).catch(() => {});
+      return;
+    }
+  }
+}

@@ -2204,6 +2204,11 @@ function teardownRealtimeSession() {
   // the user enters preview mode. Without this, the guard stays true and the
   // listener is never re-wired after the first navigation.
   _previewObserverWired = false;
+  // Clear share context so a token from a read-only share route is never
+  // visible in a subsequent room context (overwritten by the next navigation
+  // but nulled here as a defence-in-depth measure).
+  _shareToken = null;
+  _isReadOnly = false;
 }
 
 // ── Templates handler ─────────────────────────────────────────────────────────

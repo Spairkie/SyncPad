@@ -31,6 +31,24 @@ test.describe('Settings panel', () => {
     await expect(page.locator('[data-exp-preset]').first()).toBeVisible();
   });
 
+  test('30-second expiry preset is removed (B-2)', async ({ page }) => {
+    await createRoom(page);
+    await openSettingsPanel(page);
+    await page.locator('#setting-exp-btn').click();
+    // The 30s preset chip must not exist — it was below the 5-minute minimum
+    await expect(page.locator('[data-exp-preset="30s"]')).toHaveCount(0);
+  });
+
+  test('10-minute expiry preset is first and active by default (B-2)', async ({ page }) => {
+    await createRoom(page);
+    await openSettingsPanel(page);
+    await page.locator('#setting-exp-btn').click();
+    // First preset chip should be the 10m one
+    const firstChip = page.locator('[data-exp-preset]').first();
+    await expect(firstChip).toHaveAttribute('data-exp-preset', '10m');
+    await expect(firstChip).toHaveClass(/is-active/);
+  });
+
   test('custom expiration rejects values below 5 minutes', async ({ page }) => {
     await createRoom(page);
     await openSettingsPanel(page);
@@ -119,6 +137,78 @@ test.describe('Settings panel', () => {
     // Click to disable
     await btn.click();
     await expect(btn).toHaveText('Off');
+  });
+});
+
+test.describe('View-once mode', () => {
+  test('view-once toggle button is visible in settings panel', async ({ page }) => {
+    await createRoom(page);
+    await openSettingsPanel(page);
+    await expect(page.locator('#setting-vo-btn')).toBeVisible();
+  });
+
+  test('view-once status element is present', async ({ page }) => {
+    await createRoom(page);
+    await openSettingsPanel(page);
+    await expect(page.locator('#setting-vo-status')).toBeVisible();
+  });
+
+  test('clicking view-once button toggles the status text', async ({ page }) => {
+    await createRoom(page);
+    await openSettingsPanel(page);
+    const btn    = page.locator('#setting-vo-btn');
+    const status = page.locator('#setting-vo-status');
+
+    const before = await status.textContent();
+    await btn.click();
+    // Status text should change after toggling
+    await expect(status).not.toHaveText(before || '', { timeout: 5000 });
+    // Toggle back
+    await btn.click();
+    await expect(status).toHaveText(before || '', { timeout: 5000 });
+  });
+});
+
+test.describe('Lock editing', () => {
+  test('lock editing button is visible in settings panel for owner', async ({ page }) => {
+    await createRoom(page);
+    await openSettingsPanel(page);
+    await expect(page.locator('#setting-lock-btn')).toBeVisible();
+  });
+
+  test('clicking lock button makes editor read-only', async ({ page }) => {
+    await createRoom(page);
+    await openSettingsPanel(page);
+    const lockBtn = page.locator('#setting-lock-btn');
+
+    await lockBtn.click();
+    // Wait for the setting to apply
+    await page.waitForTimeout(1000);
+
+    // Editor should be disabled / read-only
+    const editor = page.locator('#note-editor');
+    const isReadOnly = await editor.evaluate(el => el.readOnly || el.disabled);
+    expect(isReadOnly).toBe(true);
+  });
+
+  test('clicking lock button again unlocks the editor', async ({ page }) => {
+    await createRoom(page);
+    await openSettingsPanel(page);
+    const lockBtn = page.locator('#setting-lock-btn');
+
+    // Lock
+    await lockBtn.click();
+    await page.waitForTimeout(1000);
+
+    // Re-open settings panel (closes on lock) and unlock
+    await openSettingsPanel(page);
+    await page.locator('#setting-lock-btn').click();
+    await page.waitForTimeout(1000);
+
+    // Editor should be editable again
+    const editor = page.locator('#note-editor');
+    const isReadOnly = await editor.evaluate(el => el.readOnly || el.disabled);
+    expect(isReadOnly).toBe(false);
   });
 });
 
