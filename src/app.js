@@ -1214,6 +1214,79 @@ function wireEvents() {
   });
   editor?.addEventListener('blur', () => onEditorBlur());
 
+  // ── Smart editor keyboard behaviour ────────────────────────────────────────
+  editor?.addEventListener('keydown', (e) => {
+    if (!canEdit() || e.isComposing || e.ctrlKey || e.metaKey || e.altKey) return;
+
+    // Tab / Shift+Tab — indent / dedent (2 spaces)
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const val   = editor.value;
+      const start = editor.selectionStart;
+      const end   = editor.selectionEnd;
+      if (start === end) {
+        // No selection: insert 2 spaces at caret
+        editor.value = val.slice(0, start) + '  ' + val.slice(end);
+        editor.selectionStart = editor.selectionEnd = start + 2;
+      } else {
+        // Multi-line selection: indent or dedent each line
+        const lStart = val.lastIndexOf('\n', start - 1) + 1;
+        const lEnd   = (() => { const n = val.indexOf('\n', end - 1); return n === -1 ? val.length : n; })();
+        const block  = val.slice(lStart, lEnd);
+        const newBlock = e.shiftKey
+          ? block.split('\n').map((l) => l.startsWith('  ') ? l.slice(2) : l.startsWith(' ') ? l.slice(1) : l).join('\n')
+          : block.split('\n').map((l) => '  ' + l).join('\n');
+        editor.value = val.slice(0, lStart) + newBlock + val.slice(lEnd);
+        editor.selectionStart = lStart;
+        editor.selectionEnd   = lStart + newBlock.length;
+      }
+      editor.dispatchEvent(new Event('input', { bubbles: true }));
+      return;
+    }
+
+    // Enter — auto-continue list items
+    if (e.key === 'Enter') {
+      const val = editor.value;
+      const pos = editor.selectionStart;
+      if (editor.selectionStart !== editor.selectionEnd) return; // has selection
+      const lineStart = val.lastIndexOf('\n', pos - 1) + 1;
+      const lineText  = val.slice(lineStart, pos);
+
+      const ulMatch = lineText.match(/^([ \t]*)([-*+]) /);
+      const olMatch = lineText.match(/^([ \t]*)(\d+)\. /);
+      const match   = ulMatch || olMatch;
+      if (!match) return;
+
+      const content = lineText.slice(match[0].length);
+      e.preventDefault();
+      if (!content.trim()) {
+        // Empty item — break out of the list
+        editor.value = val.slice(0, lineStart) + '\n' + val.slice(pos);
+        editor.selectionStart = editor.selectionEnd = lineStart + 1;
+      } else {
+        // Continue the list with the next item
+        const nextPrefix = olMatch
+          ? `${olMatch[1]}${parseInt(olMatch[2], 10) + 1}. `
+          : `${match[1]}${match[2]} `;
+        const insertion = '\n' + nextPrefix;
+        editor.value = val.slice(0, pos) + insertion + val.slice(editor.selectionEnd);
+        editor.selectionStart = editor.selectionEnd = pos + insertion.length;
+      }
+      editor.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  });
+
+  // ── Markdown toolbar ────────────────────────────────────────────────────────
+  document.getElementById('md-toolbar')?.addEventListener('mousedown', (e) => {
+    // mousedown (not click) so we can preventDefault before the editor loses focus
+    const btn = e.target.closest('[data-md-action]');
+    if (!btn) return;
+    e.preventDefault(); // keep editor focus
+    if (!canEdit()) return;
+    if (!editor) return;
+    _applyMarkdownFormat(btn.dataset.mdAction, editor);
+  });
+
   // Broadcast cursor line on selection/click (throttled in presence.js at 800ms)
   const _broadcastCursor = () => {
     if (!editor) return;
@@ -2139,6 +2212,110 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
   });
 
   window.__syncpadEventsWired = true;
+}
+
+// ── Markdown format helpers ───────────────────────────────────────────────────
+/**
+ * Apply a formatting action to the editor textarea.
+ * Called by the toolbar (mousedown) and can be reused by other code.
+ * @param {string} action  – matches data-md-action attribute
+ * @param {HTMLTextAreaElement} editor
+ */
+function _applyMarkdownFormat(action, editor) {
+  if (!editor) return;
+  const val   = editor.value;
+  const start = editor.selectionStart;
+  const end   = editor.selectionEnd;
+  const sel   = val.slice(start, end);
+
+  // Wrap selection (or "text" placeholder) with prefix/suffix markers.
+  // Toggles off if already wrapped.
+  const wrapSel = (prefix, suffix = prefix) => {
+    if (sel.startsWith(prefix) && sel.endsWith(suffix) && sel.length > prefix.length + suffix.length - 1) {
+      const inner = sel.slice(prefix.length, sel.length - suffix.length);
+      editor.value = val.slice(0, start) + inner + val.slice(end);
+      editor.selectionStart = start;
+      editor.selectionEnd   = start + inner.length;
+    } else {
+      const inner = sel || 'text';
+      editor.value = val.slice(0, start) + prefix + inner + suffix + val.slice(end);
+      editor.selectionStart = start + prefix.length;
+      editor.selectionEnd   = start + prefix.length + inner.length;
+    }
+    editor.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+
+  // Toggle a line-level prefix on every line touched by the selection.
+  const toggleLinePrefix = (prefix) => {
+    const lStart = val.lastIndexOf('\n', start - 1) + 1;
+    const eolPos = end > start ? end - 1 : end;
+    const lEnd   = (() => { const n = val.indexOf('\n', eolPos); return n === -1 ? val.length : n; })();
+    const block  = val.slice(lStart, lEnd);
+    const lines2 = block.split('\n');
+    const allHave = lines2.every((l) => l.startsWith(prefix));
+    const newBlock = allHave
+      ? lines2.map((l) => l.slice(prefix.length)).join('\n')
+      : lines2.map((l) => prefix + l).join('\n');
+    editor.value = val.slice(0, lStart) + newBlock + val.slice(lEnd);
+    editor.selectionStart = lStart;
+    editor.selectionEnd   = lStart + newBlock.length;
+    editor.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+
+  // Toggle an ATX heading on the current line (strips any existing # prefix first).
+  const toggleHeading = (level) => {
+    const prefix = '#'.repeat(level) + ' ';
+    const lStart = val.lastIndexOf('\n', start - 1) + 1;
+    const lEnd   = (() => { const n = val.indexOf('\n', start); return n === -1 ? val.length : n; })();
+    const line   = val.slice(lStart, lEnd);
+    const stripped = line.replace(/^#{1,6} /, '');
+    const newLine  = line.startsWith(prefix) ? stripped : prefix + stripped;
+    editor.value = val.slice(0, lStart) + newLine + val.slice(lEnd);
+    editor.selectionStart = lStart;
+    editor.selectionEnd   = lStart + newLine.length;
+    editor.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+
+  switch (action) {
+    case 'bold':          wrapSel('**', '**'); break;
+    case 'italic':        wrapSel('_',  '_');  break;
+    case 'strikethrough': wrapSel('~~', '~~'); break;
+    case 'code':          wrapSel('`',  '`');  break;
+    case 'h1':            toggleHeading(1);    break;
+    case 'h2':            toggleHeading(2);    break;
+    case 'h3':            toggleHeading(3);    break;
+    case 'quote':         toggleLinePrefix('> '); break;
+    case 'ul':            toggleLinePrefix('- '); break;
+    case 'ol':            toggleLinePrefix('1. '); break;
+    case 'link': {
+      const insert = sel ? `[${sel}](url)` : '[link text](url)';
+      editor.value = val.slice(0, start) + insert + val.slice(end);
+      const urlStart = start + insert.indexOf('url');
+      editor.selectionStart = urlStart;
+      editor.selectionEnd   = urlStart + 3;
+      editor.dispatchEvent(new Event('input', { bubbles: true }));
+      break;
+    }
+    case 'codeblock': {
+      const before = start > 0 && val[start - 1] !== '\n' ? '\n' : '';
+      const after  = end < val.length && val[end] !== '\n' ? '\n' : '';
+      const inner  = sel || 'code here';
+      const insert = `${before}\`\`\`\n${inner}\n\`\`\`${after}`;
+      editor.value = val.slice(0, start) + insert + val.slice(end);
+      editor.selectionStart = start + before.length + 4;
+      editor.selectionEnd   = start + before.length + 4 + inner.length;
+      editor.dispatchEvent(new Event('input', { bubbles: true }));
+      break;
+    }
+    case 'hr': {
+      const before = start > 0 && val[start - 1] !== '\n' ? '\n' : '';
+      const ins = `${before}---\n`;
+      editor.value = val.slice(0, start) + ins + val.slice(end);
+      editor.selectionStart = editor.selectionEnd = start + ins.length;
+      editor.dispatchEvent(new Event('input', { bubbles: true }));
+      break;
+    }
+  }
 }
 
 function teardownRealtimeSession() {

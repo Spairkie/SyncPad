@@ -4,12 +4,16 @@
 // Supports:
 //   - headings (# .. ######)
 //   - bold (**x** or __x__) and italic (*x* or _x_)
+//   - strikethrough (~~x~~)
 //   - inline code `x`
 //   - fenced code blocks ```lang\n…\n```
 //   - links [text](https://…)   (http(s)/mailto only)
 //   - unordered lists (- / * / +)
 //   - ordered lists  (1. 2. …)
 //   - GFM-style checklists  - [ ] item   - [x] item
+//   - blockquotes  > text
+//   - horizontal rules  --- / *** / ___
+//   - GFM tables  | Col | Col |  with | --- | --- | separator
 //   - paragraphs separated by blank lines
 //   - hard line breaks (two trailing spaces)
 //
@@ -79,11 +83,51 @@ function _splitBlocks(src) {
       continue;
     }
 
+    // Horizontal rule — 3+ dashes, asterisks, or underscores, nothing else
+    // Must be checked before headings/lists to avoid mis-parsing "---"
+    if (/^(?:-[ \t]*){3,}$|^(?:\*[ \t]*){3,}$|^(?:_[ \t]*){3,}$/.test(line.trim())) {
+      blocks.push({ type: 'hr' });
+      i++; continue;
+    }
+
     // Heading
     const h = line.match(/^(#{1,6})\s+(.+?)\s*#*\s*$/);
     if (h) {
       blocks.push({ type: 'heading', level: h[1].length, text: h[2] });
       i++; continue;
+    }
+
+    // Blockquote — collect consecutive > lines, strip the > prefix
+    if (/^>/.test(line)) {
+      const bqLines = [];
+      while (i < lines.length && /^>/.test(lines[i])) {
+        bqLines.push(lines[i].replace(/^>\s?/, ''));
+        i++;
+      }
+      blocks.push({ type: 'blockquote', text: bqLines.join('\n') });
+      continue;
+    }
+
+    // GFM table — first row starts with |, second row is the separator
+    if (
+      /^\|/.test(line) &&
+      i + 1 < lines.length &&
+      /^\|[-|:\s]+\|/.test(lines[i + 1])
+    ) {
+      const tableLines = [];
+      while (i < lines.length && /^\|/.test(lines[i])) {
+        tableLines.push(lines[i]); i++;
+      }
+      // First row = headers, second row = separator (skip), rest = body rows
+      const parseRow = (row) =>
+        row.split('|').slice(1, -1).map((c) => c.trim());
+      const [headerRow, _sep, ...bodyLines] = tableLines;
+      blocks.push({
+        type:    'table',
+        headers: parseRow(headerRow),
+        rows:    bodyLines.map(parseRow),
+      });
+      continue;
     }
 
     // List (unordered, ordered, or checklist)
@@ -108,6 +152,9 @@ function _splitBlocks(src) {
       !/^\s*$/.test(lines[i]) &&
       !/^```/.test(lines[i]) &&
       !/^#{1,6}\s+/.test(lines[i]) &&
+      !/^>/.test(lines[i]) &&
+      !/^\|/.test(lines[i]) &&
+      !/^(?:-[ \t]*){3,}$|^(?:\*[ \t]*){3,}$|^(?:_[ \t]*){3,}$/.test(lines[i].trim()) &&
       !/^[ \t]*(?:[-*+]|\d+\.)[ \t]+/.test(lines[i])
     ) {
       para.push(lines[i]); i++;
@@ -132,6 +179,25 @@ function _renderBlock(block, ctx) {
       const tag = block.ordered ? 'ol' : 'ul';
       const itemsHtml = block.items.map((it) => _renderListItem(it, ctx)).join('\n');
       return `<${tag}>\n${itemsHtml}\n</${tag}>`;
+    }
+
+    case 'blockquote':
+      // Recursively render the quoted content so nested headings/lists work
+      return `<blockquote>${renderMarkdown(block.text)}</blockquote>`;
+
+    case 'hr':
+      return `<hr>`;
+
+    case 'table': {
+      const thead = `<thead><tr>${block.headers
+        .map((h) => `<th>${_renderInline(h)}</th>`)
+        .join('')}</tr></thead>`;
+      const tbody = block.rows.length
+        ? `<tbody>${block.rows
+            .map((row) => `<tr>${row.map((c) => `<td>${_renderInline(c)}</td>`).join('')}</tr>`)
+            .join('\n')}</tbody>`
+        : '';
+      return `<table>${thead}${tbody}</table>`;
     }
 
     case 'paragraph':
@@ -162,20 +228,21 @@ function _renderInline(raw) {
   const codeSlots = [];
   let text = String(raw).replace(/`([^`\n]+?)`/g, (_, code) => {
     codeSlots.push(escapeHtml(code));
-    return `\u0001${codeSlots.length - 1}\u0001`;
+    return `${codeSlots.length - 1}`;
   });
 
   // 2. Escape everything else
   text = escapeHtml(text);
 
-  // 3. Bold then italic (non-greedy).
+  // 3. Bold, italic, strikethrough (non-greedy).
   // Word-boundary guards (negative lookbehind/ahead on [a-zA-Z0-9]) prevent
   // underscore-based markers from matching inside identifiers like snake_case.
-  // Asterisk markers are left without boundary guards (less common in code).
+  // Asterisk/tilde markers are left without boundary guards.
   text = text.replace(/\*\*([^*\n]+?)\*\*/g, '<strong>$1</strong>');
   text = text.replace(/(?<![a-zA-Z0-9])__([^_\n]+?)__(?![a-zA-Z0-9])/g, '<strong>$1</strong>');
   text = text.replace(/\*([^*\n]+?)\*/g,     '<em>$1</em>');
   text = text.replace(/(?<![a-zA-Z0-9])_([^_\n]+?)_(?![a-zA-Z0-9])/g,   '<em>$1</em>');
+  text = text.replace(/~~([^~\n]+?)~~/g,     '<del>$1</del>');
 
   // 4. Links — http/https/mailto only.
   // NOTE: `url` here comes from step-2-escaped text, so special chars like &
@@ -191,7 +258,7 @@ function _renderInline(raw) {
   text = text.replace(/\n/g, ' ');
 
   // 6. Restore code spans
-  text = text.replace(/\u0001(\d+)\u0001/g, (_, n) => `<code>${codeSlots[Number(n)]}</code>`);
+  text = text.replace(/(\d+)/g, (_, n) => `<code>${codeSlots[Number(n)]}</code>`);
 
   return text;
 }

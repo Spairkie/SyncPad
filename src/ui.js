@@ -993,7 +993,32 @@ export function setMarkdownMode(mode, renderFn) {
     preview.classList.remove('hidden');
     wrap?.classList.add('mode-split');
     if (renderFn) { preview.innerHTML = renderFn(); _prismHighlight(preview); }
+    _wireScrollSync(editor, preview);
   }
+}
+
+// ── Scroll synchronisation (split mode) ──────────────────────────────────────
+let _scrollSyncWired = false;
+function _wireScrollSync(editor, preview) {
+  if (_scrollSyncWired) return;
+  _scrollSyncWired = true;
+  let _lock = false;
+  editor.addEventListener('scroll', () => {
+    if (_lock || preview.classList.contains('hidden')) return;
+    _lock = true;
+    const maxScroll = editor.scrollHeight - editor.clientHeight;
+    const ratio = maxScroll > 0 ? editor.scrollTop / maxScroll : 0;
+    preview.scrollTop = ratio * (preview.scrollHeight - preview.clientHeight);
+    requestAnimationFrame(() => { _lock = false; });
+  });
+  preview.addEventListener('scroll', () => {
+    if (_lock || editor.classList.contains('hidden')) return;
+    _lock = true;
+    const maxScroll = preview.scrollHeight - preview.clientHeight;
+    const ratio = maxScroll > 0 ? preview.scrollTop / maxScroll : 0;
+    editor.scrollTop = ratio * (editor.scrollHeight - editor.clientHeight);
+    requestAnimationFrame(() => { _lock = false; });
+  });
 }
 
 /** Backward-compatible shim — delegates to setMarkdownMode. */

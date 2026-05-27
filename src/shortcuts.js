@@ -10,6 +10,7 @@
 //   Ctrl/Cmd + B             Bold selected text
 //   Ctrl/Cmd + I             Italic selected text
 //   Ctrl/Cmd + K             Insert markdown link
+//   Ctrl/Cmd + `             Inline code
 //   Ctrl/Cmd + Shift + K     Open share modal
 //   Ctrl/Cmd + Shift + T     Insert timestamp
 //   Ctrl/Cmd + Shift + C     Copy note
@@ -125,6 +126,7 @@ function _handleKeyDown(e) {
   if (key === 'b' && !shift) { e.preventDefault(); _wrapSelection(_editor, '**', '**'); return; }
   if (key === 'i' && !shift) { e.preventDefault(); _wrapSelection(_editor, '_',  '_');  return; }
   if (key === 'k' && !shift) { e.preventDefault(); _insertLink(_editor);                return; }
+  if (key === '`' && !shift) { e.preventDefault(); _wrapSelection(_editor, '`',  '`');  return; }
 }
 
 function _isTypingField(el) {

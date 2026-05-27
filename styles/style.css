@@ -517,10 +517,11 @@ svg { display: block; flex-shrink: 0; }
   box-shadow: var(--shadow-md);
   overflow: hidden;
   /* Grid: single-column by default (write or preview mode).
-     .mode-split overrides to two columns below. */
+     .mode-split overrides to two columns below.
+     Row 1 = formatting toolbar (auto height); Row 2 = editor/preview (fills rest). */
   display: grid;
   grid-template-columns: 1fr;
-  grid-template-rows: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 0;
   /* Comfortable writing width on desktop. Split mode overrides below. */
   width: min(100% - 2rem, 900px);
@@ -599,6 +600,56 @@ svg { display: block; flex-shrink: 0; }
 .note-preview li.md-task.md-task-checked { color: var(--text-secondary); text-decoration: line-through; }
 body.read-only-mode .note-preview li.md-task input[type="checkbox"],
 body.lock-mode .note-preview li.md-task input[type="checkbox"] { cursor: not-allowed; }
+/* Tables */
+.note-preview table { width: 100%; border-collapse: collapse; margin: 0.8em 0; font-size: 0.9em; }
+.note-preview th, .note-preview td { border: 1px solid var(--border); padding: 6px 12px; text-align: left; }
+.note-preview th { background: var(--bg-elevated); font-weight: 600; }
+.note-preview tbody tr:nth-child(even) td { background: var(--bg-elevated); opacity: 0.7; }
+/* Strikethrough */
+.note-preview del { color: var(--text-muted); text-decoration-color: var(--text-secondary); }
+
+/* ── Markdown formatting toolbar ────────────────────────────────────────────── */
+/* Toolbar lives in row 1 of .editor-wrap's grid; spans all columns in split mode */
+.md-toolbar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--bg-surface);
+  flex-wrap: wrap;
+  overflow: hidden;
+}
+/* Hide in preview mode (no editable text to format) */
+.editor-wrap.mode-preview .md-toolbar { display: none; }
+/* Muted in read-only / locked — pointer-events off prevents clicks */
+body.read-only-mode .md-toolbar,
+body.lock-mode .md-toolbar { opacity: 0.4; pointer-events: none; }
+
+.md-tb-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 26px;
+  padding: 0 5px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font-ui);
+  cursor: pointer;
+  user-select: none;
+  flex-shrink: 0;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+}
+.md-tb-btn:hover { background: var(--bg-elevated); color: var(--text-primary); border-color: var(--border-soft); }
+.md-tb-btn:active { background: var(--accent-dim, color-mix(in srgb, var(--accent) 12%, transparent)); color: var(--accent); }
+/* Separator between toolbar groups */
+.md-tb-sep { width: 1px; height: 18px; background: var(--border-soft); margin: 0 3px; flex-shrink: 0; }
 
 /* Remote Notice */
 .remote-notice {

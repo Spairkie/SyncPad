@@ -366,6 +366,37 @@
   <!-- ── Editor area ────────────────────────────────────────────── -->
   <div class="editor-area">
     <div class="editor-wrap">
+      <!-- Markdown formatting toolbar — hidden in preview mode via CSS -->
+      <div id="md-toolbar" class="md-toolbar" role="toolbar" aria-label="Markdown formatting">
+        <button class="md-tb-btn" data-md-action="h1" title="Heading 1" type="button" aria-label="Heading 1"><b>H1</b></button>
+        <button class="md-tb-btn" data-md-action="h2" title="Heading 2" type="button" aria-label="Heading 2"><b>H2</b></button>
+        <button class="md-tb-btn" data-md-action="h3" title="Heading 3" type="button" aria-label="Heading 3"><b>H3</b></button>
+        <div class="md-tb-sep" aria-hidden="true"></div>
+        <button class="md-tb-btn" data-md-action="bold" title="Bold (Ctrl+B)" type="button" aria-label="Bold"><b>B</b></button>
+        <button class="md-tb-btn" data-md-action="italic" title="Italic (Ctrl+I)" type="button" aria-label="Italic"><i>I</i></button>
+        <button class="md-tb-btn" data-md-action="strikethrough" title="Strikethrough" type="button" aria-label="Strikethrough"><s>S</s></button>
+        <div class="md-tb-sep" aria-hidden="true"></div>
+        <button class="md-tb-btn" data-md-action="code" title="Inline code (Ctrl+`)" type="button" aria-label="Inline code"><code style="font-size:10px;pointer-events:none">&lt;/&gt;</code></button>
+        <button class="md-tb-btn" data-md-action="codeblock" title="Code block" type="button" aria-label="Code block">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="13" height="13" aria-hidden="true"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+        </button>
+        <button class="md-tb-btn" data-md-action="link" title="Link (Ctrl+K)" type="button" aria-label="Insert link">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        </button>
+        <div class="md-tb-sep" aria-hidden="true"></div>
+        <button class="md-tb-btn" data-md-action="quote" title="Blockquote" type="button" aria-label="Blockquote">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13" aria-hidden="true"><path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"/><path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z"/></svg>
+        </button>
+        <button class="md-tb-btn" data-md-action="ul" title="Bullet list" type="button" aria-label="Bullet list">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13" aria-hidden="true"><line x1="9" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="20" y2="18"/><circle cx="4" cy="6" r="1.5" fill="currentColor" stroke="none"/><circle cx="4" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="4" cy="18" r="1.5" fill="currentColor" stroke="none"/></svg>
+        </button>
+        <button class="md-tb-btn" data-md-action="ol" title="Numbered list" type="button" aria-label="Numbered list">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13" aria-hidden="true"><line x1="10" y1="6" x2="21" y2="6"/><line x1="10" y1="12" x2="21" y2="12"/><line x1="10" y1="18" x2="21" y2="18"/><path d="M4 6h1v4"/><path d="M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/></svg>
+        </button>
+        <button class="md-tb-btn" data-md-action="hr" title="Horizontal rule" type="button" aria-label="Horizontal rule">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" width="13" height="13" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+      </div>
       <textarea id="note-editor"
                 placeholder="Start writing… Your note syncs live across devices."
                 spellcheck="true"
@@ -945,6 +976,9 @@
         <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>B</kbd> <span>Bold selection</span></div>
         <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>I</kbd> <span>Italic selection</span></div>
         <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>K</kbd> <span>Insert markdown link</span></div>
+        <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>`</kbd> <span>Inline code</span></div>
+        <div class="shortcut-row"><kbd>Tab</kbd> <span>Indent (in editor)</span></div>
+        <div class="shortcut-row"><kbd>Shift</kbd><kbd>Tab</kbd> <span>Dedent (in editor)</span></div>
         <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>K</kbd> <span>Share room</span></div>
         <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>T</kbd> <span>Insert timestamp</span></div>
         <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>C</kbd> <span>Copy note</span></div>
