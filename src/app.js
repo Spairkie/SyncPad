@@ -472,7 +472,7 @@ async function joinRoom(roomId) {
 
 async function onPasscodeSubmit() {
   const input    = document.getElementById('passcode-input');
-  const passcode = input?.value?.trim() || '';
+  const passcode = input?.value || '';
   if (!passcode) { UI.showPasscodeError('Please enter the passcode.'); return; }
 
   UI.clearPasscodeError();
@@ -1704,7 +1704,7 @@ function wireEvents() {
       const pc = await UI.showPrompt('Set a new passcode:', { placeholder: 'Passcode…', confirmLabel: 'Set passcode' });
       if (!pc?.trim()) return;
       try {
-        await setPasscode(_roomId, pc.trim());
+        await setPasscode(_roomId, pc);
         _room = await loadRoom(_roomId);
         _updatePermissionContext();
         _renderRoomHeader();
@@ -1759,7 +1759,7 @@ function wireEvents() {
       // PBKDF2 key derivation takes 1-3 s — indicate progress on the button.
       if (encBtn) { encBtn.disabled = true; encBtn.textContent = 'Encrypting…'; }
       try {
-        const { salt, key } = await enableEncryption(_roomId, UI.getEditorValue(), pp.trim());
+        const { salt, key } = await enableEncryption(_roomId, UI.getEditorValue(), pp);
         _encKey = key; _encSalt = salt;
         // v1: switch sync.js to encrypted lane immediately.
         setEncryption(
