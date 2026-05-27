@@ -33,11 +33,11 @@ function _getTabId() {
  * @param {object} [opts]
  * @param {boolean} [opts.readOnly]
  */
-export function initPresence(roomId, onPresenceChange, opts = {}) {
+export function initPresence(roomId, onPresenceChange, { readOnly = false } = {}) {
   destroyPresence();
   _roomId           = roomId;
   _onPresenceChange = onPresenceChange;
-  _readOnly         = !!opts.readOnly;
+  _readOnly         = readOnly;
   const sb       = getSupabaseClient();
   const deviceId = getDeviceId();
   const tabId    = _getTabId();

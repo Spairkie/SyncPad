@@ -196,3 +196,32 @@ export async function closeModal(page, id) {
     }
   }
 }
+
+/**
+ * Open the share modal and return the URL shown in the specified link field.
+ * Closes the modal afterwards.
+ *
+ * @param {import('@playwright/test').Page} page
+ * @param {'editable'|'readonly'} [type='editable'] — which link to read
+ * @returns {Promise<string>} The URL value from the share input field
+ */
+export async function getShareUrl(page, type = 'editable') {
+  // Open share modal — prefer the desktop button, fall back to mobile
+  const shareBtn = page.locator('#btn-share');
+  const mobShareBtn = page.locator('#mob-btn-share');
+  if (await mobShareBtn.isVisible().catch(() => false)) {
+    await mobShareBtn.click();
+  } else {
+    await shareBtn.click();
+  }
+  await page.waitForSelector('#share-modal.visible', { timeout: 5000 });
+
+  const inputId = type === 'readonly' ? '#share-readonly-text' : '#share-editable-text';
+  const value = await page.locator(inputId).inputValue();
+
+  // Close the modal
+  await page.locator('#share-modal-close').click();
+  await page.waitForSelector('#share-modal.visible', { state: 'hidden', timeout: 3000 }).catch(() => {});
+
+  return value;
+}

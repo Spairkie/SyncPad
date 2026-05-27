@@ -205,9 +205,9 @@
 
 <div id="admin-screen" class="auth-screen hidden">
   <!-- Replaced at runtime by admin.js initAdmin(); this is only shown briefly while JS loads -->
-  <div class="auth-card" style="text-align:center">
-    <div class="loading-spinner" style="margin:0 auto 12px"></div>
-    <p style="color:var(--text-secondary);font-size:14px">Loading admin…</p>
+  <div class="auth-card auth-card--centered">
+    <div class="loading-spinner loading-spinner--spaced"></div>
+    <p class="auth-loading-text">Loading admin…</p>
   </div>
 </div>
 
@@ -366,6 +366,37 @@
   <!-- ── Editor area ────────────────────────────────────────────── -->
   <div class="editor-area">
     <div class="editor-wrap">
+      <!-- Markdown formatting toolbar — hidden in preview mode via CSS -->
+      <div id="md-toolbar" class="md-toolbar" role="toolbar" aria-label="Markdown formatting">
+        <button class="md-tb-btn" data-md-action="h1" title="Heading 1" type="button" aria-label="Heading 1"><b>H1</b></button>
+        <button class="md-tb-btn" data-md-action="h2" title="Heading 2" type="button" aria-label="Heading 2"><b>H2</b></button>
+        <button class="md-tb-btn" data-md-action="h3" title="Heading 3" type="button" aria-label="Heading 3"><b>H3</b></button>
+        <div class="md-tb-sep" aria-hidden="true"></div>
+        <button class="md-tb-btn" data-md-action="bold" title="Bold (Ctrl+B)" type="button" aria-label="Bold"><b>B</b></button>
+        <button class="md-tb-btn" data-md-action="italic" title="Italic (Ctrl+I)" type="button" aria-label="Italic"><i>I</i></button>
+        <button class="md-tb-btn" data-md-action="strikethrough" title="Strikethrough" type="button" aria-label="Strikethrough"><s>S</s></button>
+        <div class="md-tb-sep" aria-hidden="true"></div>
+        <button class="md-tb-btn" data-md-action="code" title="Inline code (Ctrl+`)" type="button" aria-label="Inline code"><code style="font-size:10px;pointer-events:none">&lt;/&gt;</code></button>
+        <button class="md-tb-btn" data-md-action="codeblock" title="Code block" type="button" aria-label="Code block">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="13" height="13" aria-hidden="true"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+        </button>
+        <button class="md-tb-btn" data-md-action="link" title="Link (Ctrl+K)" type="button" aria-label="Insert link">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        </button>
+        <div class="md-tb-sep" aria-hidden="true"></div>
+        <button class="md-tb-btn" data-md-action="quote" title="Blockquote" type="button" aria-label="Blockquote">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13" aria-hidden="true"><path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"/><path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2h.75c0 2.25.25 4-2.75 4v3c0 1 0 1 1 1z"/></svg>
+        </button>
+        <button class="md-tb-btn" data-md-action="ul" title="Bullet list" type="button" aria-label="Bullet list">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13" aria-hidden="true"><line x1="9" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="20" y2="18"/><circle cx="4" cy="6" r="1.5" fill="currentColor" stroke="none"/><circle cx="4" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="4" cy="18" r="1.5" fill="currentColor" stroke="none"/></svg>
+        </button>
+        <button class="md-tb-btn" data-md-action="ol" title="Numbered list" type="button" aria-label="Numbered list">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="13" height="13" aria-hidden="true"><line x1="10" y1="6" x2="21" y2="6"/><line x1="10" y1="12" x2="21" y2="12"/><line x1="10" y1="18" x2="21" y2="18"/><path d="M4 6h1v4"/><path d="M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/></svg>
+        </button>
+        <button class="md-tb-btn" data-md-action="hr" title="Horizontal rule" type="button" aria-label="Horizontal rule">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" width="13" height="13" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+      </div>
       <textarea id="note-editor"
                 placeholder="Start writing… Your note syncs live across devices."
                 spellcheck="true"
@@ -460,52 +491,79 @@
     </button>
   </div>
   <div class="panel-body">
-    <div class="tools-grid">
-      <button class="tool-btn" id="tool-copy">
-        <span class="tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span>
-        <span class="tool-label">Copy Note</span>
-      </button>
-      <button class="tool-btn" id="tool-copy-link">
-        <span class="tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>
-        <span class="tool-label">Copy Link</span>
-      </button>
-      <button class="tool-btn" id="tool-paste" data-readonly-hide>
-        <span class="tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg></span>
-        <span class="tool-label">Paste</span>
-      </button>
-      <button class="tool-btn" id="tool-share">
-        <span class="tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg></span>
-        <span class="tool-label">Share</span>
-      </button>
-      <button class="tool-btn" id="tool-download">
-        <span class="tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>
-        <span class="tool-label">Download .txt</span>
-      </button>
-      <button class="tool-btn" id="tool-import" data-readonly-hide>
-        <span class="tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span>
-        <span class="tool-label">Import .txt</span>
-      </button>
-      <button class="tool-btn" id="tool-templates" data-readonly-hide>
-        <span class="tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span>
-        <span class="tool-label">Templates</span>
-      </button>
-      <button class="tool-btn" id="tool-timestamp" data-readonly-hide>
-        <span class="tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
-        <span class="tool-label">Timestamp</span>
-      </button>
-      <button class="tool-btn" id="tool-select-all">
-        <span class="tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h6v6H3z"/><path d="M15 3h6v6h-6z"/><path d="M3 15h6v6H3z"/><path d="M15 15h6v6h-6z"/></svg></span>
-        <span class="tool-label">Select All</span>
-      </button>
-      <button class="tool-btn" id="tool-monospace">
-        <span class="tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg></span>
-        <span class="tool-label">Monospace</span>
-      </button>
-      <button class="tool-btn danger" id="tool-clear" data-readonly-hide>
-        <span class="tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
-        <span class="tool-label">Clear Note</span>
-      </button>
+
+    <!-- Clipboard & Share -->
+    <div class="tools-section">
+      <div class="tools-section-title">Clipboard &amp; Share</div>
+      <div class="tools-grid">
+        <button class="tool-btn" id="tool-copy">
+          <span class="tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span>
+          <span class="tool-label">Copy Note</span>
+        </button>
+        <button class="tool-btn" id="tool-copy-link">
+          <span class="tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>
+          <span class="tool-label">Copy Link</span>
+        </button>
+        <button class="tool-btn" id="tool-paste" data-readonly-hide>
+          <span class="tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg></span>
+          <span class="tool-label">Paste</span>
+        </button>
+        <button class="tool-btn" id="tool-share">
+          <span class="tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg></span>
+          <span class="tool-label">Share</span>
+        </button>
+      </div>
     </div>
+
+    <!-- Content -->
+    <div class="tools-section">
+      <div class="tools-section-title">Content</div>
+      <div class="tools-grid">
+        <button class="tool-btn" id="tool-find">
+          <span class="tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
+          <span class="tool-label">Find in Note</span>
+        </button>
+        <button class="tool-btn" id="tool-select-all">
+          <span class="tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h6v6H3z"/><path d="M15 3h6v6h-6z"/><path d="M3 15h6v6H3z"/><path d="M15 15h6v6h-6z"/></svg></span>
+          <span class="tool-label">Select All</span>
+        </button>
+        <button class="tool-btn" id="tool-timestamp" data-readonly-hide>
+          <span class="tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+          <span class="tool-label">Timestamp</span>
+        </button>
+        <button class="tool-btn" id="tool-templates" data-readonly-hide>
+          <span class="tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span>
+          <span class="tool-label">Templates</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- File -->
+    <div class="tools-section">
+      <div class="tools-section-title">File</div>
+      <div class="tools-grid">
+        <button class="tool-btn" id="tool-download">
+          <span class="tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></span>
+          <span class="tool-label">Download .md</span>
+        </button>
+        <button class="tool-btn" id="tool-import" data-readonly-hide>
+          <span class="tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span>
+          <span class="tool-label">Import .md / .txt</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Danger zone -->
+    <div class="tools-section tools-section-danger">
+      <div class="tools-section-title">Danger Zone</div>
+      <div class="tools-grid">
+        <button class="tool-btn danger" id="tool-clear" data-readonly-hide>
+          <span class="tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></span>
+          <span class="tool-label">Clear Note</span>
+        </button>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -570,7 +628,7 @@
   </div>
   <div class="panel-body">
     <div id="devices-list"></div>
-    <p style="font-size:12px;color:var(--text-muted);margin-top:14px;">
+    <p class="devices-help-text">
       Tap your device name to rename how you appear in this room.
     </p>
   </div>
@@ -611,26 +669,34 @@
         </div>
         <button class="setting-btn" id="setting-enc-btn">Enable</button>
       </div>
+    </div>
+
+    <!-- Room Controls -->
+    <div class="settings-section">
+      <div class="settings-section-title">Room Controls</div>
 
       <div class="setting-row">
         <div>
-          <div class="setting-label">Lock editing</div>
+          <div class="setting-label">Lock Editing</div>
           <div class="setting-sub" id="setting-lock-status">Unlocked</div>
         </div>
         <button class="setting-btn" id="setting-lock-btn">Lock</button>
       </div>
-    </div>
 
-    <!-- Auto-expire -->
-    <div class="settings-section">
-      <div class="settings-section-title">Auto-expire</div>
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">View-once</div>
+          <div class="setting-sub" id="setting-vo-status">Off</div>
+        </div>
+        <button class="setting-btn" id="setting-vo-btn">Enable</button>
+      </div>
 
       <div class="setting-row">
         <div>
           <div class="setting-label">Auto-expire</div>
           <div class="setting-sub" id="setting-exp-status">Never</div>
         </div>
-        <button class="setting-btn" id="setting-exp-btn">Set auto-expire</button>
+        <button class="setting-btn" id="setting-exp-btn">Set expiry</button>
       </div>
       <div class="setting-stack hidden" id="setting-exp-controls">
         <div class="setting-sub">Clear this room automatically after:</div>
@@ -653,23 +719,23 @@
         <div class="setting-sub" id="setting-exp-preview">Preview: Select a duration.</div>
         <div class="setting-error hidden" id="setting-exp-error" aria-live="polite"></div>
         <div class="exp-actions">
-          <button class="setting-btn" id="setting-exp-apply-btn" type="button">Set auto-expire</button>
+          <button class="setting-btn" id="setting-exp-apply-btn" type="button">Set expiry</button>
           <button class="setting-btn" id="setting-exp-remove-btn" type="button">Remove expiration</button>
         </div>
-      </div>
-
-      <div class="setting-row">
-        <div>
-          <div class="setting-label">View-once</div>
-          <div class="setting-sub" id="setting-vo-status">Off</div>
-        </div>
-        <button class="setting-btn" id="setting-vo-btn">Enable</button>
       </div>
     </div>
 
     <!-- Editor preferences -->
     <div class="settings-section">
       <div class="settings-section-title">Editor</div>
+
+      <div class="setting-row">
+        <div>
+          <div class="setting-label">Monospace font</div>
+          <div class="setting-sub">Use a fixed-width font in the editor</div>
+        </div>
+        <button class="setting-btn" id="setting-monospace-btn" aria-pressed="false">Off</button>
+      </div>
 
       <div class="setting-row">
         <div>
@@ -684,7 +750,7 @@
     <div class="settings-section">
       <div class="settings-section-title">About</div>
       <div class="setting-row">
-        <div class="setting-label" style="color:var(--text-secondary);font-size:13px;line-height:1.6;">
+        <div class="setting-label setting-label--about">
           SyncPad &mdash; live shared notepad.<br />
           Built on Supabase Realtime.
         </div>
@@ -706,7 +772,7 @@
 
 <!-- Share modal -->
 <div class="modal-backdrop" id="share-modal">
-  <div class="modal share-modal">
+  <div class="modal share-modal" role="dialog" aria-modal="true" aria-labelledby="share-modal-title">
     <div class="share-modal-header" aria-live="polite">
       <h3 id="share-modal-title">Share room</h3>
       <p class="share-subtitle">Choose who can access this room.</p>
@@ -802,9 +868,9 @@
 
 <!-- Templates modal -->
 <div class="modal-backdrop" id="templates-modal">
-  <div class="modal templates-modal">
+  <div class="modal templates-modal" role="dialog" aria-modal="true" aria-labelledby="templates-modal-title">
     <div class="templates-header">
-      <h3>Templates</h3>
+      <h3 id="templates-modal-title">Templates</h3>
       <button class="templates-close" aria-label="Close">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
@@ -945,6 +1011,9 @@
         <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>B</kbd> <span>Bold selection</span></div>
         <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>I</kbd> <span>Italic selection</span></div>
         <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>K</kbd> <span>Insert markdown link</span></div>
+        <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>`</kbd> <span>Inline code</span></div>
+        <div class="shortcut-row"><kbd>Tab</kbd> <span>Indent (in editor)</span></div>
+        <div class="shortcut-row"><kbd>Shift</kbd><kbd>Tab</kbd> <span>Dedent (in editor)</span></div>
         <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>K</kbd> <span>Share room</span></div>
         <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>T</kbd> <span>Insert timestamp</span></div>
         <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>C</kbd> <span>Copy note</span></div>

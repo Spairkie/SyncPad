@@ -10,6 +10,7 @@
 //   Ctrl/Cmd + B             Bold selected text
 //   Ctrl/Cmd + I             Italic selected text
 //   Ctrl/Cmd + K             Insert markdown link
+//   Ctrl/Cmd + `             Inline code
 //   Ctrl/Cmd + Shift + K     Open share modal
 //   Ctrl/Cmd + Shift + T     Insert timestamp
 //   Ctrl/Cmd + Shift + C     Copy note
@@ -125,6 +126,7 @@ function _handleKeyDown(e) {
   if (key === 'b' && !shift) { e.preventDefault(); _wrapSelection(_editor, '**', '**'); return; }
   if (key === 'i' && !shift) { e.preventDefault(); _wrapSelection(_editor, '_',  '_');  return; }
   if (key === 'k' && !shift) { e.preventDefault(); _insertLink(_editor);                return; }
+  if (key === '`' && !shift) { e.preventDefault(); _wrapSelection(_editor, '`',  '`');  return; }
 }
 
 function _isTypingField(el) {
@@ -145,8 +147,9 @@ function _wrapSelection(editor, prefix, suffix) {
   const end   = editor.selectionEnd;
   const sel   = editor.value.slice(start, end);
 
-  // If already wrapped, unwrap
-  if (sel.startsWith(prefix) && sel.endsWith(suffix)) {
+  // If already wrapped (and there's actual inner content), unwrap.
+  // Guard against sel === prefix+suffix (no inner content) to avoid producing empty string.
+  if (sel.startsWith(prefix) && sel.endsWith(suffix) && sel.length > prefix.length + suffix.length) {
     const inner = sel.slice(prefix.length, sel.length - suffix.length);
     editor.value = editor.value.slice(0, start) + inner + editor.value.slice(end);
     editor.selectionStart = start;

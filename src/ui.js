@@ -1,5 +1,6 @@
 // SyncPad – ui.js
 // All DOM manipulation lives here. No business logic.
+import { TEMPLATE_CATEGORY_ORDER } from './templates.js';
 import {
   countWords, countChars, formatFileSize, fileEmoji, formatTimestamp,
   escapeHtml, copyToClipboard,
@@ -617,28 +618,29 @@ export function showPasscodeError(msg) {
   const el    = document.getElementById('passcode-error');
   const input = document.getElementById('passcode-input');
   if (el) el.textContent = msg;
-  input?.classList.add('error');
-  // Clear the red outline on the next keystroke so the user gets instant feedback.
-  input?.addEventListener('input', () => clearPasscodeError(), { once: true });
+  // Use .oninput (not addEventListener) so repeated calls never accumulate listeners.
+  // The handler clears itself after firing once.
+  if (input) { input.classList.add('error'); input.oninput = () => { clearPasscodeError(); input.oninput = null; }; }
 }
 export function clearPasscodeError() {
-  const el = document.getElementById('passcode-error');
+  const el    = document.getElementById('passcode-error');
+  const input = document.getElementById('passcode-input');
   if (el) el.textContent = '';
-  document.getElementById('passcode-input')?.classList.remove('error');
+  if (input) { input.classList.remove('error'); input.oninput = null; }
 }
 
 export function showEncryptionError(msg) {
   const el    = document.getElementById('encryption-error');
   const input = document.getElementById('encryption-input');
   if (el) el.textContent = msg;
-  input?.classList.add('error');
-  // Clear the red outline on the next keystroke so the user gets instant feedback.
-  input?.addEventListener('input', () => clearEncryptionError(), { once: true });
+  // Use .oninput so repeated calls never accumulate listeners.
+  if (input) { input.classList.add('error'); input.oninput = () => { clearEncryptionError(); input.oninput = null; }; }
 }
 export function clearEncryptionError() {
   const el = document.getElementById('encryption-error');
   if (el) el.textContent = '';
-  document.getElementById('encryption-input')?.classList.remove('error');
+  const input = document.getElementById('encryption-input');
+  if (input) { input.classList.remove('error'); input.oninput = null; }
 }
 
 // ── Editor helpers ────────────────────────────────────────────────────────────
@@ -770,7 +772,7 @@ export function renderSettingsPanel(room) {
   if (encBtn)  encBtn.textContent  = room.encryption_enabled ? 'Disable' : 'Enable';
   // 'Modify' when an expiration is already set — the actual Remove button is
   // inside the collapsible controls section (setting-exp-remove-btn).
-  if (expBtn)  expBtn.textContent  = room.expires_at         ? 'Modify'  : 'Set';
+  if (expBtn)  expBtn.textContent  = room.expires_at         ? 'Modify'  : 'Set expiry';
   if (voBtn)   voBtn.textContent   = room.view_once          ? 'Disable' : 'Enable';
   if (lockBtn) lockBtn.textContent = room.editing_locked     ? 'Unlock'  : 'Lock';
 }
@@ -993,13 +995,38 @@ export function setMarkdownMode(mode, renderFn) {
     preview.classList.remove('hidden');
     wrap?.classList.add('mode-split');
     if (renderFn) { preview.innerHTML = renderFn(); _prismHighlight(preview); }
+    _wireScrollSync(editor, preview);
   }
 }
 
-/** Backward-compatible shim — delegates to setMarkdownMode. */
-export function setPreviewMode(showPreview, renderFn) {
-  setMarkdownMode(showPreview ? 'preview' : 'write', renderFn);
+// ── Scroll synchronisation (split mode) ──────────────────────────────────────
+let _scrollSyncWired = false;
+/** Reset the scroll-sync guard so _wireScrollSync can re-attach on the next split-mode entry.
+ *  Must be called from teardownRealtimeSession so the guard doesn't persist across rooms. */
+export function resetScrollSync() { _scrollSyncWired = false; }
+function _wireScrollSync(editor, preview) {
+  if (_scrollSyncWired) return;
+  _scrollSyncWired = true;
+  let _lock = false;
+  editor.addEventListener('scroll', () => {
+    if (_lock || preview.classList.contains('hidden')) return;
+    _lock = true;
+    const maxScroll = editor.scrollHeight - editor.clientHeight;
+    const ratio = maxScroll > 0 ? editor.scrollTop / maxScroll : 0;
+    preview.scrollTop = ratio * (preview.scrollHeight - preview.clientHeight);
+    requestAnimationFrame(() => { _lock = false; });
+  });
+  preview.addEventListener('scroll', () => {
+    if (_lock || editor.classList.contains('hidden')) return;
+    _lock = true;
+    const maxScroll = preview.scrollHeight - preview.clientHeight;
+    const ratio = maxScroll > 0 ? preview.scrollTop / maxScroll : 0;
+    editor.scrollTop = ratio * (editor.scrollHeight - editor.clientHeight);
+    requestAnimationFrame(() => { _lock = false; });
+  });
 }
+
+
 
 export function refreshPreview(renderFn) {
   const preview = document.getElementById('note-preview');
@@ -1029,15 +1056,21 @@ export function renderThemePicker(themes, currentId, onSelect) {
   container.innerHTML = '';
   themes.forEach(t => {
     const btn = document.createElement('button');
-    btn.className = `theme-option${t.id === currentId ? ' active' : ''}`;
+    const isActive = t.id === currentId;
+    btn.className = `theme-option${isActive ? ' active' : ''}`;
     btn.dataset.themeId = t.id;
     btn.title = t.label;
+    btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    // Dual-swatch: background color + accent color gives a realistic preview
+    const bgColor     = escapeHtml(t.bg     || '#1c1c1e');
+    const accentColor = escapeHtml(t.swatch || '#f5a623');
     btn.innerHTML = `
-      <span class="theme-swatch" style="background:${escapeHtml(t.swatch)}"></span>
+      <span class="theme-preview" aria-hidden="true">
+        <span class="theme-preview-bg"  style="background:${bgColor}"></span>
+        <span class="theme-preview-dot" style="background:${accentColor}"></span>
+      </span>
       <span class="theme-label">${escapeHtml(t.label)}</span>
-      <span class="theme-check" style="opacity:${t.id === currentId ? 1 : 0}">
-        ${getIcon('check', 13)}
-      </span>`;
+      <span class="theme-check">${getIcon('check', 13)}</span>`;
     btn.addEventListener('click', () => {
       onSelect(t.id);
       renderThemePicker(themes, t.id, onSelect);
@@ -1118,32 +1151,43 @@ function _renderInsertTab(body, builtins, customs, onChoose) {
 
   const previewCol = document.createElement('div');
   previewCol.className = 'tmpl-preview-col';
+
+  const previewHdr = document.createElement('div');
+  previewHdr.className = 'tmpl-preview-hdr';
+  previewHdr.textContent = 'Preview';
+
   const previewEl = document.createElement('pre');
   previewEl.className = 'tmpl-preview-body';
-  previewEl.textContent = 'Hover or focus a template to preview its content.';
+  previewEl.textContent = 'Select a template to preview its content.';
+
+  previewCol.appendChild(previewHdr);
   previewCol.appendChild(previewEl);
 
   const showPreview = (t) => {
     const lines = (t.body || '').trimEnd();
-    const LIMIT = 800;
+    const LIMIT = 1200;
+    previewHdr.textContent = t.label || 'Preview';
     previewEl.textContent = lines.length
       ? (lines.length > LIMIT ? lines.slice(0, LIMIT) + '\n…' : lines)
       : `(${t.desc || 'Empty template'})`;
   };
 
-  // ── Template list with group headers ────────────────────────
+  // ── Template list with category group headers ────────────────
   const list = document.createElement('div');
   list.className = 'templates-list';
   list.setAttribute('role', 'list');
 
   const buildList = (filter) => {
     list.innerHTML = '';
-    const f = filter.toLowerCase();
+    const f = filter.toLowerCase().trim();
 
+    // Match against label, description, and body for deeper search
     const matchFn = (t) => !f
       || t.label.toLowerCase().includes(f)
-      || (t.desc || '').toLowerCase().includes(f);
+      || (t.desc  || '').toLowerCase().includes(f)
+      || (t.body  || '').toLowerCase().includes(f);
 
+    // ── Custom templates ──────────────────────────────────────
     const customEntries = Object.entries(customs).filter(([, t]) => matchFn(t));
     if (customEntries.length) {
       const hdr = document.createElement('div');
@@ -1151,15 +1195,47 @@ function _renderInsertTab(body, builtins, customs, onChoose) {
       hdr.textContent = 'My Templates';
       list.appendChild(hdr);
       customEntries.forEach(([key, t]) => list.appendChild(_makeTemplateBtn(key, t, onChoose, showPreview)));
-
-      const sep = document.createElement('div');
-      sep.className = 'templates-group-label';
-      sep.textContent = 'Built-in';
-      list.appendChild(sep);
     }
 
+    // ── Built-in templates grouped by category ────────────────
     const builtinEntries = Object.entries(builtins).filter(([, t]) => matchFn(t));
-    builtinEntries.forEach(([key, t]) => list.appendChild(_makeTemplateBtn(key, t, onChoose, showPreview)));
+
+    if (f) {
+      // While searching, show all matches flat (no category headers) for speed
+      if (builtinEntries.length) {
+        if (customEntries.length) {
+          const sep = document.createElement('div');
+          sep.className = 'templates-group-label';
+          sep.textContent = 'Built-in';
+          list.appendChild(sep);
+        }
+        builtinEntries.forEach(([key, t]) => list.appendChild(_makeTemplateBtn(key, t, onChoose, showPreview)));
+      }
+    } else {
+      // No filter — group by category in preferred order
+      const byCategory = new Map();
+      builtinEntries.forEach(([key, t]) => {
+        const cat = t.category || 'Other';
+        if (!byCategory.has(cat)) byCategory.set(cat, []);
+        byCategory.get(cat).push([key, t]);
+      });
+
+      const categoryOrder = [...TEMPLATE_CATEGORY_ORDER];
+      // Add any categories not in the preferred order at the end
+      for (const cat of byCategory.keys()) {
+        if (!categoryOrder.includes(cat)) categoryOrder.push(cat);
+      }
+
+      for (const cat of categoryOrder) {
+        const entries = byCategory.get(cat);
+        if (!entries?.length) continue;
+        const hdr = document.createElement('div');
+        hdr.className = 'templates-group-label';
+        hdr.textContent = cat;
+        list.appendChild(hdr);
+        entries.forEach(([key, t]) => list.appendChild(_makeTemplateBtn(key, t, onChoose, showPreview)));
+      }
+    }
 
     if (!customEntries.length && !builtinEntries.length) {
       const none = document.createElement('div');
@@ -1291,10 +1367,11 @@ function _confirmTemplateInsert(key, label, onChoose) {
     onChoose(key, 'replace');
     return;
   }
-  _showInlineChoice(`Apply "${label}"?`, [
-    { label: 'Replace note', value: 'replace', kind: 'danger' },
-    { label: 'Append',       value: 'append',  kind: 'primary' },
-    { label: 'Cancel',       value: null,      kind: 'cancel' },
+  _showInlineChoice(`Apply "${escapeHtml(label)}"`, [
+    { label: 'Insert at cursor', value: 'insert',  kind: 'primary',   desc: 'Add at the cursor position' },
+    { label: 'Append to note',   value: 'append',  kind: '',          desc: 'Add at the end of the note' },
+    { label: 'Replace note',     value: 'replace', kind: 'danger',    desc: 'Overwrite all current content' },
+    { label: 'Cancel',           value: null,       kind: 'cancel',   desc: null },
   ], (choice) => { if (choice) onChoose(key, choice); });
 }
 
@@ -1304,14 +1381,23 @@ function _showInlineChoice(message, choices, onPick) {
   const body = modal.querySelector('.templates-body');
   if (!body) return;
   body.innerHTML = `
-    <p class="template-choice-msg">${escapeHtml(message)}</p>
+    <p class="template-choice-msg">${message}</p>
     <div class="template-choice-actions"></div>
   `;
   const actions = body.querySelector('.template-choice-actions');
   choices.forEach((c) => {
     const b = document.createElement('button');
-    b.textContent = c.label;
     b.className = `template-choice-btn ${c.kind || ''}`;
+    const labelSpan = document.createElement('span');
+    labelSpan.className = 'template-choice-btn-label';
+    labelSpan.textContent = c.label;
+    b.appendChild(labelSpan);
+    if (c.desc) {
+      const descSpan = document.createElement('span');
+      descSpan.className = 'template-choice-btn-desc';
+      descSpan.textContent = c.desc;
+      b.appendChild(descSpan);
+    }
     b.addEventListener('click', () => { closeModal('templates-modal'); onPick(c.value); }, { once: true });
     actions.appendChild(b);
   });
@@ -1402,7 +1488,7 @@ function _ensureConfirmModal() {
 
 /**
  * Show a themed single-input prompt dialog.
- * Returns a Promise<string|null> — the trimmed input value, or null if cancelled.
+ * Returns a Promise<string|null> — the raw (untrimmed) input value, or null if cancelled/empty.
  *
  * @param {string} message
  * @param {object} [opts]
@@ -1481,7 +1567,7 @@ function _ensurePromptModal() {
   el.innerHTML = `
     <div class="modal confirm-modal-inner">
       <p id="sp-prompt-message" class="confirm-modal-message"></p>
-      <input id="sp-prompt-input" class="auth-input" style="margin:12px 0 4px" />
+      <input id="sp-prompt-input" class="auth-input prompt-modal-input" />
       <div class="modal-actions">
         <button id="sp-prompt-cancel" class="modal-actions-btn modal-btn-cancel"></button>
         <button id="sp-prompt-ok"     class="modal-actions-btn modal-btn-confirm"></button>
