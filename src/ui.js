@@ -618,13 +618,15 @@ export function showPasscodeError(msg) {
   const input = document.getElementById('passcode-input');
   if (el) el.textContent = msg;
   input?.classList.add('error');
-  // Clear the red outline on the next keystroke so the user gets instant feedback.
-  input?.addEventListener('input', () => clearPasscodeError(), { once: true });
+  // Use .oninput (not addEventListener) so repeated calls never accumulate listeners.
+  // The handler clears itself after firing once.
+  if (input) input.oninput = () => { clearPasscodeError(); input.oninput = null; };
 }
 export function clearPasscodeError() {
   const el = document.getElementById('passcode-error');
   if (el) el.textContent = '';
-  document.getElementById('passcode-input')?.classList.remove('error');
+  const input = document.getElementById('passcode-input');
+  if (input) { input.classList.remove('error'); input.oninput = null; }
 }
 
 export function showEncryptionError(msg) {
@@ -632,13 +634,14 @@ export function showEncryptionError(msg) {
   const input = document.getElementById('encryption-input');
   if (el) el.textContent = msg;
   input?.classList.add('error');
-  // Clear the red outline on the next keystroke so the user gets instant feedback.
-  input?.addEventListener('input', () => clearEncryptionError(), { once: true });
+  // Use .oninput so repeated calls never accumulate listeners.
+  if (input) input.oninput = () => { clearEncryptionError(); input.oninput = null; };
 }
 export function clearEncryptionError() {
   const el = document.getElementById('encryption-error');
   if (el) el.textContent = '';
-  document.getElementById('encryption-input')?.classList.remove('error');
+  const input = document.getElementById('encryption-input');
+  if (input) { input.classList.remove('error'); input.oninput = null; }
 }
 
 // ── Editor helpers ────────────────────────────────────────────────────────────
@@ -770,7 +773,7 @@ export function renderSettingsPanel(room) {
   if (encBtn)  encBtn.textContent  = room.encryption_enabled ? 'Disable' : 'Enable';
   // 'Modify' when an expiration is already set — the actual Remove button is
   // inside the collapsible controls section (setting-exp-remove-btn).
-  if (expBtn)  expBtn.textContent  = room.expires_at         ? 'Modify'  : 'Set';
+  if (expBtn)  expBtn.textContent  = room.expires_at         ? 'Modify'  : 'Set expiry';
   if (voBtn)   voBtn.textContent   = room.view_once          ? 'Disable' : 'Enable';
   if (lockBtn) lockBtn.textContent = room.editing_locked     ? 'Unlock'  : 'Lock';
 }
@@ -1054,15 +1057,21 @@ export function renderThemePicker(themes, currentId, onSelect) {
   container.innerHTML = '';
   themes.forEach(t => {
     const btn = document.createElement('button');
-    btn.className = `theme-option${t.id === currentId ? ' active' : ''}`;
+    const isActive = t.id === currentId;
+    btn.className = `theme-option${isActive ? ' active' : ''}`;
     btn.dataset.themeId = t.id;
     btn.title = t.label;
+    btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    // Dual-swatch: background color + accent color gives a realistic preview
+    const bgColor     = escapeHtml(t.bg     || '#1c1c1e');
+    const accentColor = escapeHtml(t.swatch || '#f5a623');
     btn.innerHTML = `
-      <span class="theme-swatch" style="background:${escapeHtml(t.swatch)}"></span>
+      <span class="theme-preview" aria-hidden="true">
+        <span class="theme-preview-bg"  style="background:${bgColor}"></span>
+        <span class="theme-preview-dot" style="background:${accentColor}"></span>
+      </span>
       <span class="theme-label">${escapeHtml(t.label)}</span>
-      <span class="theme-check" style="opacity:${t.id === currentId ? 1 : 0}">
-        ${getIcon('check', 13)}
-      </span>`;
+      <span class="theme-check">${getIcon('check', 13)}</span>`;
     btn.addEventListener('click', () => {
       onSelect(t.id);
       renderThemePicker(themes, t.id, onSelect);

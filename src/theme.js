@@ -5,11 +5,13 @@
 const THEME_KEY = 'syncpad_theme';
 
 export const THEMES = [
-  { id: 'charcoal-amber',  label: 'Charcoal Amber', swatch: '#f5a623' },
-  { id: 'midnight-blue',   label: 'Midnight Blue',  swatch: '#60a5fa' },
-  { id: 'forest-green',    label: 'Forest Green',   swatch: '#4ade80' },
-  { id: 'paper-light',     label: 'Paper Light',    swatch: '#c17d2e' },
-  { id: 'terminal',        label: 'Terminal',       swatch: '#00ff41' },
+  { id: 'charcoal-amber',  label: 'Charcoal Amber', swatch: '#f5a623', bg: '#1c1c1e' },
+  { id: 'midnight-blue',   label: 'Midnight Blue',  swatch: '#60a5fa', bg: '#0f172a' },
+  { id: 'forest-green',    label: 'Forest Green',   swatch: '#4ade80', bg: '#0f1a0f' },
+  { id: 'paper-light',     label: 'Paper Light',    swatch: '#c17d2e', bg: '#f5f0e8' },
+  { id: 'terminal',        label: 'Terminal',       swatch: '#00ff41', bg: '#0a0a0a' },
+  { id: 'mocha-dark',      label: 'Mocha Dark',     swatch: '#d4956a', bg: '#1e1410' },
+  { id: 'lavender-light',  label: 'Lavender Light', swatch: '#7c5cbf', bg: '#f5f3ff' },
 ];
 
 /**

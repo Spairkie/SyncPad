@@ -1561,19 +1561,15 @@ function wireEvents() {
     },
 
     'tool-download': () => {
-      const blob = new Blob([UI.getEditorValue()], { type: 'text/plain' });
-      const a    = Object.assign(document.createElement('a'), {
-        href:     URL.createObjectURL(blob),
-        download: `${_roomId}.txt`,
-      });
-      document.body.appendChild(a); a.click();
-      document.body.removeChild(a); URL.revokeObjectURL(a.href);
+      // Export as Markdown (.md). Content is plain text / Markdown.
+      _downloadBlob(UI.getEditorValue(), `${_roomId}.md`, 'text/markdown');
+      UI.showToast('Downloaded .md', 'success');
     },
 
     'tool-import': () => {
       if (!canImportText()) { UI.showToast(editBlockedReason() || 'Import is disabled.', 'warning'); return; }
       const inp = Object.assign(document.createElement('input'), {
-        type: 'file', accept: '.txt,text/plain',
+        type: 'file', accept: '.txt,.md,text/plain,text/markdown',
       });
       inp.onchange = () => {
         const f = inp.files[0]; if (!f) return;
@@ -1600,12 +1596,8 @@ function wireEvents() {
       UI.insertAtCursor(insertTimestamp());
     },
     'tool-select-all': () => { editor?.focus(); editor?.setSelectionRange(0, editor.value.length); },
-    'tool-monospace':  () => {
-      _monospace = !_monospace;
-      UI.setMonospace(_monospace);
-      try { localStorage.setItem('syncpad_monospace', _monospace ? '1' : '0'); } catch {}
-      UI.showToast(_monospace ? 'Monospace on.' : 'Monospace off.');
-    },
+    'tool-monospace':  () => { _toggleMonospace(); },
+    'tool-find':       () => { _onOpenSearch?.(); },
     'tool-templates': () => {
       if (!canUseTemplates()) { UI.showToast(editBlockedReason() || 'Templates are disabled.', 'warning'); return; }
 
@@ -2192,6 +2184,20 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
     editor.dispatchEvent(new Event('input', { bubbles: true }));
   });
 
+  // ── Monospace setting button (Settings panel) ──────────────────────────────
+  const _updateMonospaceSettingUI = () => {
+    const btn = document.getElementById('setting-monospace-btn');
+    if (!btn) return;
+    btn.textContent = _monospace ? 'On' : 'Off';
+    btn.setAttribute('aria-pressed', String(_monospace));
+  };
+  _updateMonospaceSettingUI();
+
+  document.getElementById('setting-monospace-btn')?.addEventListener('click', () => {
+    _toggleMonospace();
+    _updateMonospaceSettingUI();
+  });
+
   // ── Strip-paste setting button ─────────────────────────────────────────────
   const _updateStripPasteUI = () => {
     const btn = document.getElementById('setting-strip-paste-btn');
@@ -2212,6 +2218,14 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
   });
 
   window.__syncpadEventsWired = true;
+}
+
+// ── Editor preference helpers ─────────────────────────────────────────────────
+function _toggleMonospace() {
+  _monospace = !_monospace;
+  UI.setMonospace(_monospace);
+  try { localStorage.setItem('syncpad_monospace', _monospace ? '1' : '0'); } catch {}
+  UI.showToast(_monospace ? 'Monospace on.' : 'Monospace off.', 'info', 1800);
 }
 
 // ── Markdown format helpers ───────────────────────────────────────────────────
@@ -2381,6 +2395,10 @@ function teardownRealtimeSession() {
   // the user enters preview mode. Without this, the guard stays true and the
   // listener is never re-wired after the first navigation.
   _previewObserverWired = false;
+  // Reset room object so stale room data never leaks into a subsequent session
+  // (e.g. settings callbacks that fire after teardown read _room for its values).
+  _room   = null;
+  _roomId = null;
 }
 
 // ── Templates handler ─────────────────────────────────────────────────────────
