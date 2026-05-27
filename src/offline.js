@@ -54,7 +54,11 @@ export function loadDraft(roomId) {
     const raw = localStorage.getItem(_key(roomId));
     if (!raw) return null;
     const entry = JSON.parse(raw);
-    if (Date.now() - entry.timestamp > TTL_MS) { clearDraft(roomId); return null; }
+    // Guard against malformed entries where timestamp is missing or NaN —
+    // (Date.now() - undefined) produces NaN, and NaN > TTL_MS is false, so
+    // the draft would never expire. Treat any non-finite timestamp as expired.
+    const age = Date.now() - entry.timestamp;
+    if (!isFinite(age) || age > TTL_MS) { clearDraft(roomId); return null; }
     return entry;
   } catch { return null; }
 }

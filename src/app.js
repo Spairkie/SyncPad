@@ -72,6 +72,7 @@ let _encSalt       = null;
 let _unsubRoom     = null;
 let _unsubFiles    = null;
 let _expTimer      = null;
+let _onlineCleanup = null;   // v1: teardown fn returned by onOnlineChange()
 let _monospace     = false;
 let _eventsWired   = false;  // v1: guard against double-wiring
 let _consumingViewOnce = false; // v1: short-circuit own view-once clear echo
@@ -688,7 +689,7 @@ async function startApp() {
 
   wireEvents();
 
-  onOnlineChange((online) => {
+  _onlineCleanup = onOnlineChange((online) => {
     if (online) { UI.hideOfflineBanner(); UI.setStatus('connected'); flushSave(); }
     else        { UI.showOfflineBanner();  UI.setStatus('offline'); }
   });
@@ -2329,6 +2330,11 @@ function teardownRealtimeSession() {
   // wrong room.
   clearTimeout(_expTimer);
   _expTimer = null;
+  // Remove the online/offline listener registered in startApp(). Without this
+  // each room navigation accumulates a new listener on window, causing duplicate
+  // flushSave calls and stale status updates after re-connecting.
+  _onlineCleanup?.();
+  _onlineCleanup = null;
   // Reset encryption keys so a key from an encrypted room is never used to
   // silently encrypt saves in a subsequent non-encrypted room.
   _encKey  = null;

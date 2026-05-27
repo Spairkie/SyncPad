@@ -56,6 +56,7 @@ export function initSync(opts) {
 
   _localLastEditAt           = 0;
   _pendingRemoteContent      = null;
+  _pendingRemoteTimestamp    = null;
   _applyingRemote            = false;
   _seqNum                    = 0;
 }
