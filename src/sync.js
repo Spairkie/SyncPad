@@ -222,6 +222,7 @@ function _clearPending() {
 
 // ── Set content without triggering a local save ───────────────────────────────
 
+/** Apply text to the editor while suppressing the local-edit flag. */
 export function setContentNoSave(plaintext) {
   _applyingRemote = true;
   try { _setEditorVal(plaintext); }
@@ -239,8 +240,5 @@ function _mustIgnoreEncryptedRemote() {
   return !!ctx.isEncryptedNoKey && !_decryptFn;
 }
 
-function _applyContentSafe(text) {
-  _applyingRemote = true;
-  try { _setEditorVal(text); }
-  finally { _applyingRemote = false; }
-}
+/** Internal alias — same semantics as the public setContentNoSave. */
+const _applyContentSafe = setContentNoSave;

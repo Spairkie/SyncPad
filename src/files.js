@@ -31,15 +31,15 @@ export async function uploadFile(roomId, file) {
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
   const filePath = `${roomId}/${Date.now()}_${safeName}`;
 
-  const { error: ue } = await sb.storage.from(BUCKET).upload(
+  const { error: uploadError } = await sb.storage.from(BUCKET).upload(
     filePath, file, { contentType: file.type || 'application/octet-stream' }
   );
-  if (ue) {
-    logSupabaseError('uploadFile:storage', ue, { room_id: roomId });
+  if (uploadError) {
+    logSupabaseError('uploadFile:storage', uploadError, { room_id: roomId });
     throw new Error('Could not upload file.');
   }
 
-  const { data, error: de } = await sb.from(TABLE)
+  const { data, error: dbError } = await sb.from(TABLE)
     .insert({
       room_id:           roomId,
       filename:          file.name,
@@ -51,9 +51,9 @@ export async function uploadFile(roomId, file) {
     .select()
     .single();
 
-  if (de) {
-    logSupabaseError('uploadFile:metadata', de, { room_id: roomId });
-    // Roll back the storage upload
+  if (dbError) {
+    logSupabaseError('uploadFile:metadata', dbError, { room_id: roomId });
+    // Roll back the storage upload (best-effort — ignore error)
     await sb.storage.from(BUCKET).remove([filePath]).catch(() => {});
     throw new Error('Could not save file metadata.');
   }

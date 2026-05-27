@@ -147,8 +147,12 @@ test.describe('Confirm modal focus trap (A-2)', () => {
     });
     await page.waitForSelector('#sp-confirm-modal.visible', { timeout: 5000 });
 
-    // Focus Cancel first
+    // Focus Cancel first and wait for focus to settle before pressing keys
     await page.locator('#sp-confirm-cancel').focus();
+    await page.waitForFunction(
+      () => document.activeElement?.id === 'sp-confirm-cancel',
+      null, { timeout: 2000 }
+    );
     // Shift+Tab from first element should wrap to last
     await page.keyboard.press('Shift+Tab');
     await expect(page.locator('#sp-confirm-ok')).toBeFocused();

@@ -56,7 +56,7 @@ import {
   saveCustomTemplate, renameCustomTemplate, deleteCustomTemplate,
   exportCustomTemplates, importCustomTemplates,
 } from './templates.js';
-import { loadSavedTheme, applyTheme, THEMES }  from './theme.js';
+import { loadSavedTheme, applyTheme, THEMES, getSavedTheme }  from './theme.js';
 import { initShortcuts, destroyShortcuts }     from './shortcuts.js';
 
 import * as UI from './ui.js';
@@ -472,7 +472,7 @@ async function joinRoom(roomId) {
 
 async function onPasscodeSubmit() {
   const input    = document.getElementById('passcode-input');
-  const passcode = input?.value?.trim() || '';
+  const passcode = input?.value || '';
   if (!passcode) { UI.showPasscodeError('Please enter the passcode.'); return; }
 
   UI.clearPasscodeError();
@@ -578,7 +578,7 @@ async function startApp() {
   // since _markdownMode was reset to 'write' in teardownRealtimeSession().
   UI.setMarkdownMode('write', null);
   UI.setLockedMode(!!_room.editing_locked);
-  UI.renderThemePicker(THEMES, getSavedTheme_(), (id) => applyTheme(id));
+  UI.renderThemePicker(THEMES, getSavedTheme(), (id) => applyTheme(id));
 
   initSync({
     roomId:           _roomId,
@@ -1131,7 +1131,7 @@ function _openTemplatesModalFresh() {
             let count;
             try { count = importCustomTemplates(String(e.target.result)); }
             catch (err) {
-              if (err?.code === 'QUOTA_EXCEEDED') { UI.showToast('Browser storage is full - could not import templates.', 'error'); return; }
+              if (err?.code === 'QUOTA_EXCEEDED') { UI.showToast('Browser storage is full — could not import templates.', 'error'); return; }
               UI.showToast('Import failed.', 'error'); return;
             }
             if (count < 0) { UI.showToast('Invalid file - expected a JSON object of templates.', 'error'); return; }
@@ -1213,6 +1213,92 @@ function wireEvents() {
     _debouncedRefreshPreview();
   });
   editor?.addEventListener('blur', () => onEditorBlur());
+
+  // ── Smart editor keyboard behaviour ────────────────────────────────────────
+  editor?.addEventListener('keydown', (e) => {
+    if (!canEdit() || e.isComposing || e.ctrlKey || e.metaKey || e.altKey) return;
+
+    // Tab / Shift+Tab — indent/dedent only when there is a multi-character selection
+    // OR the cursor is at the start of a line with content (i.e. indenting makes sense).
+    // For a plain Tab on an empty/cursor-only position outside a list, fall through so
+    // the browser can move focus to the next element (keyboard accessibility).
+    if (e.key === 'Tab') {
+      const val   = editor.value;
+      const start = editor.selectionStart;
+      const end   = editor.selectionEnd;
+      const hasSelection = start !== end;
+      // Determine if the cursor line has non-whitespace content or is part of a list
+      const lineStart = val.lastIndexOf('\n', start - 1) + 1;
+      const lineText  = val.slice(lineStart, start + (end - start));
+      const inList    = /^\s*[-*+]|\s*\d+\./.test(lineText);
+
+      // Only intercept Tab if: there's a multi-char selection to indent, OR cursor is in a list.
+      // Otherwise let Tab propagate so keyboard focus moves naturally.
+      if (!hasSelection && !inList) return;
+
+      e.preventDefault();
+      if (hasSelection) {
+        // Multi-line selection: indent or dedent each line
+        const lStart = val.lastIndexOf('\n', start - 1) + 1;
+        const lEnd   = (() => { const n = val.indexOf('\n', end - 1); return n === -1 ? val.length : n; })();
+        const block  = val.slice(lStart, lEnd);
+        const newBlock = e.shiftKey
+          ? block.split('\n').map((l) => l.startsWith('  ') ? l.slice(2) : l.startsWith(' ') ? l.slice(1) : l).join('\n')
+          : block.split('\n').map((l) => '  ' + l).join('\n');
+        editor.value = val.slice(0, lStart) + newBlock + val.slice(lEnd);
+        editor.selectionStart = lStart;
+        editor.selectionEnd   = lStart + newBlock.length;
+      } else {
+        // In a list: insert 2 spaces at caret
+        editor.value = val.slice(0, start) + '  ' + val.slice(end);
+        editor.selectionStart = editor.selectionEnd = start + 2;
+      }
+      editor.dispatchEvent(new Event('input', { bubbles: true }));
+      return;
+    }
+
+    // Enter — auto-continue list items
+    if (e.key === 'Enter') {
+      const val = editor.value;
+      const pos = editor.selectionStart;
+      if (editor.selectionStart !== editor.selectionEnd) return; // has selection
+      const lineStart = val.lastIndexOf('\n', pos - 1) + 1;
+      const lineText  = val.slice(lineStart, pos);
+
+      const ulMatch = lineText.match(/^([ \t]*)([-*+]) /);
+      const olMatch = lineText.match(/^([ \t]*)(\d+)\. /);
+      const match   = ulMatch || olMatch;
+      if (!match) return;
+
+      const content = lineText.slice(match[0].length);
+      e.preventDefault();
+      if (!content.trim()) {
+        // Empty item — break out of the list
+        editor.value = val.slice(0, lineStart) + '\n' + val.slice(pos);
+        editor.selectionStart = editor.selectionEnd = lineStart + 1;
+      } else {
+        // Continue the list with the next item
+        const nextPrefix = olMatch
+          ? `${olMatch[1]}${parseInt(olMatch[2], 10) + 1}. `
+          : `${match[1]}${match[2]} `;
+        const insertion = '\n' + nextPrefix;
+        editor.value = val.slice(0, pos) + insertion + val.slice(editor.selectionEnd);
+        editor.selectionStart = editor.selectionEnd = pos + insertion.length;
+      }
+      editor.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  });
+
+  // ── Markdown toolbar ────────────────────────────────────────────────────────
+  document.getElementById('md-toolbar')?.addEventListener('mousedown', (e) => {
+    // mousedown (not click) so we can preventDefault before the editor loses focus
+    const btn = e.target.closest('[data-md-action]');
+    if (!btn) return;
+    e.preventDefault(); // keep editor focus
+    if (!canEdit()) return;
+    if (!editor) return;
+    _applyMarkdownFormat(btn.dataset.mdAction, editor);
+  });
 
   // Broadcast cursor line on selection/click (throttled in presence.js at 800ms)
   const _broadcastCursor = () => {
@@ -1488,19 +1574,15 @@ function wireEvents() {
     },
 
     'tool-download': () => {
-      const blob = new Blob([UI.getEditorValue()], { type: 'text/plain' });
-      const a    = Object.assign(document.createElement('a'), {
-        href:     URL.createObjectURL(blob),
-        download: `${_roomId}.txt`,
-      });
-      document.body.appendChild(a); a.click();
-      document.body.removeChild(a); URL.revokeObjectURL(a.href);
+      // Export as Markdown (.md). Content is plain text / Markdown.
+      _downloadBlob(UI.getEditorValue(), `${_roomId}.md`, 'text/markdown');
+      UI.showToast('Downloaded .md', 'success');
     },
 
     'tool-import': () => {
       if (!canImportText()) { UI.showToast(editBlockedReason() || 'Import is disabled.', 'warning'); return; }
       const inp = Object.assign(document.createElement('input'), {
-        type: 'file', accept: '.txt,text/plain',
+        type: 'file', accept: '.txt,.md,text/plain,text/markdown',
       });
       inp.onchange = () => {
         const f = inp.files[0]; if (!f) return;
@@ -1527,63 +1609,10 @@ function wireEvents() {
       UI.insertAtCursor(insertTimestamp());
     },
     'tool-select-all': () => { editor?.focus(); editor?.setSelectionRange(0, editor.value.length); },
-    'tool-monospace':  () => {
-      _monospace = !_monospace;
-      UI.setMonospace(_monospace);
-      try { localStorage.setItem('syncpad_monospace', _monospace ? '1' : '0'); } catch {}
-      UI.showToast(_monospace ? 'Monospace on.' : 'Monospace off.');
-    },
+    'tool-find':       () => { UI.openPanel('search-panel'); document.getElementById('search-input')?.focus(); },
     'tool-templates': () => {
       if (!canUseTemplates()) { UI.showToast(editBlockedReason() || 'Templates are disabled.', 'warning'); return; }
-
-      const _openTemplates = () => {
-        UI.openTemplatesModal(
-          TEMPLATES,
-          getCustomTemplates(),
-          _onTemplateChosen,
-          (key) => { deleteCustomTemplate(key); },
-          (key, label) => { renameCustomTemplate(key, label); },
-          {
-            onExport: () => {
-              const json = exportCustomTemplates();
-              const blob = new Blob([json], { type: 'application/json' });
-              const a    = Object.assign(document.createElement('a'), {
-                href: URL.createObjectURL(blob), download: 'syncpad-templates.json',
-              });
-              document.body.appendChild(a); a.click(); document.body.removeChild(a);
-              URL.revokeObjectURL(a.href);
-              UI.showToast('Templates exported.', 'success');
-            },
-            onImport: () => {
-              const inp = Object.assign(document.createElement('input'), {
-                type: 'file', accept: 'application/json,.json',
-              });
-              inp.onchange = () => {
-                const f = inp.files[0]; if (!f) return;
-                if (f.size > 1024 * 1024) { UI.showToast('File too large (max 1 MB for template import).', 'error'); return; }
-                const r = new FileReader();
-                r.onerror = () => UI.showToast('Could not read file.', 'error');
-                r.onload = (e) => {
-                  let count;
-                  try { count = importCustomTemplates(String(e.target.result)); }
-                  catch (err) {
-                    if (err?.code === 'QUOTA_EXCEEDED') { UI.showToast('Browser storage is full — could not import templates.', 'error'); return; }
-                    UI.showToast('Import failed.', 'error'); return;
-                  }
-                  if (count < 0) { UI.showToast('Invalid file — expected a JSON object of templates.', 'error'); return; }
-                  UI.showToast(`Imported ${count} template${count !== 1 ? 's' : ''}.`, 'success');
-                  UI.closeModal('templates-modal');
-                  setTimeout(_openTemplates, 150); // reopen with fresh data
-                };
-                r.readAsText(f);
-              };
-              inp.click();
-            },
-          }
-        );
-      };
-
-      _openTemplates();
+      _openTemplatesModalFresh();
     },
   };
 
@@ -1675,7 +1704,7 @@ function wireEvents() {
       const pc = await UI.showPrompt('Set a new passcode:', { placeholder: 'Passcode…', confirmLabel: 'Set passcode' });
       if (!pc?.trim()) return;
       try {
-        await setPasscode(_roomId, pc.trim());
+        await setPasscode(_roomId, pc);
         _room = await loadRoom(_roomId);
         _updatePermissionContext();
         _renderRoomHeader();
@@ -1730,7 +1759,7 @@ function wireEvents() {
       // PBKDF2 key derivation takes 1-3 s — indicate progress on the button.
       if (encBtn) { encBtn.disabled = true; encBtn.textContent = 'Encrypting…'; }
       try {
-        const { salt, key } = await enableEncryption(_roomId, UI.getEditorValue(), pp.trim());
+        const { salt, key } = await enableEncryption(_roomId, UI.getEditorValue(), pp);
         _encKey = key; _encSalt = salt;
         // v1: switch sync.js to encrypted lane immediately.
         setEncryption(
@@ -2119,6 +2148,20 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
     editor.dispatchEvent(new Event('input', { bubbles: true }));
   });
 
+  // ── Monospace setting button (Settings panel) ──────────────────────────────
+  const _updateMonospaceSettingUI = () => {
+    const btn = document.getElementById('setting-monospace-btn');
+    if (!btn) return;
+    btn.textContent = _monospace ? 'On' : 'Off';
+    btn.setAttribute('aria-pressed', String(_monospace));
+  };
+  _updateMonospaceSettingUI();
+
+  document.getElementById('setting-monospace-btn')?.addEventListener('click', () => {
+    _toggleMonospace();
+    _updateMonospaceSettingUI();
+  });
+
   // ── Strip-paste setting button ─────────────────────────────────────────────
   const _updateStripPasteUI = () => {
     const btn = document.getElementById('setting-strip-paste-btn');
@@ -2137,8 +2180,120 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
       'info', 2000
     );
   });
+}
 
-  window.__syncpadEventsWired = true;
+// ── Editor preference helpers ─────────────────────────────────────────────────
+function _toggleMonospace() {
+  _monospace = !_monospace;
+  UI.setMonospace(_monospace);
+  try { localStorage.setItem('syncpad_monospace', _monospace ? '1' : '0'); } catch {}
+  UI.showToast(_monospace ? 'Monospace on.' : 'Monospace off.', 'info', 1800);
+}
+
+// ── Markdown format helpers ───────────────────────────────────────────────────
+/**
+ * Apply a formatting action to the editor textarea.
+ * Called by the toolbar (mousedown) and can be reused by other code.
+ * @param {string} action  – matches data-md-action attribute
+ * @param {HTMLTextAreaElement} editor
+ */
+function _applyMarkdownFormat(action, editor) {
+  if (!editor) return;
+  const val   = editor.value;
+  const start = editor.selectionStart;
+  const end   = editor.selectionEnd;
+  const sel   = val.slice(start, end);
+
+  // Wrap selection (or "text" placeholder) with prefix/suffix markers.
+  // Toggles off if already wrapped.
+  const wrapSel = (prefix, suffix = prefix) => {
+    // Unwrap only when there is at least one inner character (length strictly greater
+    // than prefix+suffix combined) so selecting exactly '``' or '**' doesn't delete content.
+    if (sel.startsWith(prefix) && sel.endsWith(suffix) && sel.length > prefix.length + suffix.length) {
+      const inner = sel.slice(prefix.length, sel.length - suffix.length);
+      editor.value = val.slice(0, start) + inner + val.slice(end);
+      editor.selectionStart = start;
+      editor.selectionEnd   = start + inner.length;
+    } else {
+      const inner = sel || 'text';
+      editor.value = val.slice(0, start) + prefix + inner + suffix + val.slice(end);
+      editor.selectionStart = start + prefix.length;
+      editor.selectionEnd   = start + prefix.length + inner.length;
+    }
+    editor.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+
+  // Toggle a line-level prefix on every line touched by the selection.
+  const toggleLinePrefix = (prefix) => {
+    const lStart = val.lastIndexOf('\n', start - 1) + 1;
+    const eolPos = end > start ? end - 1 : end;
+    const lEnd   = (() => { const n = val.indexOf('\n', eolPos); return n === -1 ? val.length : n; })();
+    const block  = val.slice(lStart, lEnd);
+    const lines2 = block.split('\n');
+    const allHave = lines2.every((l) => l.startsWith(prefix));
+    const newBlock = allHave
+      ? lines2.map((l) => l.slice(prefix.length)).join('\n')
+      : lines2.map((l) => prefix + l).join('\n');
+    editor.value = val.slice(0, lStart) + newBlock + val.slice(lEnd);
+    editor.selectionStart = lStart;
+    editor.selectionEnd   = lStart + newBlock.length;
+    editor.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+
+  // Toggle an ATX heading on the current line (strips any existing # prefix first).
+  const toggleHeading = (level) => {
+    const prefix = '#'.repeat(level) + ' ';
+    const lStart = val.lastIndexOf('\n', start - 1) + 1;
+    const lEnd   = (() => { const n = val.indexOf('\n', start); return n === -1 ? val.length : n; })();
+    const line   = val.slice(lStart, lEnd);
+    const stripped = line.replace(/^#{1,6} /, '');
+    const newLine  = line.startsWith(prefix) ? stripped : prefix + stripped;
+    editor.value = val.slice(0, lStart) + newLine + val.slice(lEnd);
+    editor.selectionStart = lStart;
+    editor.selectionEnd   = lStart + newLine.length;
+    editor.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+
+  switch (action) {
+    case 'bold':          wrapSel('**', '**'); break;
+    case 'italic':        wrapSel('_',  '_');  break;
+    case 'strikethrough': wrapSel('~~', '~~'); break;
+    case 'code':          wrapSel('`',  '`');  break;
+    case 'h1':            toggleHeading(1);    break;
+    case 'h2':            toggleHeading(2);    break;
+    case 'h3':            toggleHeading(3);    break;
+    case 'quote':         toggleLinePrefix('> '); break;
+    case 'ul':            toggleLinePrefix('- '); break;
+    case 'ol':            toggleLinePrefix('1. '); break;
+    case 'link': {
+      const insert = sel ? `[${sel}](url)` : '[link text](url)';
+      editor.value = val.slice(0, start) + insert + val.slice(end);
+      const urlStart = start + insert.indexOf('url');
+      editor.selectionStart = urlStart;
+      editor.selectionEnd   = urlStart + 3;
+      editor.dispatchEvent(new Event('input', { bubbles: true }));
+      break;
+    }
+    case 'codeblock': {
+      const before = start > 0 && val[start - 1] !== '\n' ? '\n' : '';
+      const after  = end < val.length && val[end] !== '\n' ? '\n' : '';
+      const inner  = sel || 'code here';
+      const insert = `${before}\`\`\`\n${inner}\n\`\`\`${after}`;
+      editor.value = val.slice(0, start) + insert + val.slice(end);
+      editor.selectionStart = start + before.length + 4;
+      editor.selectionEnd   = start + before.length + 4 + inner.length;
+      editor.dispatchEvent(new Event('input', { bubbles: true }));
+      break;
+    }
+    case 'hr': {
+      const before = start > 0 && val[start - 1] !== '\n' ? '\n' : '';
+      const ins = `${before}---\n`;
+      editor.value = val.slice(0, start) + ins + val.slice(end);
+      editor.selectionStart = editor.selectionEnd = start + ins.length;
+      editor.dispatchEvent(new Event('input', { bubbles: true }));
+      break;
+    }
+  }
 }
 
 function teardownRealtimeSession() {
@@ -2204,11 +2359,12 @@ function teardownRealtimeSession() {
   // the user enters preview mode. Without this, the guard stays true and the
   // listener is never re-wired after the first navigation.
   _previewObserverWired = false;
-  // Clear share context so a token from a read-only share route is never
-  // visible in a subsequent room context (overwritten by the next navigation
-  // but nulled here as a defence-in-depth measure).
-  _shareToken = null;
-  _isReadOnly = false;
+  // Reset room object so stale room data never leaks into a subsequent session
+  // (e.g. settings callbacks that fire after teardown read _room for its values).
+  _room   = null;
+  _roomId = null;
+  // Reset the scroll-sync guard so it can re-wire on the next split-mode entry.
+  UI.resetScrollSync();
 }
 
 // ── Templates handler ─────────────────────────────────────────────────────────
@@ -2219,8 +2375,18 @@ function _onTemplateChosen(key, mode) {
   if (!canUseTemplates()) { UI.showToast(editBlockedReason() || 'Templates are disabled.', 'warning'); return; }
 
   const editor = document.getElementById('note-editor');
-  const current = UI.getEditorValue();
 
+  if (mode === 'insert') {
+    // Insert at the current cursor position; fall back to append if no editor focus.
+    UI.insertAtCursor(body);
+    editor?.dispatchEvent(new Event('input', { bubbles: true }));
+    UI.updateWordCount(UI.getEditorValue());
+    _refreshPreviewIfActive();
+    UI.showToast('Template inserted.', 'success');
+    return;
+  }
+
+  const current = UI.getEditorValue();
   let next;
   if (mode === 'append') {
     next = current && body ? `${current.replace(/\s+$/, '')}\n\n${body}` : (current + body);
@@ -2236,12 +2402,6 @@ function _onTemplateChosen(key, mode) {
   UI.showToast(mode === 'append' ? 'Template appended.' : 'Template applied.', 'success');
 }
 
-// ── Theme helper (avoids importing getSavedTheme into app.js separately) ─────
-
-function getSavedTheme_() {
-  try { return localStorage.getItem('syncpad_theme') || 'charcoal-amber'; } catch {}
-  return 'charcoal-amber';
-}
 
 // ── Preview helpers ───────────────────────────────────────────────────────────
 
