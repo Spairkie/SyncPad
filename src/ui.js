@@ -1488,7 +1488,7 @@ function _ensureConfirmModal() {
 
 /**
  * Show a themed single-input prompt dialog.
- * Returns a Promise<string|null> — the trimmed input value, or null if cancelled.
+ * Returns a Promise<string|null> — the raw (untrimmed) input value, or null if cancelled/empty.
  *
  * @param {string} message
  * @param {object} [opts]
@@ -1567,7 +1567,7 @@ function _ensurePromptModal() {
   el.innerHTML = `
     <div class="modal confirm-modal-inner">
       <p id="sp-prompt-message" class="confirm-modal-message"></p>
-      <input id="sp-prompt-input" class="auth-input" style="margin:12px 0 4px" />
+      <input id="sp-prompt-input" class="auth-input prompt-modal-input" />
       <div class="modal-actions">
         <button id="sp-prompt-cancel" class="modal-actions-btn modal-btn-cancel"></button>
         <button id="sp-prompt-ok"     class="modal-actions-btn modal-btn-confirm"></button>
