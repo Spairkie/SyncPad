@@ -2257,7 +2257,9 @@ function _applyMarkdownFormat(action, editor) {
   // Wrap selection (or "text" placeholder) with prefix/suffix markers.
   // Toggles off if already wrapped.
   const wrapSel = (prefix, suffix = prefix) => {
-    if (sel.startsWith(prefix) && sel.endsWith(suffix) && sel.length > prefix.length + suffix.length - 1) {
+    // Unwrap only when there is at least one inner character (length strictly greater
+    // than prefix+suffix combined) so selecting exactly '``' or '**' doesn't delete content.
+    if (sel.startsWith(prefix) && sel.endsWith(suffix) && sel.length > prefix.length + suffix.length) {
       const inner = sel.slice(prefix.length, sel.length - suffix.length);
       editor.value = val.slice(0, start) + inner + val.slice(end);
       editor.selectionStart = start;

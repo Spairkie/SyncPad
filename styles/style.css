@@ -93,6 +93,11 @@
   --text-secondary: #6a5e50;
   --text-muted:     #a89a88;
   --text-inverse:   #ffffff;
+  /* Semantic status colours — darker shades for legibility on light backgrounds */
+  --green:          #15803d;
+  --red:            #b91c1c;
+  --blue:           #1d4ed8;
+  --yellow:         #92400e;
   --shadow-sm:      0 1px 3px rgba(0,0,0,0.1);
   --shadow-md:      0 4px 16px rgba(0,0,0,0.12);
   --shadow-lg:      0 12px 40px rgba(0,0,0,0.15);
@@ -154,6 +159,11 @@
   --text-secondary: #6b5a8a;
   --text-muted:     #a898c4;
   --text-inverse:   #ffffff;
+  /* Semantic status colours — darker shades for legibility on light backgrounds */
+  --green:          #15803d;
+  --red:            #b91c1c;
+  --blue:           #1d4ed8;
+  --yellow:         #92400e;
   --shadow-sm:      0 1px 3px rgba(0,0,0,0.08);
   --shadow-md:      0 4px 16px rgba(0,0,0,0.1);
   --shadow-lg:      0 12px 40px rgba(0,0,0,0.12);
