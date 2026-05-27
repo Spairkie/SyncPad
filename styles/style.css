@@ -1070,7 +1070,7 @@ body.lock-mode .md-toolbar { opacity: 0.4; pointer-events: none; }
 .modal-btn-cancel:hover  { background: var(--bg-base); }
 .modal-btn-confirm { background: var(--accent); color: var(--text-inverse); transition: opacity var(--transition); }
 .modal-btn-confirm:hover { opacity: 0.9; }
-.modal-btn-danger  { background: var(--red); color: white; transition: opacity var(--transition); }
+.modal-btn-danger  { background: var(--red); color: var(--text-inverse); transition: opacity var(--transition); }
 .modal-btn-danger:hover  { opacity: 0.85; }
 /* Confirm dialog specifics */
 .confirm-modal-inner { max-width: 340px; }
@@ -1266,7 +1266,7 @@ body.lock-mode .md-toolbar { opacity: 0.4; pointer-events: none; }
 .template-choice-btn:hover { background: var(--bg-base); border-color: var(--accent); }
 .template-choice-btn.primary { background: var(--accent); color: var(--text-inverse); border-color: var(--accent); }
 .template-choice-btn.primary:hover { opacity: 0.9; }
-.template-choice-btn.danger { background: var(--red); color: white; border-color: var(--red); }
+.template-choice-btn.danger { background: var(--red); color: var(--text-inverse); border-color: var(--red); }
 .template-choice-btn.danger:hover { opacity: 0.9; }
 
 /* Templates tab bar */
@@ -1306,7 +1306,7 @@ body.lock-mode .md-toolbar { opacity: 0.4; pointer-events: none; }
 }
 .custom-tmpl-btn svg   { width: 13px; height: 13px; }
 .custom-tmpl-btn:hover { background: var(--bg-base); color: var(--text-primary); }
-.custom-tmpl-btn.danger:hover { background: var(--red); color: white; border-color: var(--red); }
+.custom-tmpl-btn.danger:hover { background: var(--red); color: var(--text-inverse); border-color: var(--red); }
 
 /* Save-as-template button in modal footer */
 .modal-btn-secondary {
@@ -2309,7 +2309,7 @@ kbd {
 .admin-action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .admin-action-primary { background: var(--accent); color: var(--text-inverse); border-color: var(--accent); }
 .admin-action-primary:hover { opacity: 0.9; }
-.admin-action-danger { background: var(--red); color: white; border-color: var(--red); }
+.admin-action-danger { background: var(--red); color: var(--text-inverse); border-color: var(--red); }
 .admin-action-danger:hover { opacity: 0.85; }
 
 /* ── Badges ───────────────────────────────────────────────── */
