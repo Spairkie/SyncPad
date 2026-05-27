@@ -817,7 +817,7 @@ body.lock-mode .note-preview li.md-task input[type="checkbox"] { cursor: not-all
   border: 1px solid var(--red); color: var(--red); background: transparent;
   cursor: pointer; transition: background var(--transition), color var(--transition);
 }
-.files-bulk-delete-btn:hover:not(:disabled) { background: var(--red); color: #fff; }
+.files-bulk-delete-btn:hover:not(:disabled) { background: var(--red); color: var(--text-inverse); }
 .files-bulk-delete-btn:disabled { opacity: 0.38; cursor: not-allowed; }
 .file-item--selectable { cursor: pointer; }
 .file-item--selectable:hover { border-color: var(--accent); }
