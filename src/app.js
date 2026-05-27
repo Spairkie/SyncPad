@@ -2375,8 +2375,18 @@ function _onTemplateChosen(key, mode) {
   if (!canUseTemplates()) { UI.showToast(editBlockedReason() || 'Templates are disabled.', 'warning'); return; }
 
   const editor = document.getElementById('note-editor');
-  const current = UI.getEditorValue();
 
+  if (mode === 'insert') {
+    // Insert at the current cursor position; fall back to append if no editor focus.
+    UI.insertAtCursor(body);
+    editor?.dispatchEvent(new Event('input', { bubbles: true }));
+    UI.updateWordCount(UI.getEditorValue());
+    _refreshPreviewIfActive();
+    UI.showToast('Template inserted.', 'success');
+    return;
+  }
+
+  const current = UI.getEditorValue();
   let next;
   if (mode === 'append') {
     next = current && body ? `${current.replace(/\s+$/, '')}\n\n${body}` : (current + body);

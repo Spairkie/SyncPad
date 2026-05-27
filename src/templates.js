@@ -10,14 +10,16 @@ export const BODY_MAX = 50_000;
 
 export const TEMPLATES = {
   blank: {
-    label: 'Blank note',
-    desc:  'Empty canvas to start from scratch',
-    body:  '',
+    label:    'Blank note',
+    desc:     'Empty canvas to start from scratch',
+    category: 'General',
+    body:     '',
   },
 
   checklist: {
-    label: 'Checklist',
-    desc:  'Simple task list with checkboxes',
+    label:    'Checklist',
+    desc:     'Simple task list with checkboxes',
+    category: 'Personal',
     body:
 `- [ ] First task
 - [ ] Second task
@@ -26,8 +28,9 @@ export const TEMPLATES = {
   },
 
   meeting: {
-    label: 'Meeting notes',
-    desc:  'Agenda, discussion notes, and action items',
+    label:    'Meeting notes',
+    desc:     'Agenda, discussion notes, and action items',
+    category: 'Work & Meetings',
     body:
 `# Meeting Notes
 Date:
@@ -44,36 +47,54 @@ Attendees:
 `,
   },
 
+  standup: {
+    label:    'Daily standup',
+    desc:     'Yesterday / today / blockers — scrum format',
+    category: 'Work & Meetings',
+    body:
+`# Daily Standup
+Date:
+
+**Yesterday**
+-
+
+**Today**
+-
+
+**Blockers**
+- None
+`,
+  },
+
+  email: {
+    label:    'Email draft',
+    desc:     'Quick email draft skeleton',
+    category: 'Work & Meetings',
+    body:
+`Subject:
+
+Good morning,
+
+
+
+Thank you,
+`,
+  },
+
   quicklinks: {
-    label: 'Quick links',
-    desc:  'Shared list of URLs and resources',
+    label:    'Quick links',
+    desc:     'Shared list of URLs and resources',
+    category: 'General',
     body:
 `# Quick Links
 -
 `,
   },
 
-  troubleshoot: {
-    label: 'Troubleshooting notes',
-    desc:  'Issue description, steps tried, and next steps',
-    body:
-`# Troubleshooting Notes
-Issue:
-Device/User:
-
-Steps Tried:
-1.
-2.
-3.
-
-Result:
-Next Step:
-`,
-  },
-
   daily: {
-    label: 'Daily plan',
-    desc:  'Top priorities, task list, and notes for the day',
+    label:    'Daily plan',
+    desc:     'Top priorities, task list, and notes for the day',
+    category: 'Planning',
     body:
 `# Daily Plan
 Date:
@@ -91,41 +112,92 @@ Date:
 `,
   },
 
-  email: {
-    label: 'Email draft',
-    desc:  'Quick email draft skeleton',
+  weekly: {
+    label:    'Weekly review',
+    desc:     'Wins, challenges, lessons, and next week plan',
+    category: 'Planning',
     body:
-`Subject:
+`# Weekly Review
+Week of:
 
-Good morning,
+## Wins 🎉
+-
 
+## Challenges
+-
 
+## Lessons Learned
+-
 
-Thank you,
+## Next Week — Top 3 Goals
+1.
+2.
+3.
+
+## Notes
 `,
   },
 
-  standup: {
-    label: 'Daily standup',
-    desc:  'Yesterday / today / blockers — scrum format',
+  project: {
+    label:    'Project brief',
+    desc:     'Goal, scope, timeline, and stakeholders',
+    category: 'Planning',
     body:
-`# Daily Standup
-Date:
+`# Project Brief
+**Project name:**
+**Owner:**
+**Date:**
 
-**Yesterday**
+## Goal
+
+
+## Scope
+**In scope:**
 -
 
-**Today**
+**Out of scope:**
 -
 
-**Blockers**
-- None
+## Timeline
+| Milestone | Date |
+|-----------|------|
+|           |      |
+
+## Stakeholders
+| Name | Role |
+|------|------|
+|      |      |
+
+## Risks
+
+
+## Notes
+`,
+  },
+
+  troubleshoot: {
+    label:    'Troubleshooting notes',
+    desc:     'Issue description, steps tried, and next steps',
+    category: 'Engineering',
+    body:
+`# Troubleshooting Notes
+Issue:
+Device/User:
+
+Steps Tried:
+1.
+2.
+3.
+
+Result:
+Next Step:
 `,
   },
 
   bug: {
-    label: 'Bug report',
-    desc:  'Reproducible steps, expected vs actual behaviour',
+    label:    'Bug report',
+    desc:     'Reproducible steps, expected vs actual behaviour',
+    category: 'Engineering',
     body:
 `# Bug Report
 **Title:**
@@ -159,8 +231,9 @@ Date:
   },
 
   review: {
-    label: 'Code review',
-    desc:  'Checklist for reviewing a pull request',
+    label:    'Code review',
+    desc:     'Checklist for reviewing a pull request',
+    category: 'Engineering',
     body:
 `# Code Review
 PR / Branch:
@@ -184,34 +257,142 @@ Date:
 `,
   },
 
-  weekly: {
-    label: 'Weekly review',
-    desc:  'Wins, challenges, lessons, and next week plan',
+  deployment: {
+    label:    'Deployment checklist',
+    desc:     'Pre/post deployment steps and verification',
+    category: 'Engineering',
     body:
-`# Weekly Review
-Week of:
+`# Deployment Checklist
+**Service / Version:**
+**Date:**
+**Engineer:**
 
-## Wins 🎉
--
+## Pre-Deployment
+- [ ] Tests passing in CI
+- [ ] Dependencies reviewed / updated
+- [ ] Environment variables confirmed
+- [ ] Database migrations staged and reviewed
+- [ ] Rollback plan documented
+- [ ] Team notified
 
-## Challenges
--
-
-## Lessons Learned
--
-
-## Next Week — Top 3 Goals
+## Deployment Steps
 1.
 2.
 3.
+
+## Post-Deployment Verification
+- [ ] Health check endpoint responding
+- [ ] Key user flows tested
+- [ ] Error rate normal
+- [ ] Logs reviewed
+- [ ] Monitoring / alerts active
+
+## Rollback Steps (if needed)
+1.
+2.
 
 ## Notes
 `,
   },
 
+  incident: {
+    label:    'Incident report',
+    desc:     'Timeline, impact, root cause, and follow-up',
+    category: 'Engineering',
+    body:
+`# Incident Report
+**Title:**
+**Severity:** P1 / P2 / P3
+**Date/Time detected:**
+**Date/Time resolved:**
+**Duration:**
+
+## Summary
+
+
+## Impact
+- Users affected:
+- Services affected:
+
+## Timeline
+| Time | Event |
+|------|-------|
+|      |       |
+
+## Root Cause
+
+
+## Contributing Factors
+-
+
+## Resolution
+
+
+## Follow-up Actions
+- [ ]
+
+## Lessons Learned
+-
+`,
+  },
+
+  handoff: {
+    label:    'Handoff note',
+    desc:     'Shift or project handoff for the next person',
+    category: 'Engineering',
+    body:
+`# Handoff Note
+**From:**
+**To:**
+**Date/Time:**
+
+## Current Status
+(Brief summary of where things stand)
+
+## Open Items
+- [ ]
+
+## Decisions Made Today
+
+
+## Waiting On
+-
+
+## Next Actions for You
+- [ ]
+
+## Context / Notes
+`,
+  },
+
+  retro: {
+    label:    'Retrospective',
+    desc:     'Sprint or project retrospective — what worked and what to improve',
+    category: 'Engineering',
+    body:
+`# Retrospective
+Sprint / Period:
+Date:
+Facilitator:
+
+## What Went Well 🎉
+-
+
+## What Could Be Better 🔧
+-
+
+## Action Items
+- [ ]
+
+## Shoutouts 👏
+-
+`,
+  },
+
   shopping: {
-    label: 'Shopping list',
-    desc:  'Categorised grocery / shopping list',
+    label:    'Shopping list',
+    desc:     'Categorised grocery / shopping list',
+    category: 'Personal',
     body:
 `# Shopping List
 Date:
@@ -232,43 +413,16 @@ Date:
 - [ ]
 `,
   },
-
-  project: {
-    label: 'Project brief',
-    desc:  'Goal, scope, timeline, and stakeholders',
-    body:
-`# Project Brief
-**Project name:**
-**Owner:**
-**Date:**
-
-## Goal
-
-
-## Scope
-**In scope:**
--
-
-**Out of scope:**
--
-
-## Timeline
-| Milestone | Date |
-|-----------|------|
-|           |      |
-
-## Stakeholders
-| Name | Role |
-|------|------|
-|      |      |
-
-## Risks
-
-
-## Notes
-`,
-  },
 };
+
+/** Preferred display order for template categories. */
+export const TEMPLATE_CATEGORY_ORDER = [
+  'General',
+  'Work & Meetings',
+  'Planning',
+  'Engineering',
+  'Personal',
+];
 
 export function getTemplate(key) {
   // Check custom templates first

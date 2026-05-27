@@ -1,5 +1,6 @@
 // SyncPad – ui.js
 // All DOM manipulation lives here. No business logic.
+import { TEMPLATE_CATEGORY_ORDER } from './templates.js';
 import {
   countWords, countChars, formatFileSize, fileEmoji, formatTimestamp,
   escapeHtml, copyToClipboard,
@@ -1150,32 +1151,43 @@ function _renderInsertTab(body, builtins, customs, onChoose) {
 
   const previewCol = document.createElement('div');
   previewCol.className = 'tmpl-preview-col';
+
+  const previewHdr = document.createElement('div');
+  previewHdr.className = 'tmpl-preview-hdr';
+  previewHdr.textContent = 'Preview';
+
   const previewEl = document.createElement('pre');
   previewEl.className = 'tmpl-preview-body';
-  previewEl.textContent = 'Hover or focus a template to preview its content.';
+  previewEl.textContent = 'Select a template to preview its content.';
+
+  previewCol.appendChild(previewHdr);
   previewCol.appendChild(previewEl);
 
   const showPreview = (t) => {
     const lines = (t.body || '').trimEnd();
-    const LIMIT = 800;
+    const LIMIT = 1200;
+    previewHdr.textContent = t.label || 'Preview';
     previewEl.textContent = lines.length
       ? (lines.length > LIMIT ? lines.slice(0, LIMIT) + '\n…' : lines)
       : `(${t.desc || 'Empty template'})`;
   };
 
-  // ── Template list with group headers ────────────────────────
+  // ── Template list with category group headers ────────────────
   const list = document.createElement('div');
   list.className = 'templates-list';
   list.setAttribute('role', 'list');
 
   const buildList = (filter) => {
     list.innerHTML = '';
-    const f = filter.toLowerCase();
+    const f = filter.toLowerCase().trim();
 
+    // Match against label, description, and body for deeper search
     const matchFn = (t) => !f
       || t.label.toLowerCase().includes(f)
-      || (t.desc || '').toLowerCase().includes(f);
+      || (t.desc  || '').toLowerCase().includes(f)
+      || (t.body  || '').toLowerCase().includes(f);
 
+    // ── Custom templates ──────────────────────────────────────
     const customEntries = Object.entries(customs).filter(([, t]) => matchFn(t));
     if (customEntries.length) {
       const hdr = document.createElement('div');
@@ -1183,15 +1195,47 @@ function _renderInsertTab(body, builtins, customs, onChoose) {
       hdr.textContent = 'My Templates';
       list.appendChild(hdr);
       customEntries.forEach(([key, t]) => list.appendChild(_makeTemplateBtn(key, t, onChoose, showPreview)));
-
-      const sep = document.createElement('div');
-      sep.className = 'templates-group-label';
-      sep.textContent = 'Built-in';
-      list.appendChild(sep);
     }
 
+    // ── Built-in templates grouped by category ────────────────
     const builtinEntries = Object.entries(builtins).filter(([, t]) => matchFn(t));
-    builtinEntries.forEach(([key, t]) => list.appendChild(_makeTemplateBtn(key, t, onChoose, showPreview)));
+
+    if (f) {
+      // While searching, show all matches flat (no category headers) for speed
+      if (builtinEntries.length) {
+        if (customEntries.length) {
+          const sep = document.createElement('div');
+          sep.className = 'templates-group-label';
+          sep.textContent = 'Built-in';
+          list.appendChild(sep);
+        }
+        builtinEntries.forEach(([key, t]) => list.appendChild(_makeTemplateBtn(key, t, onChoose, showPreview)));
+      }
+    } else {
+      // No filter — group by category in preferred order
+      const byCategory = new Map();
+      builtinEntries.forEach(([key, t]) => {
+        const cat = t.category || 'Other';
+        if (!byCategory.has(cat)) byCategory.set(cat, []);
+        byCategory.get(cat).push([key, t]);
+      });
+
+      const categoryOrder = [...TEMPLATE_CATEGORY_ORDER];
+      // Add any categories not in the preferred order at the end
+      for (const cat of byCategory.keys()) {
+        if (!categoryOrder.includes(cat)) categoryOrder.push(cat);
+      }
+
+      for (const cat of categoryOrder) {
+        const entries = byCategory.get(cat);
+        if (!entries?.length) continue;
+        const hdr = document.createElement('div');
+        hdr.className = 'templates-group-label';
+        hdr.textContent = cat;
+        list.appendChild(hdr);
+        entries.forEach(([key, t]) => list.appendChild(_makeTemplateBtn(key, t, onChoose, showPreview)));
+      }
+    }
 
     if (!customEntries.length && !builtinEntries.length) {
       const none = document.createElement('div');
@@ -1323,10 +1367,11 @@ function _confirmTemplateInsert(key, label, onChoose) {
     onChoose(key, 'replace');
     return;
   }
-  _showInlineChoice(`Apply "${label}"?`, [
-    { label: 'Replace note', value: 'replace', kind: 'danger' },
-    { label: 'Append',       value: 'append',  kind: 'primary' },
-    { label: 'Cancel',       value: null,      kind: 'cancel' },
+  _showInlineChoice(`Apply "${escapeHtml(label)}"`, [
+    { label: 'Insert at cursor', value: 'insert',  kind: 'primary',   desc: 'Add at the cursor position' },
+    { label: 'Append to note',   value: 'append',  kind: '',          desc: 'Add at the end of the note' },
+    { label: 'Replace note',     value: 'replace', kind: 'danger',    desc: 'Overwrite all current content' },
+    { label: 'Cancel',           value: null,       kind: 'cancel',   desc: null },
   ], (choice) => { if (choice) onChoose(key, choice); });
 }
 
@@ -1336,14 +1381,23 @@ function _showInlineChoice(message, choices, onPick) {
   const body = modal.querySelector('.templates-body');
   if (!body) return;
   body.innerHTML = `
-    <p class="template-choice-msg">${escapeHtml(message)}</p>
+    <p class="template-choice-msg">${message}</p>
     <div class="template-choice-actions"></div>
   `;
   const actions = body.querySelector('.template-choice-actions');
   choices.forEach((c) => {
     const b = document.createElement('button');
-    b.textContent = c.label;
     b.className = `template-choice-btn ${c.kind || ''}`;
+    const labelSpan = document.createElement('span');
+    labelSpan.className = 'template-choice-btn-label';
+    labelSpan.textContent = c.label;
+    b.appendChild(labelSpan);
+    if (c.desc) {
+      const descSpan = document.createElement('span');
+      descSpan.className = 'template-choice-btn-desc';
+      descSpan.textContent = c.desc;
+      b.appendChild(descSpan);
+    }
     b.addEventListener('click', () => { closeModal('templates-modal'); onPick(c.value); }, { once: true });
     actions.appendChild(b);
   });
