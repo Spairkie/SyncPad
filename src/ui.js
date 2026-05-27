@@ -563,12 +563,17 @@ function _renderQr(containerId, url) {
   el.innerHTML = '';
   if (!url || !window.QRCode) return;
   try {
+    // Read QR colours from the active theme's CSS variables so the code adapts
+    // to all five themes rather than always using the Charcoal Amber palette.
+    const cs = getComputedStyle(document.documentElement);
+    const colorDark  = cs.getPropertyValue('--accent').trim()  || '#f5a623';
+    const colorLight = cs.getPropertyValue('--bg-base').trim() || '#18181c';
     new window.QRCode(el, {
       text: url,
       width: 144,
       height: 144,
-      colorDark: '#f5a623',
-      colorLight: '#18181c',
+      colorDark,
+      colorLight,
     });
   } catch {}
 }
@@ -1235,8 +1240,8 @@ function _renderCustomTab(body, customs, onDelete, onRename, rerender, { onExpor
     renameBtn.title = 'Rename';
     renameBtn.setAttribute('aria-label', `Rename template "${t.label}"`);
     renameBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
-    renameBtn.addEventListener('click', () => {
-      const newName = prompt('Rename template:', t.label);
+    renameBtn.addEventListener('click', async () => {
+      const newName = await showPrompt('Rename template:', { defaultValue: t.label, confirmLabel: 'Rename' });
       if (newName?.trim()) { onRename(key, newName.trim()); rerender(); }
     });
 
@@ -1245,8 +1250,9 @@ function _renderCustomTab(body, customs, onDelete, onRename, rerender, { onExpor
     delBtn.title = 'Delete';
     delBtn.setAttribute('aria-label', `Delete template "${t.label}"`);
     delBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`;
-    delBtn.addEventListener('click', () => {
-      if (!confirm(`Delete template "${t.label}"?`)) return;
+    delBtn.addEventListener('click', async () => {
+      const ok = await showConfirm(`Delete template "${t.label}"?`, { confirmLabel: 'Delete', danger: true });
+      if (!ok) return;
       onDelete(key);
       rerender();
     });
@@ -1349,6 +1355,17 @@ export function showConfirm(message, { confirmLabel = 'Confirm', cancelLabel = '
     const _onConfirmKey = (e) => {
       if (e.key === 'Escape') { e.preventDefault(); cleanup(false); }
       if (e.key === 'Enter'  && document.activeElement === okBtn) cleanup(true);
+      // Focus trap — keep Tab cycling within the two modal buttons.
+      if (e.key === 'Tab') {
+        const focusables = [cancelBtn, okBtn].filter(btn => !btn.disabled);
+        const first = focusables[0];
+        const last  = focusables[focusables.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault(); last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault(); first.focus();
+        }
+      }
     };
 
     okBtn.onclick     = () => cleanup(true);
@@ -1376,6 +1393,94 @@ function _ensureConfirmModal() {
       <div class="modal-actions">
         <button id="sp-confirm-cancel" class="modal-actions-btn modal-btn-cancel"></button>
         <button id="sp-confirm-ok"     class="modal-actions-btn modal-btn-confirm"></button>
+      </div>
+    </div>`;
+  document.body.appendChild(el);
+}
+
+// ── Prompt modal ──────────────────────────────────────────────────────────────
+
+/**
+ * Show a themed single-input prompt dialog.
+ * Returns a Promise<string|null> — the trimmed input value, or null if cancelled.
+ *
+ * @param {string} message
+ * @param {object} [opts]
+ * @param {string} [opts.defaultValue='']
+ * @param {string} [opts.placeholder='']
+ * @param {string} [opts.confirmLabel='OK']
+ * @param {string} [opts.cancelLabel='Cancel']
+ */
+export function showPrompt(message, { defaultValue = '', placeholder = '', confirmLabel = 'OK', cancelLabel = 'Cancel' } = {}) {
+  return new Promise((resolve) => {
+    _ensurePromptModal();
+    const modal     = document.getElementById('sp-prompt-modal');
+    const msgEl     = document.getElementById('sp-prompt-message');
+    const inputEl   = document.getElementById('sp-prompt-input');
+    const okBtn     = document.getElementById('sp-prompt-ok');
+    const cancelBtn = document.getElementById('sp-prompt-cancel');
+    if (!modal || !msgEl || !inputEl || !okBtn || !cancelBtn) { resolve(null); return; }
+
+    msgEl.textContent      = message;
+    inputEl.value          = defaultValue;
+    inputEl.placeholder    = placeholder || '';
+    okBtn.textContent      = confirmLabel;
+    cancelBtn.textContent  = cancelLabel;
+
+    const cleanup = (result) => {
+      modal.classList.remove('visible');
+      okBtn.onclick        = null;
+      cancelBtn.onclick    = null;
+      modal.onclick        = null;
+      inputEl.onkeydown    = null;
+      document.removeEventListener('keydown', _onKey);
+      resolve(result);
+    };
+
+    const _onKey = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); cleanup(null); }
+      // Focus trap — Tab cycles: input → cancelBtn → okBtn → input.
+      if (e.key === 'Tab') {
+        const focusables = [inputEl, cancelBtn, okBtn].filter(el => !el.disabled);
+        const first = focusables[0];
+        const last  = focusables[focusables.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault(); last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault(); first.focus();
+        }
+      }
+    };
+
+    inputEl.onkeydown = (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); const v = inputEl.value.trim(); cleanup(v || null); }
+    };
+
+    okBtn.onclick     = () => { const v = inputEl.value.trim(); cleanup(v || null); };
+    cancelBtn.onclick = () => cleanup(null);
+    modal.onclick     = (e) => { if (e.target === modal) cleanup(null); };
+    document.addEventListener('keydown', _onKey);
+
+    modal.classList.add('visible');
+    requestAnimationFrame(() => { inputEl.focus(); inputEl.select(); });
+  });
+}
+
+function _ensurePromptModal() {
+  if (document.getElementById('sp-prompt-modal')) return;
+  const el = document.createElement('div');
+  el.id        = 'sp-prompt-modal';
+  el.className = 'modal-backdrop';
+  el.setAttribute('role', 'dialog');
+  el.setAttribute('aria-modal', 'true');
+  el.setAttribute('aria-labelledby', 'sp-prompt-message');
+  el.innerHTML = `
+    <div class="modal confirm-modal-inner">
+      <p id="sp-prompt-message" class="confirm-modal-message"></p>
+      <input id="sp-prompt-input" class="auth-input" style="margin:12px 0 4px" />
+      <div class="modal-actions">
+        <button id="sp-prompt-cancel" class="modal-actions-btn modal-btn-cancel"></button>
+        <button id="sp-prompt-ok"     class="modal-actions-btn modal-btn-confirm"></button>
       </div>
     </div>`;
   document.body.appendChild(el);
