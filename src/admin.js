@@ -38,6 +38,7 @@ let _hasQuarantine  = false; // set after probing schema
 let _reports        = [];
 let _reportsOffset  = 0;
 let _reportsFilter  = 'new';
+let _reportsTotal   = 0;
 
 // Files tab state
 let _files          = [];
@@ -947,17 +948,22 @@ async function _openRoomDetail(roomId) {
   });
 
   document.getElementById('drawer-quarantine-btn')?.addEventListener('click', async () => {
-    const reason = await _adminPrompt('Enter a reason for quarantine (optional):', { placeholder: 'e.g. Abusive content' });
-    if (reason === null) return; // user cancelled
+    const reasonInput = await _adminPrompt('Enter a reason for quarantine (optional):', { placeholder: 'e.g. Abusive content' });
+    if (reasonInput === null) return; // user cancelled
+    // admin_quarantine_room() rejects an empty p_reason server-side. Supply a
+    // default here so the RPC and the raw-update fallback below always agree
+    // on a non-empty reason, rather than the fallback silently accepting an
+    // empty one the RPC intentionally disallows.
+    const reason = reasonInput.trim() || 'No reason provided';
     const { error } = await _sb.rpc('admin_quarantine_room', {
-      p_room_id: room.room_id, p_reason: reason || '', p_quarantined_by: _session?.user?.email || 'admin',
+      p_room_id: room.room_id, p_reason: reason, p_quarantined_by: _session?.user?.email || 'admin',
     });
     if (error) {
       // Fall back to direct update if RPC not available
       const { error: e2 } = await _sb.from('syncpad_rooms').update({
         quarantined_at: new Date().toISOString(),
         quarantined_by: _session?.user?.email || 'admin',
-        quarantine_reason: reason || '',
+        quarantine_reason: reason,
       }).eq('room_id', room.room_id);
       if (e2) { await _adminAlert(`Error: ${e2.message}`); return; }
     }
@@ -1019,8 +1025,7 @@ async function _renderReportsTab(contentEl) {
   const result = await _fetchReports(0);
   if (result.error) { contentEl.innerHTML = _accessDeniedHtml(result.error); return; }
   _reports = result.data || [];
-
-  const totalForFilter = result.count ?? 0;
+  _reportsTotal = result.count ?? 0;
 
   contentEl.innerHTML = `
     <div class="admin-tab-content">
@@ -1056,7 +1061,7 @@ async function _renderReportsTab(contentEl) {
 
     </div>`;
 
-  _wireReportsTab(totalForFilter);
+  _wireReportsTab();
 }
 
 function _reportFilterChips() {
@@ -1080,7 +1085,7 @@ async function _fetchReports(offset) {
   return q;
 }
 
-function _wireReportsTab(initialTotal) {
+function _wireReportsTab() {
   const tbody    = document.getElementById('admin-reports-tbody');
   const emptyEl  = document.getElementById('admin-reports-empty');
   const countEl  = document.getElementById('admin-reports-count');
@@ -1094,7 +1099,7 @@ function _wireReportsTab(initialTotal) {
     _reportsOffset = 0; _reports = [];
     document.querySelectorAll('#admin-report-filter-chips .admin-chip').forEach(c => c.classList.toggle('active', c === chip));
     const r = await _fetchReports(0);
-    if (!r.error) { _reports = r.data || []; }
+    if (!r.error) { _reports = r.data || []; _reportsTotal = r.count ?? 0; }
     renderRows();
   });
 
@@ -1105,6 +1110,7 @@ function _wireReportsTab(initialTotal) {
     const r = await _fetchReports(_reportsOffset);
     if (!r.error && r.data?.length) {
       _reports.push(...r.data);
+      _reportsTotal = r.count ?? _reportsTotal;
       renderRows(true);
     }
     loadMore.disabled = false; loadMore.textContent = 'Load more reports';
@@ -1160,7 +1166,7 @@ function _wireReportsTab(initialTotal) {
 
     const loaded = _reports.length;
     if (countEl) countEl.textContent = `${loaded} report${loaded !== 1 ? 's' : ''}`;
-    if (loadMore) loadMore.classList.toggle('hidden', loaded >= (initialTotal || loaded));
+    if (loadMore) loadMore.classList.toggle('hidden', loaded >= (_reportsTotal || loaded));
 
     // Wire actions
     tbody.querySelectorAll('button[data-action]:not([data-wired])').forEach(btn => {
@@ -1322,7 +1328,14 @@ function _wireFilesTab() {
     if (!error && data?.length) {
       _files.push(...data);
       allFiles = [..._files];
-      renderRows(allFiles, true);
+      // Re-apply the active search filter (if any) to the newly-extended set
+      // and do a full (non-append) re-render, so "Load more" doesn't silently
+      // drop back to showing unfiltered results.
+      const q = searchEl?.value.toLowerCase().trim();
+      const filtered = q
+        ? allFiles.filter(f => f.filename.toLowerCase().includes(q) || f.room_id.toLowerCase().includes(q))
+        : allFiles;
+      renderRows(filtered, false);
     }
     loadMore.disabled = false; loadMore.textContent = 'Load more files';
   });
@@ -1619,6 +1632,18 @@ async function _deleteRoomAndStorage(roomId) {
   const { error: storageErr } = await _removeStorageObjects(paths);
   if (storageErr) return { error: storageErr };
   const { error } = await _sb.from('syncpad_rooms').delete().eq('room_id', roomId);
+  if (!error) {
+    // syncpad_room_reports.room_id has no FK to syncpad_rooms, so report rows
+    // survive the room delete. Mark any still-"new" reports reviewed so they
+    // don't keep reappearing in the "New" filter/stat card pointing at a room
+    // that no longer exists. Best-effort: the room delete already succeeded
+    // and must not be reported as failed because of this secondary write.
+    try {
+      await _sb.from('syncpad_room_reports').update({ status: 'reviewed' }).eq('room_id', roomId).eq('status', 'new');
+    } catch (e) {
+      console.error('[admin] failed to mark reports reviewed after room delete', e);
+    }
+  }
   return { error };
 }
 

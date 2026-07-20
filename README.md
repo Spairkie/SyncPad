@@ -38,7 +38,7 @@
 - **Markdown editor** with Write / Preview / Split modes and a safe custom renderer
 - **File upload and preview** — images, text, Markdown, CSV, PDF (no library)
 - **Presence, typing indicator, and cursor/activity tracking**
-- **Responsive layout** with 5 themes, bottom action bar on mobile
+- **Responsive layout** with 7 themes, bottom action bar on mobile
 - **Progressive Web App** (PWA) — installable, offline-capable
 - **Thorough documentation** and a working Supabase SQL schema
 
@@ -96,7 +96,7 @@
 - **Read-only file access** — read-only users can preview and download files but cannot upload or delete
 
 ### Appearance & UX
-- **5 themes** — Charcoal Amber, Midnight Blue, Forest Green, Paper Light, Terminal
+- **7 themes** — Charcoal Amber, Midnight Blue, Forest Green, Paper Light, Terminal, Mocha Dark, Lavender Light
 - **Mobile layout** — bottom action bar with one-thumb access to all major features
 - **PWA** — installable on desktop and mobile; offline-capable for cached assets
 
@@ -258,7 +258,7 @@ See [`docs/architecture.md`](docs/architecture.md) for the full module-by-module
 - **Two sync tracks** — Broadcast for live typing (~250 ms), Postgres for durable saves (1 s debounce)
 - **Encryption in-browser only** — AES-256-GCM key derived from passphrase via PBKDF2; plaintext never leaves the device over the network when encryption is active
 - **Service worker** — network-first caching for same-origin assets; Supabase traffic bypassed entirely
-- **Theme system** — CSS custom properties with a `data-theme` attribute on `<html>`; five themes with zero runtime overhead
+- **Theme system** — CSS custom properties with a `data-theme` attribute on `<html>`; seven themes with zero runtime overhead
 
 ### Tech stack
 
@@ -336,7 +336,7 @@ See [`docs/playwright.md`](docs/playwright.md) for the full test guide.
 - [x] Batch admin expired-room cleanup queries for larger room sets
 - [x] Add real `/share/:token` protected-room regression tests
 - [x] Add admin user setup documentation in `docs/admin-setup.md`
-- [x] Bump service worker cache version for this release (`syncpad-v10`)
+- [x] Bump service worker cache version for this release (`syncpad-v18`)
 
 ### Outside current demo scope
 

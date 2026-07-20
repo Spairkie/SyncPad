@@ -321,8 +321,12 @@ export function renderDevicesList(devices, myDeviceId, onNameChange) {
     if (!isMe) {
       if (device.typing) {
         activityHtml = '<span class="device-activity typing">Typing…</span>';
-      } else if (device.cursor_line != null) {
-        activityHtml = `<span class="device-activity">Near line ${device.cursor_line}</span>`;
+      } else if (Number.isFinite(device.cursor_line)) {
+        // cursor_line comes from Supabase Presence, settable by any connected
+        // peer with no server-side validation — type-guard it to a finite
+        // number (its only legitimate shape) rather than trusting it blindly,
+        // and still escape it before it reaches innerHTML.
+        activityHtml = `<span class="device-activity">Near line ${escapeHtml(String(device.cursor_line))}</span>`;
       } else if (device.read_only) {
         activityHtml = '<span class="device-activity muted">Viewing</span>';
       }
@@ -363,6 +367,7 @@ export function renderFilesList(files, onDownload, onDelete, opts = {}) {
   if (!files?.length) { empty?.classList.remove('hidden'); return; }
   empty?.classList.add('hidden');
   const canDelete         = opts.canDelete         !== false;
+  const canDownload       = opts.canDownload       !== false;
   const onPreview         = opts.onPreview         || null;
   const selectMode        = !!opts.selectMode;
   const selectedIds       = opts.selectedIds        || new Set();
@@ -379,8 +384,8 @@ export function renderFilesList(files, onDownload, onDelete, opts = {}) {
         <div class="file-meta">${formatFileSize(file.file_size)} · ${formatTimestamp(file.uploaded_at)}</div>
       </div>
       <div class="file-actions">
-        ${(!selectMode && onPreview) ? `<button class="file-action-btn preview" title="Preview ${escapeHtml(file.filename)}" aria-label="Preview ${escapeHtml(file.filename)}">${getIcon('eye', 15)}</button>` : ''}
-        ${!selectMode ? `<button class="file-action-btn download" title="Download ${escapeHtml(file.filename)}" aria-label="Download ${escapeHtml(file.filename)}">${getIcon('download', 15)}</button>` : ''}
+        ${(!selectMode && canDownload && onPreview) ? `<button class="file-action-btn preview" title="Preview ${escapeHtml(file.filename)}" aria-label="Preview ${escapeHtml(file.filename)}">${getIcon('eye', 15)}</button>` : ''}
+        ${(!selectMode && canDownload) ? `<button class="file-action-btn download" title="Download ${escapeHtml(file.filename)}" aria-label="Download ${escapeHtml(file.filename)}">${getIcon('download', 15)}</button>` : ''}
         ${(!selectMode && canDelete) ? `<button class="file-action-btn delete" title="Delete ${escapeHtml(file.filename)}" aria-label="Delete ${escapeHtml(file.filename)}">${getIcon('trash', 15)}</button>` : ''}
       </div>`;
     if (selectMode && onSelectionChange) {
@@ -394,8 +399,8 @@ export function renderFilesList(files, onDownload, onDelete, opts = {}) {
       });
     }
     if (!selectMode) {
-      if (onPreview) item.querySelector('.preview').addEventListener('click', () => onPreview(file));
-      const dlBtn = item.querySelector('.download');
+      if (canDownload && onPreview) item.querySelector('.preview').addEventListener('click', () => onPreview(file));
+      const dlBtn = canDownload ? item.querySelector('.download') : null;
       if (dlBtn) {
         dlBtn.addEventListener('click', async () => {
           // Briefly disable the button while the signed URL is fetched so
@@ -567,7 +572,7 @@ function _renderQr(containerId, url) {
   if (!url || !window.QRCode) return;
   try {
     // Read QR colours from the active theme's CSS variables so the code adapts
-    // to all five themes rather than always using the Charcoal Amber palette.
+    // to all seven themes rather than always using the Charcoal Amber palette.
     const cs = getComputedStyle(document.documentElement);
     const colorDark  = cs.getPropertyValue('--accent').trim()  || '#f5a623';
     const colorLight = cs.getPropertyValue('--bg-base').trim() || '#18181c';
@@ -684,9 +689,6 @@ export function insertAtCursor(text) {
 export function setMonospace(on) {
   document.getElementById('note-editor')?.classList.toggle('monospace', on);
   document.getElementById('note-preview')?.classList.toggle('monospace', on);
-  const btn = document.getElementById('tool-monospace');
-  const label = btn?.querySelector('.tool-label');
-  if (label) label.textContent = on ? 'Monospace ✓' : 'Monospace';
 }
 
 /**
@@ -794,7 +796,12 @@ export function showUpdateBar(onUpdate) {
   const bar = document.getElementById('sw-update-bar');
   if (!bar) return;
   bar.classList.add('visible');
-  bar.querySelector('.sw-update-btn')?.addEventListener('click', onUpdate, { once: true });
+  // Use .onclick (idempotent re-assignment) rather than addEventListener,
+  // even with {once:true} — 'updatefound' can legitimately fire more than
+  // once per session, and addEventListener would stack a new listener (each
+  // closing over a different `worker`) before the first ever fires.
+  const btn = bar.querySelector('.sw-update-btn');
+  if (btn) btn.onclick = onUpdate;
 }
 
 // ── PWA install bar ───────────────────────────────────────────────────────────
@@ -803,10 +810,12 @@ export function showInstallBar(onInstall, onDismiss) {
   const bar = document.getElementById('pwa-install-bar');
   if (!bar) return;
   bar.classList.add('visible');
-  bar.querySelector('.install')?.addEventListener('click', onInstall, { once: true });
-  bar.querySelector('.dismiss')?.addEventListener('click', () => {
-    bar.classList.remove('visible'); onDismiss?.();
-  }, { once: true });
+  const installBtn = bar.querySelector('.install');
+  if (installBtn) installBtn.onclick = onInstall;
+  const dismissBtn = bar.querySelector('.dismiss');
+  if (dismissBtn) {
+    dismissBtn.onclick = () => { bar.classList.remove('visible'); onDismiss?.(); };
+  }
 }
 
 // ── Encryption badge ──────────────────────────────────────────────────────────

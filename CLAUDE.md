@@ -6,7 +6,7 @@ This file is a reference for AI coding assistants (Claude Code) working on the S
 
 ## 1. Project Overview
 
-SyncPad is a vanilla-JavaScript realtime shared notepad built on Supabase. It has no build step, no bundler, and no framework — ES modules load directly in the browser. Features include live collaborative editing (Supabase Broadcast), durable saves to Postgres, per-room encryption (AES-256-GCM), file uploads with signed-URL caching, Markdown preview, 13 built-in templates plus user-defined custom templates, five visual themes, presence tracking (devices/cursors/typing indicators), room settings (passcode, expiry, lock), and an admin dashboard backed by Supabase Auth and RLS.
+SyncPad is a vanilla-JavaScript realtime shared notepad built on Supabase. It has no build step, no bundler, and no framework — ES modules load directly in the browser. Features include live collaborative editing (Supabase Broadcast), durable saves to Postgres, per-room encryption (AES-256-GCM), file uploads with signed-URL caching, Markdown preview, 13 built-in templates plus user-defined custom templates, seven visual themes, presence tracking (devices/cursors/typing indicators), room settings (passcode, expiry, lock), and an admin dashboard backed by Supabase Auth and RLS.
 
 ---
 
@@ -49,7 +49,7 @@ Supabase credentials are injected into `index.html` as `window.SYNCPAD_CONFIG`. 
 | `src/permissions.js` | Frontend permission context — `isReadOnly`, `isOwner`, `isLocked` |
 | `src/settings.js` | Room settings handlers — passcode, expiry, lock |
 | `src/templates.js` | 13 built-in templates + localStorage custom templates; `BODY_MAX = 50000` |
-| `src/theme.js` | CSS variable theme system — 5 themes, toggled via `data-theme` on `<html>` |
+| `src/theme.js` | CSS variable theme system — 7 themes, toggled via `data-theme` on `<html>` |
 | `src/shortcuts.js` | Keyboard shortcut handler |
 | `src/admin.js` | Admin dashboard — Supabase Auth (`signInWithPassword`), RLS via `is_syncpad_admin()` |
 | `src/utils.js` | `escapeHtml()`, `formatFileSize()`, `countWords()` |

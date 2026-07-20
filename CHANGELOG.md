@@ -8,6 +8,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Phase 14 — Security/permission fixes, quarantine enforcement, admin bugs
+
+Branch: `claude/repo-review-refactor-kba1k5`
+
+Follow-up pass after a full-repo review (`app.js`, `ui.js`, `admin.js`, `index.html`/`service-worker.js`/`style.css` each read in full) surfaced several real bugs beyond the Phase 13 feature work.
+
+#### Security
+- **XSS via Presence `cursor_line`**: `renderDevicesList()` in `ui.js` interpolated `device.cursor_line` into `innerHTML` unescaped. `cursor_line` comes from Supabase Presence, settable by any connected peer with no server-side validation — a malicious peer could inject arbitrary HTML that rendered on every other connected device. Fixed with a `Number.isFinite()` type guard (its only legitimate shape) plus `escapeHtml()` as defense in depth.
+- **Permission bypass on paste**: the strip-paste-formatting feature's `paste` listener on `#note-editor` mutated `editor.value` directly without checking `canPaste()`/`canEdit()`, so a read-only/locked/encrypted-without-key user with that preference enabled could still visibly paste and mutate the editor locally (the save itself was already blocked, but the UI wrongly behaved as editable).
+- **Quarantine had no effect outside the admin dashboard**: `admin.js` fully implements room quarantine (RPCs, audit log, UI), but nothing in the regular app checked `room.quarantined_at`/`downloads_disabled` — a quarantined room stayed fully visible and editable to normal users. `joinRoom()` and the live room-state-transition handler now block/kick out of quarantined rooms with an info screen (before any passcode prompt, decryption attempt, or editor init); `downloads_disabled` now hides file preview/download actions.
+
+#### Fixed
+- **Toasts invisible behind the admin dashboard**: `#toast-container` (z-index 500) rendered behind `.auth-screen`/`#admin-screen` (z-index 900) — every toast shown while the admin dashboard was open (most admin actions, via `admin.js`'s own `_showToast` sharing the same container) was invisible. Bumped to z-index 1100.
+- **Admin: deleting a room from the Reports tab didn't persist report status** — only an in-memory mutation, never a DB write. Reports stayed `status:'new'` forever, pointing at a deleted room, reappearing in the "New" filter/stat card. Moved the fix into `_deleteRoomAndStorage()` itself so all four delete call sites (bulk, drawer, Reports tab) are covered.
+- **Admin: Reports tab "Load more" used a stale total** after switching filter chips (captured once in a closure param instead of a reassignable module-level variable, unlike the Rooms tab). Now mirrors the Rooms tab's `_roomsTotal` pattern via a new `_reportsTotal`.
+- **Admin: Files tab "Load more" silently dropped an active search filter**, always re-rendering the full unfiltered set. Now re-applies the filter and does a full re-render after loading more.
+- **Admin: quarantine RPC fallback allowed an empty reason** the RPC itself intentionally rejects server-side. Both paths now agree on a non-empty default.
+- **`_expPreset` DOM desync across room navigation**: picking "Custom" expiry in one room left the settings panel visually showing Custom (with inputs open) in the next room, even though the underlying preset had reset to the default. Teardown now resyncs the DOM, not just the variable.
+- **Dead code**: `ui.js`'s `setMonospace()` referenced a `#tool-monospace` element that doesn't exist anywhere in `index.html` (the real toggle, `#setting-monospace-btn`, is already handled separately in `app.js`) — removed the no-op branch.
+- **Duplicate SW-update-bar/install-bar click handlers**: used `addEventListener(..., {once:true})`, which can still stack duplicate listeners if `showUpdateBar()`/`showInstallBar()` are called again before the first fires (`updatefound` can legitimately fire more than once per session). Switched to idempotent `.onclick` assignment.
+- **Hardcoded hex colors bypassing the theme system**: admin dashboard badges/buttons/device-dot and the contact-form status colors used raw hex instead of `var(--green)/--yellow/--red)`, so they didn't adapt across all 7 themes.
+- Stale docs: README/CLAUDE.md said "5 themes" (actual: 7, matching `theme.js`); README's release checklist referenced an old service-worker cache version.
+- Minor markup cleanup: redundant inline `style="display:none"` alongside `class="hidden"`; an inline style moved to a CSS class.
+
+#### Changed
+- Service worker cache bumped to `syncpad-v18`.
+
+---
+
 ### Phase 13 — Multi-file uploads, download filenames, PWA resume, Markdown features
 
 Branch: `claude/repo-review-refactor-kba1k5`
