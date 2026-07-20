@@ -1504,6 +1504,66 @@ function _ensureConfirmModal() {
   document.body.appendChild(el);
 }
 
+// ── Alert modal ───────────────────────────────────────────────────────────────
+
+/**
+ * Show a themed single-button alert dialog. Returns a Promise<void> that
+ * resolves once the user dismisses it (OK, Escape, or backdrop click).
+ *
+ * @param {string} message
+ * @param {object} [opts]
+ * @param {string} [opts.okLabel='OK']
+ */
+export function showAlert(message, { okLabel = 'OK' } = {}) {
+  return new Promise((resolve) => {
+    _ensureAlertModal();
+    const modal = document.getElementById('sp-alert-modal');
+    const msgEl = document.getElementById('sp-alert-message');
+    const okBtn = document.getElementById('sp-alert-ok');
+    if (!modal || !msgEl || !okBtn) { resolve(); return; }
+
+    msgEl.textContent = message;
+    okBtn.textContent = okLabel;
+
+    const cleanup = () => {
+      modal.classList.remove('visible');
+      okBtn.onclick = null;
+      modal.onclick = null;
+      document.removeEventListener('keydown', _onAlertKey);
+      resolve();
+    };
+
+    const _onAlertKey = (e) => {
+      if (e.key === 'Escape' || e.key === 'Enter') { e.preventDefault(); cleanup(); }
+    };
+
+    okBtn.onclick = cleanup;
+    modal.onclick = (e) => { if (e.target === modal) cleanup(); };
+    document.addEventListener('keydown', _onAlertKey);
+
+    modal.classList.add('visible');
+    requestAnimationFrame(() => okBtn.focus());
+  });
+}
+
+function _ensureAlertModal() {
+  if (document.getElementById('sp-alert-modal')) return;
+  const el = document.createElement('div');
+  el.id        = 'sp-alert-modal';
+  el.className = 'modal-backdrop';
+  el.setAttribute('role', 'alertdialog');
+  el.setAttribute('aria-modal', 'true');
+  el.setAttribute('aria-labelledby', 'sp-alert-message');
+  el.innerHTML = `
+    <div class="modal confirm-modal-inner">
+      <p id="sp-alert-message" class="confirm-modal-message"></p>
+      <div class="modal-actions">
+        <button id="sp-alert-ok" class="modal-actions-btn modal-btn-confirm"></button>
+      </div>
+    </div>`;
+  document.body.appendChild(el);
+}
+
 // ── Prompt modal ──────────────────────────────────────────────────────────────
 
 /**

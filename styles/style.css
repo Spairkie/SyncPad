@@ -1116,6 +1116,8 @@ body.lock-mode .md-toolbar { opacity: 0.4; pointer-events: none; }
      the modal — e.g. Delete "some-long-filename-with-no-spaces.pdf"? */
   overflow-wrap: break-word;
   word-break: break-word;
+  /* Preserves \n\n paragraph breaks in multi-line confirm messages. */
+  white-space: pre-line;
 }
 .prompt-modal-input { margin: 12px 0 4px; }
 
