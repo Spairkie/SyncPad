@@ -4,6 +4,7 @@
 
 import { getSupabaseClient } from './supabase.js';
 import { escapeHtml, formatFileSize, formatTimestamp } from './utils.js';
+import { showConfirm, showPrompt, showAlert } from './ui.js';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -551,7 +552,7 @@ function _wireRoomsTab(contentEl, selectCols) {
 
   document.getElementById('admin-bulk-clear')?.addEventListener('click', async () => {
     const ids = Array.from(_roomsSelected);
-    const ok = await _adminConfirm(
+    const ok = await showConfirm(
       `Clear content from ${ids.length} room${ids.length !== 1 ? 's' : ''}?\n\nThe rooms are kept; only the note text is removed. This cannot be undone.`,
       { confirmLabel: 'Clear all', danger: true }
     );
@@ -574,7 +575,7 @@ function _wireRoomsTab(contentEl, selectCols) {
     updateBulkBar();
     renderRows();
     await _loadStats();
-    if (errs) await _adminAlert(`${errs} room(s) could not be cleared. Check console for details.`);
+    if (errs) await showAlert(`${errs} room(s) could not be cleared. Check console for details.`);
     else _showToast(`Cleared ${ids.length} room${ids.length !== 1 ? 's' : ''}.`, 'success');
   });
 
@@ -600,7 +601,7 @@ function _wireRoomsTab(contentEl, selectCols) {
     updateBulkBar();
     renderRows();
     await _loadStats();
-    if (errs) await _adminAlert(`${errs} room(s) could not be deleted. Check console for details.`);
+    if (errs) await showAlert(`${errs} room(s) could not be deleted. Check console for details.`);
     else _showToast(`Deleted ${ids.length} room${ids.length !== 1 ? 's' : ''}.`, 'success');
   });
 
@@ -731,7 +732,7 @@ function _wireRows(tbody, updateBulkBar, selectCols, renderRows) {
     btn.dataset.wired = '1';
     btn.addEventListener('click', async () => {
       const roomId = btn.dataset.roomId;
-      const ok = await _adminConfirm(
+      const ok = await showConfirm(
         `Clear content from room "${roomId}"?\n\nThe room is kept; only the note text is removed.`,
         { confirmLabel: 'Clear content', danger: true },
       );
@@ -740,7 +741,7 @@ function _wireRows(tbody, updateBulkBar, selectCols, renderRows) {
       const { error } = await _sb.from('syncpad_rooms')
         .update({ content: '', cleared_reason: 'manual' }).eq('room_id', roomId);
       if (error) {
-        await _adminAlert(`Error clearing room: ${error.message}`);
+        await showAlert(`Error clearing room: ${error.message}`);
         btn.disabled = false; return;
       }
       const room = _rooms.find(r => r.room_id === roomId);
@@ -766,7 +767,7 @@ function _wireRows(tbody, updateBulkBar, selectCols, renderRows) {
       btn.disabled = true;
       const { error } = await _deleteRoomAndStorage(roomId);
       if (error) {
-        await _adminAlert(`Error deleting room: ${error.message}`);
+        await showAlert(`Error deleting room: ${error.message}`);
         btn.disabled = false; return;
       }
       const idx = _rooms.findIndex(r => r.room_id === roomId);
@@ -924,10 +925,10 @@ async function _openRoomDetail(roomId) {
   });
 
   document.getElementById('drawer-clear-btn')?.addEventListener('click', async () => {
-    const ok = await _adminConfirm(`Clear content from room "${room.room_id}"?`, { confirmLabel: 'Clear', danger: true });
+    const ok = await showConfirm(`Clear content from room "${room.room_id}"?`, { confirmLabel: 'Clear', danger: true });
     if (!ok) return;
     const { error } = await _sb.from('syncpad_rooms').update({ content: '', cleared_reason: 'manual' }).eq('room_id', room.room_id);
-    if (error) { await _adminAlert(`Error: ${error.message}`); return; }
+    if (error) { await showAlert(`Error: ${error.message}`); return; }
     await _logAdminAction('clear_room', { target_room_id: room.room_id });
     _showToast('Room cleared.', 'success');
     _closeDrawer();
@@ -936,19 +937,19 @@ async function _openRoomDetail(roomId) {
 
   document.getElementById('drawer-lock-btn')?.addEventListener('click', async () => {
     const { error } = await _sb.from('syncpad_rooms').update({ editing_locked: true }).eq('room_id', room.room_id);
-    if (error) { await _adminAlert(`Error: ${error.message}`); return; }
+    if (error) { await showAlert(`Error: ${error.message}`); return; }
     await _logAdminAction('lock_editing', { target_room_id: room.room_id });
     _showToast('Editing locked.', 'success'); _closeDrawer();
   });
   document.getElementById('drawer-unlock-btn')?.addEventListener('click', async () => {
     const { error } = await _sb.from('syncpad_rooms').update({ editing_locked: false }).eq('room_id', room.room_id);
-    if (error) { await _adminAlert(`Error: ${error.message}`); return; }
+    if (error) { await showAlert(`Error: ${error.message}`); return; }
     await _logAdminAction('unlock_editing', { target_room_id: room.room_id });
     _showToast('Editing unlocked.', 'success'); _closeDrawer();
   });
 
   document.getElementById('drawer-quarantine-btn')?.addEventListener('click', async () => {
-    const reasonInput = await _adminPrompt('Enter a reason for quarantine (optional):', { placeholder: 'e.g. Abusive content' });
+    const reasonInput = await showPrompt('Enter a reason for quarantine (optional):', { placeholder: 'e.g. Abusive content' });
     if (reasonInput === null) return; // user cancelled
     // admin_quarantine_room() rejects an empty p_reason server-side. Supply a
     // default here so the RPC and the raw-update fallback below always agree
@@ -965,7 +966,7 @@ async function _openRoomDetail(roomId) {
         quarantined_by: _session?.user?.email || 'admin',
         quarantine_reason: reason,
       }).eq('room_id', room.room_id);
-      if (e2) { await _adminAlert(`Error: ${e2.message}`); return; }
+      if (e2) { await showAlert(`Error: ${e2.message}`); return; }
     }
     await _logAdminAction('quarantine_room', { target_room_id: room.room_id, metadata: { reason } });
     _showToast('Room quarantined.', 'success'); _closeDrawer();
@@ -977,7 +978,7 @@ async function _openRoomDetail(roomId) {
       const { error: e2 } = await _sb.from('syncpad_rooms').update({
         quarantined_at: null, quarantined_by: null, quarantine_reason: null,
       }).eq('room_id', room.room_id);
-      if (e2) { await _adminAlert(`Error: ${e2.message}`); return; }
+      if (e2) { await showAlert(`Error: ${e2.message}`); return; }
     }
     await _logAdminAction('unquarantine_room', { target_room_id: room.room_id });
     _showToast('Room unquarantined.', 'success'); _closeDrawer();
@@ -991,7 +992,7 @@ async function _openRoomDetail(roomId) {
     );
     if (!ok) return;
     const { error } = await _deleteRoomAndStorage(room.room_id);
-    if (error) { await _adminAlert(`Error: ${error.message}`); return; }
+    if (error) { await showAlert(`Error: ${error.message}`); return; }
     const idx = _rooms.findIndex(r => r.room_id === room.room_id);
     if (idx !== -1) _rooms.splice(idx, 1);
     await _logAdminAction('delete_room', { target_room_id: room.room_id });
@@ -1179,7 +1180,7 @@ function _wireReportsTab() {
         if (action === 'review') {
           btn.disabled = true;
           const { error } = await _sb.from('syncpad_room_reports').update({ status: 'reviewed' }).eq('id', reportId);
-          if (error) { await _adminAlert(`Error: ${error.message}`); btn.disabled = false; return; }
+          if (error) { await showAlert(`Error: ${error.message}`); btn.disabled = false; return; }
           const rep = _reports.find(r => String(r.id) === reportId);
           if (rep) rep.status = 'reviewed';
           await _logAdminAction('review_report', { target_report_id: reportId });
@@ -1189,7 +1190,7 @@ function _wireReportsTab() {
         if (action === 'dismiss') {
           btn.disabled = true;
           const { error } = await _sb.from('syncpad_room_reports').update({ status: 'dismissed' }).eq('id', reportId);
-          if (error) { await _adminAlert(`Error: ${error.message}`); btn.disabled = false; return; }
+          if (error) { await showAlert(`Error: ${error.message}`); btn.disabled = false; return; }
           const rep = _reports.find(r => String(r.id) === reportId);
           if (rep) rep.status = 'dismissed';
           await _logAdminAction('dismiss_report', { target_report_id: reportId });
@@ -1208,7 +1209,7 @@ function _wireReportsTab() {
           if (!ok) return;
           btn.disabled = true;
           const { error } = await _deleteRoomAndStorage(roomId);
-          if (error) { await _adminAlert(`Error: ${error.message}`); btn.disabled = false; return; }
+          if (error) { await showAlert(`Error: ${error.message}`); btn.disabled = false; return; }
           _reports.forEach(r => { if (r.room_id === roomId) r.status = 'reviewed'; });
           await _logAdminAction('delete_room', { target_room_id: roomId });
           renderRows();
@@ -1382,18 +1383,18 @@ function _wireFilesTab() {
         const fileId   = btn.dataset.fileId;
         const filePath = btn.dataset.filePath;
         const filename = btn.dataset.filename;
-        const ok = await _adminConfirm(`Delete file "${filename}"?\nThis cannot be undone.`, { confirmLabel: 'Delete', danger: true });
+        const ok = await showConfirm(`Delete file "${filename}"?\nThis cannot be undone.`, { confirmLabel: 'Delete', danger: true });
         if (!ok) return;
         btn.disabled = true;
 
         // Delete from storage first, then DB
         const { error: se } = await _sb.storage.from(FILES_BUCKET).remove([filePath]);
         if (se) {
-          await _adminAlert(`Storage delete error: ${se.message}\nThe file may already be missing.`);
+          await showAlert(`Storage delete error: ${se.message}\nThe file may already be missing.`);
           // Continue to remove DB row regardless
         }
         const { error: de } = await _sb.from('syncpad_files').delete().eq('id', fileId);
-        if (de) { await _adminAlert(`DB row delete error: ${de.message}`); btn.disabled = false; return; }
+        if (de) { await showAlert(`DB row delete error: ${de.message}`); btn.disabled = false; return; }
 
         const idx = _files.findIndex(f => String(f.id) === fileId);
         if (idx !== -1) { _files.splice(idx, 1); allFiles = [..._files]; }
@@ -1546,10 +1547,30 @@ async function _renderCleanupTab(contentEl) {
   document.getElementById('admin-cleanup-btn').addEventListener('click', async () => {
     const btn = document.getElementById('admin-cleanup-btn');
     const resultEl = document.getElementById('admin-cleanup-result');
-    const ok = await _adminConfirm('Run server-side cleanup to delete all expired rooms?', { confirmLabel: 'Run cleanup' });
+    const ok = await showConfirm('Run server-side cleanup to delete all expired rooms?', { confirmLabel: 'Run cleanup' });
     if (!ok) return;
     btn.disabled = true; btn.textContent = 'Running…';
     resultEl.classList.add('hidden'); resultEl.className = 'admin-cleanup-result';
+
+    // The RPC deletes DB rows for expired encrypted rooms outright, but a raw
+    // SQL delete never touches Storage — it would silently orphan their files.
+    // Snapshot which rooms it's about to delete and sweep their files first,
+    // the same way the manual danger-button path already does.
+    const { storagePaths, error: snapshotErr } = await _listExpiredEncryptedRoomFilePaths();
+    if (snapshotErr) {
+      btn.disabled = false; btn.textContent = 'Run cleanup';
+      resultEl.classList.remove('hidden'); resultEl.classList.add('admin-cleanup-result--error');
+      resultEl.textContent = `Error: ${snapshotErr.message}`;
+      return;
+    }
+    const { error: storageErr } = await _removeStorageObjects(storagePaths);
+    if (storageErr) {
+      btn.disabled = false; btn.textContent = 'Run cleanup';
+      resultEl.classList.remove('hidden'); resultEl.classList.add('admin-cleanup-result--error');
+      resultEl.textContent = `Error clearing storage: ${storageErr.message}`;
+      return;
+    }
+
     const { data, error } = await _sb.rpc('run_cleanup_expired_syncpad_rooms_as_admin');
     btn.disabled = false; btn.textContent = 'Run cleanup';
     if (error) {
@@ -1557,17 +1578,19 @@ async function _renderCleanupTab(contentEl) {
       resultEl.textContent = `Error: ${error.message}`;
       return;
     }
-    const count = typeof data === 'number' ? data : (Array.isArray(data) ? data.length : '?');
+    const row = Array.isArray(data) ? data[0] : data;
+    const cleared = row?.cleared_unencrypted ?? 0;
+    const deleted = row?.deleted_encrypted ?? 0;
     resultEl.classList.remove('hidden'); resultEl.classList.add('admin-cleanup-result--success');
-    resultEl.textContent = `✓ Cleanup complete. ${count} expired room${count !== 1 ? 's' : ''} deleted.`;
-    await _logAdminAction('cleanup_expired');
+    resultEl.textContent = `✓ Cleanup complete. ${cleared} room${cleared !== 1 ? 's' : ''} cleared, ${deleted} encrypted room${deleted !== 1 ? 's' : ''} deleted (${storagePaths.length} file${storagePaths.length !== 1 ? 's' : ''} removed from storage).`;
+    await _logAdminAction('cleanup_expired', { metadata: { cleared_unencrypted: cleared, deleted_encrypted: deleted, storage_files_removed: storagePaths.length } });
     await _loadStats();
   });
 
   document.getElementById('admin-manual-cleanup-btn').addEventListener('click', async () => {
     const btn = document.getElementById('admin-manual-cleanup-btn');
     const resultEl = document.getElementById('admin-manual-cleanup-result');
-    const ok = await _adminConfirm('Delete ALL rooms where expires_at is in the past?\n\nThis is permanent and cannot be undone.', { confirmLabel: 'Delete all expired', danger: true });
+    const ok = await showConfirm('Delete ALL rooms where expires_at is in the past?\n\nThis is permanent and cannot be undone.', { confirmLabel: 'Delete all expired', danger: true });
     if (!ok) return;
     btn.disabled = true; btn.textContent = 'Deleting…';
     resultEl.classList.add('hidden'); resultEl.className = 'admin-cleanup-result';
@@ -1645,6 +1668,24 @@ async function _deleteRoomAndStorage(roomId) {
     }
   }
   return { error };
+}
+
+async function _listExpiredEncryptedRoomFilePaths() {
+  const nowIso = new Date().toISOString();
+  const { data: rooms, error: roomsErr } = await _sb
+    .from('syncpad_rooms').select('room_id')
+    .lt('expires_at', nowIso).not('expires_at', 'is', null).eq('encryption_enabled', true);
+  if (roomsErr) return { storagePaths: [], error: roomsErr };
+  const roomIds = (rooms || []).map(r => r.room_id).filter(Boolean);
+  if (!roomIds.length) return { storagePaths: [], error: null };
+
+  const paths = [];
+  for (const batch of _chunks(roomIds, ADMIN_QUERY_BATCH_SIZE)) {
+    const { data, error } = await _sb.from('syncpad_files').select('file_path').in('room_id', batch);
+    if (error) return { storagePaths: [], error };
+    paths.push(...(data || []).map(r => r.file_path).filter(Boolean));
+  }
+  return { storagePaths: paths, error: null };
 }
 
 async function _deleteExpiredRoomsAndStorage() {
@@ -1741,32 +1782,6 @@ function _adminGetHost() {
   return document.getElementById('admin-screen') || document.body;
 }
 
-function _adminConfirm(message, { confirmLabel = 'Confirm', danger = false } = {}) {
-  return new Promise((resolve) => {
-    _ensureAdminDialogStyles();
-    const host = _adminGetHost();
-    const el = document.createElement('div');
-    el.className = 'admin-dialog-backdrop';
-    el.innerHTML = `
-      <div class="admin-dialog" role="dialog" aria-modal="true" aria-labelledby="adlg-msg">
-        <p id="adlg-msg" class="admin-dialog-msg">${escapeHtml(message).replace(/\n/g, '<br>')}</p>
-        <div class="admin-dialog-actions">
-          <button class="admin-dialog-cancel admin-dialog-btn">Cancel</button>
-          <button class="admin-dialog-ok admin-dialog-btn${danger ? ' admin-dialog-btn--danger' : ' admin-dialog-btn--primary'}"></button>
-        </div>
-      </div>`;
-    el.querySelector('.admin-dialog-ok').textContent = confirmLabel;
-    host.appendChild(el);
-    const cleanup = (r) => { el.remove(); document.removeEventListener('keydown', onKey); resolve(r); };
-    const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); cleanup(false); } };
-    el.querySelector('.admin-dialog-ok').addEventListener('click', () => cleanup(true));
-    el.querySelector('.admin-dialog-cancel').addEventListener('click', () => cleanup(false));
-    el.addEventListener('click', (e) => { if (e.target === el) cleanup(false); });
-    document.addEventListener('keydown', onKey);
-    requestAnimationFrame(() => (danger ? el.querySelector('.admin-dialog-cancel') : el.querySelector('.admin-dialog-ok')).focus());
-  });
-}
-
 function _adminTypedConfirm(title, description, expectedValue) {
   return new Promise((resolve) => {
     _ensureAdminDialogStyles();
@@ -1799,56 +1814,6 @@ function _adminTypedConfirm(title, description, expectedValue) {
   });
 }
 
-function _adminAlert(message) {
-  return new Promise((resolve) => {
-    _ensureAdminDialogStyles();
-    const host = _adminGetHost();
-    const el = document.createElement('div');
-    el.className = 'admin-dialog-backdrop';
-    el.innerHTML = `
-      <div class="admin-dialog" role="dialog" aria-modal="true" aria-labelledby="adlg-alert">
-        <p id="adlg-alert" class="admin-dialog-msg admin-dialog-msg--error">${escapeHtml(message).replace(/\n/g, '<br>')}</p>
-        <div class="admin-dialog-actions">
-          <button class="admin-dialog-ok admin-dialog-btn admin-dialog-btn--primary">OK</button>
-        </div>
-      </div>`;
-    host.appendChild(el);
-    const cleanup = () => { el.remove(); resolve(); };
-    el.querySelector('.admin-dialog-ok').addEventListener('click', cleanup);
-    el.addEventListener('click', (e) => { if (e.target === el) cleanup(); });
-    requestAnimationFrame(() => el.querySelector('.admin-dialog-ok').focus());
-  });
-}
-
-function _adminPrompt(message, { placeholder = '', defaultValue = '' } = {}) {
-  return new Promise((resolve) => {
-    _ensureAdminDialogStyles();
-    const host = _adminGetHost();
-    const el = document.createElement('div');
-    el.className = 'admin-dialog-backdrop';
-    el.innerHTML = `
-      <div class="admin-dialog" role="dialog" aria-modal="true" aria-labelledby="adlg-prompt">
-        <p id="adlg-prompt" class="admin-dialog-msg">${escapeHtml(message)}</p>
-        <input class="admin-dialog-input" type="text" autocomplete="off"
-          value="${escapeHtml(defaultValue)}" placeholder="${escapeHtml(placeholder)}" />
-        <div class="admin-dialog-actions">
-          <button class="admin-dialog-cancel admin-dialog-btn">Cancel</button>
-          <button class="admin-dialog-ok admin-dialog-btn admin-dialog-btn--primary">OK</button>
-        </div>
-      </div>`;
-    host.appendChild(el);
-    const input   = el.querySelector('.admin-dialog-input');
-    const cleanup = (r) => { el.remove(); document.removeEventListener('keydown', onKey); resolve(r); };
-    const onKey   = (e) => { if (e.key === 'Escape') { e.preventDefault(); cleanup(null); } };
-    el.querySelector('.admin-dialog-ok').addEventListener('click', () => cleanup(input.value));
-    el.querySelector('.admin-dialog-cancel').addEventListener('click', () => cleanup(null));
-    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') cleanup(input.value); });
-    el.addEventListener('click', (e) => { if (e.target === el) cleanup(null); });
-    document.addEventListener('keydown', onKey);
-    requestAnimationFrame(() => { input.focus(); input.select(); });
-  });
-}
-
 let _adminDialogStylesInjected = false;
 function _ensureAdminDialogStyles() {
   if (_adminDialogStylesInjected) return;
@@ -1859,7 +1824,6 @@ function _ensureAdminDialogStyles() {
 .admin-dialog{background:var(--bg-surface,#1e1e2e);border:1px solid var(--border,#333);border-radius:10px;padding:1.5rem;max-width:440px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.4)}
 .admin-dialog-title{font-weight:700;font-size:1rem;margin-bottom:.5rem;color:var(--text-primary,#e0e0e0)}
 .admin-dialog-msg{margin:0 0 1rem;font-size:.9rem;color:var(--text-secondary,#aaa);line-height:1.5;white-space:pre-wrap;overflow-wrap:break-word;word-break:break-word}
-.admin-dialog-msg--error{color:var(--red,#f87171)}
 .admin-dialog-title{overflow-wrap:break-word;word-break:break-word}
 .admin-dialog-input{width:100%;padding:.5rem .75rem;font-size:.875rem;border:1px solid var(--border,#333);border-radius:6px;background:var(--bg-elevated,#252538);color:var(--text-primary,#e0e0e0);margin-bottom:1rem;box-sizing:border-box;font-family:monospace}
 .admin-dialog-input:focus{outline:none;border-color:var(--accent,#f5a623)}
