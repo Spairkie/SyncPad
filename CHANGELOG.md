@@ -8,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Phase 15 — Codex review follow-ups (PWA resume, image/autolink corruption)
+
+Branch: `claude/repo-review-refactor-kba1k5`
+
+Automated review on the merged PR surfaced three real bugs; all confirmed with a reproduction before fixing.
+
+#### Fixed
+- **PWA resume suppression missed every root-navigation link except the header logo**: the view-once panel's "Go home" button, and every plain `<a href="/SyncPad/">` "Back to SyncPad" link on the contact/privacy/terms/info screens (including the one a quarantined-room viewer lands on), bypassed the one-shot suppression flag — clicking them in a standalone PWA just bounced straight back into the same room. Replaced the single `.header-logo`-specific listener with one delegated `click` listener that catches any anchor navigating to the app root, plus a new `onGoHome` callback for the view-once panel's button (not a real anchor).
+- **Markdown images could be corrupted by the emphasis rules that ran after them**: `![alt](url)` was rendered to real `<img>` markup before the bold/italic/strikethrough regexes ran, so a `*`/`_` character inside the URL or alt text got rewritten into a literal `<em>`/`<strong>` tag sitting inside the `src=`/`alt=` attribute (e.g. `![alt](https://x.com/a*b*.png)` corrupted the `src`). Images are now rendered into an opaque placeholder first and restored at the very end, mirroring the existing code-span/anchor protection.
+- **Autolink trimming could strip a legitimate closing parenthesis**: the trailing-punctuation trim matched a whole run of punctuation at once (e.g. `).`), so a balanced URL like `.../Function_(mathematics).` had its real closing `)` stripped along with the sentence period, corrupting the link target. Rewrote the trim to walk backwards one character at a time, evaluating each `)` on its own merits (only trimmed when unmatched by an earlier `(` in the URL).
+
 ### Phase 14 — Security/permission fixes, quarantine enforcement, admin bugs
 
 Branch: `claude/repo-review-refactor-kba1k5`

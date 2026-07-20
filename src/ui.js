@@ -832,6 +832,7 @@ export function setViewOnceConsumedPanel({
   visible = false,
   readOnly = false,
   onStartNew = null,
+  onGoHome = null,
 } = {}) {
   const panel = document.getElementById('view-once-consumed-panel');
   const title = document.getElementById('view-once-consumed-title');
@@ -851,6 +852,7 @@ export function setViewOnceConsumedPanel({
   startBtn.classList.toggle('hidden', !!readOnly);
   startBtn.onclick = readOnly ? null : onStartNew;
   homeBtn.onclick = () => {
+    onGoHome?.();
     const raw = String(window.SYNCPAD_CONFIG?.basePath ?? '/SyncPad').trim();
     const base = (!raw || raw === '/') ? '' : `/${raw.replace(/^\/+|\/+$/g, '')}`;
     window.location.href = `${base}/`;

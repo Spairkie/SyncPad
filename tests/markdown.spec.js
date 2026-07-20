@@ -133,6 +133,25 @@ test.describe('Markdown preview', () => {
     await expect(preview).toContainText('L2 cache');
   });
 
+  test('autolink keeps a balanced closing paren before trailing punctuation', async ({ page }) => {
+    // "Function_(mathematics)" is a legitimate balanced path segment — only
+    // the sentence period after it should be trimmed, not the ')' itself.
+    const preview = await withPreview(page, 'See https://en.wikipedia.org/wiki/Function_(mathematics). Thanks.');
+    const link = preview.locator('a');
+    const href = await link.getAttribute('href');
+    expect(href).toBe('https://en.wikipedia.org/wiki/Function_(mathematics)');
+    await expect(preview).toContainText('mathematics). Thanks.');
+  });
+
+  test('image src/alt are not corrupted by emphasis markers', async ({ page }) => {
+    // Regression check: a URL or alt text containing * must not have its
+    // src/alt mangled by the bold/italic rules that run after image parsing.
+    const preview = await withPreview(page, '![alt](https://example.com/a*b*.png)\n\n![*emph*](https://example.com/x.png)');
+    const imgs = preview.locator('img');
+    await expect(imgs.nth(0)).toHaveAttribute('src', 'https://example.com/a*b*.png');
+    await expect(imgs.nth(1)).toHaveAttribute('alt', '*emph*');
+  });
+
   test('does not double-wrap a link whose label is itself a URL', async ({ page }) => {
     const preview = await withPreview(page, '[https://example.com](https://example.com)');
     expect(await preview.locator('a').count()).toBe(1);
