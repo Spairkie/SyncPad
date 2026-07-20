@@ -31,7 +31,7 @@ import {
   setEncryption,
 } from './sync.js';
 
-import { uploadFile, listFiles, deleteFile, getDownloadUrl, subscribeToFiles } from './files.js';
+import { uploadFile, listFiles, deleteFile, getDownloadUrl, getForceDownloadUrl, subscribeToFiles } from './files.js';
 
 import {
   checkPasscode, setPasscode, removePasscode,
@@ -102,6 +102,26 @@ let _filesSort       = 'newest';  // sort order for the files panel (not room-sc
 
 const BASE = _normalizeBasePath(window.SYNCPAD_CONFIG?.basePath ?? '/SyncPad');
 const EXPIRATION_TIMER_MAX_DELAY_MS = 2147483647;
+
+// ── PWA last-room resume ───────────────────────────────────────────────────────
+// When launched as an installed/standalone PWA, boot() skips the landing screen
+// and reopens the last editable room the user visited, so the app behaves like a
+// native app that reopens where you left off instead of a link-sharing tool that
+// always starts at "create or join". Regular browser tabs are unaffected — this
+// only applies when display-mode is standalone (or iOS's legacy navigator.standalone).
+const LAST_ROOM_KEY       = 'syncpad_last_room_id';
+const RESUME_SUPPRESS_KEY = 'syncpad_suppress_resume';
+
+function _isStandalonePwa() {
+  try {
+    return window.matchMedia?.('(display-mode: standalone)')?.matches === true
+        || window.navigator?.standalone === true;
+  } catch { return false; }
+}
+
+function _rememberLastRoom(roomId) {
+  try { localStorage.setItem(LAST_ROOM_KEY, roomId); } catch {}
+}
 
 function _normalizeBasePath(basePath) {
   const raw = String(basePath || '').trim();
@@ -200,6 +220,24 @@ async function boot() {
   }
 
   if (route.type === 'landing' && !redirectRoom) {
+    // Standalone PWA launches resume the last room instead of showing landing,
+    // unless the user just deliberately navigated Home (one-shot suppression).
+    let suppressResume = false;
+    try { suppressResume = sessionStorage.getItem(RESUME_SUPPRESS_KEY) === '1'; } catch {}
+    if (suppressResume) { try { sessionStorage.removeItem(RESUME_SUPPRESS_KEY); } catch {} }
+
+    let lastRoom = null;
+    if (!suppressResume && _isStandalonePwa()) {
+      try { lastRoom = localStorage.getItem(LAST_ROOM_KEY); } catch {}
+    }
+
+    if (lastRoom) {
+      const qs = location.search || '';
+      history.replaceState(null, '', `${BASE}/${lastRoom}${qs}`);
+      await joinRoom(lastRoom);
+      return;
+    }
+
     UI.showScreen('landing');
     wireLandingEvents();
     return;
@@ -534,6 +572,11 @@ async function onEncryptionSubmit() {
 async function startApp() {
   UI.setLoadingMessage('Starting…');
   UI.showScreen('loading');
+
+  // Remember this room for PWA "resume last room" (see _isStandalonePwa()).
+  // Only for genuine editable visits — not read-only share links or ?mode=read,
+  // which are bound to someone else's link rather than "my" room.
+  if (!_isReadOnly) _rememberLastRoom(_roomId);
 
   // ── Expiration check ───────────────────────────────────────────────────────
   if (_room.expires_at && new Date(_room.expires_at) <= new Date()) {
@@ -1001,7 +1044,7 @@ async function refreshFiles() {
     files,
     async (file) => {
       try {
-        const url = await getDownloadUrl(file.file_path);
+        const url = await getForceDownloadUrl(file.file_path, file.filename);
         const a   = document.createElement('a');
         a.href = url; a.download = file.filename;
         document.body.appendChild(a); a.click(); document.body.removeChild(a);
@@ -1043,7 +1086,7 @@ async function refreshFiles() {
             getDownloadUrl,
             async (f) => {
               try {
-                const url = await getDownloadUrl(f.file_path);
+                const url = await getForceDownloadUrl(f.file_path, f.filename);
                 const a   = document.createElement('a');
                 a.href = url; a.download = f.filename;
                 document.body.appendChild(a); a.click(); document.body.removeChild(a);
@@ -1202,6 +1245,14 @@ function wireEvents() {
   // shortcuts are re-wired above, but these must not accumulate.
   if (_eventsWired) return;
   _eventsWired = true;
+
+  // Deliberately navigating Home should land on the real landing screen, not
+  // bounce straight back into this room via the PWA resume-last-room behavior.
+  // The flag is one-shot (cleared the next time boot() reads it), so a later
+  // fresh PWA launch still resumes normally.
+  document.querySelector('.header-logo')?.addEventListener('click', () => {
+    try { sessionStorage.setItem(RESUME_SUPPRESS_KEY, '1'); } catch {}
+  });
 
   const editor = document.getElementById('note-editor');
 
@@ -1622,17 +1673,44 @@ function wireEvents() {
   });
 
   // ── Files ──────────────────────────────────────────────────────────────────
-  UI.setFileHandlers(async (file) => {
+  UI.setFileHandlers(async (files) => {
     if (!canUploadFiles()) { UI.showToast(editBlockedReason() || 'File upload is disabled. Text-encrypted rooms do not allow new file uploads in v1.', 'warning'); return; }
-    if (file.size > 10 * 1024 * 1024) { UI.showToast('File too large (max 10 MB).', 'error'); return; }
-    UI.setUploadingState(true);
-    try {
-      await uploadFile(_roomId, file);
-      UI.showToast('File uploaded.', 'success');
-      broadcastFilesChange();
-      await refreshFiles();
-    } catch { UI.showToast('Could not upload file.', 'error'); }
-    finally  { UI.setUploadingState(false); }
+
+    const tooLarge = files.filter(f => f.size > 10 * 1024 * 1024);
+    const toUpload = files.filter(f => f.size <= 10 * 1024 * 1024);
+    if (tooLarge.length) {
+      UI.showToast(
+        tooLarge.length === files.length
+          ? 'File too large (max 10 MB).'
+          : `${tooLarge.length} file${tooLarge.length !== 1 ? 's' : ''} skipped (max 10 MB).`,
+        'error',
+      );
+    }
+    if (!toUpload.length) return;
+
+    UI.setUploadingState(true, toUpload.length > 1 ? `Uploading 1 of ${toUpload.length}…` : 'Uploading…');
+    let succeeded = 0, failed = 0;
+    // Sequential (not Promise.all) so the progress indicator can report which
+    // file is in flight, and so a slow/failing upload doesn't race storage
+    // writes for the same room against each other.
+    for (let i = 0; i < toUpload.length; i++) {
+      if (toUpload.length > 1) UI.setUploadingState(true, `Uploading ${i + 1} of ${toUpload.length}…`);
+      try {
+        await uploadFile(_roomId, toUpload[i]);
+        succeeded++;
+      } catch { failed++; }
+    }
+    UI.setUploadingState(false);
+
+    if (succeeded) { broadcastFilesChange(); await refreshFiles(); }
+
+    if (!failed) {
+      UI.showToast(succeeded === 1 ? 'File uploaded.' : `${succeeded} files uploaded.`, 'success');
+    } else if (succeeded) {
+      UI.showToast(`${succeeded} uploaded, ${failed} failed.`, 'error');
+    } else {
+      UI.showToast(failed === 1 ? 'Could not upload file.' : 'Could not upload files.', 'error');
+    }
   });
 
   // ── Files — sort order ────────────────────────────────────────────────────

@@ -1,0 +1,1 @@
+First fixture file for SyncPad file-upload tests.

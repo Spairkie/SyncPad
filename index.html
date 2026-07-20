@@ -75,9 +75,11 @@
 
     <div class="landing-join">
       <input id="landing-join-input" class="landing-join-input"
+             type="text" name="syncpad-room-lookup"
              placeholder="Paste room link or ID…"
              aria-label="Room link or ID to join"
-             autocomplete="off" spellcheck="false" />
+             autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+             data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-form-type="other" />
       <button id="landing-join-btn" class="landing-join-btn">Join</button>
     </div>
 
@@ -599,13 +601,13 @@
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
       </span>
       Click or drag &amp; drop to upload
-      <div class="upload-hint">Max 10 MB per file</div>
+      <div class="upload-hint">Max 10 MB per file &middot; multiple files supported</div>
     </div>
-    <input type="file" id="file-input" />
+    <input type="file" id="file-input" multiple />
 
     <div class="uploading-indicator hidden" id="uploading-indicator">
       <div class="mini-spinner"></div>
-      Uploading…
+      <span id="uploading-indicator-text">Uploading…</span>
     </div>
 
     <div id="files-list"></div>

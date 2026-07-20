@@ -1,0 +1,2 @@
+Fixture file with spaces and parentheses in its name, used to verify downloads
+are saved with the original filename rather than the sanitized storage path name.

@@ -8,8 +8,10 @@
 //   - inline code `x`
 //   - fenced code blocks ```lang\n…\n```
 //   - links [text](https://…)   (http(s)/mailto only)
-//   - unordered lists (- / * / +)
-//   - ordered lists  (1. 2. …)
+//   - images ![alt](https://…)  (http(s) only)
+//   - bare URL autolinking (https://example.com)
+//   - unordered lists (- / * / +), including nested sub-lists by indentation
+//   - ordered lists  (1. 2. …), including nested sub-lists by indentation
 //   - GFM-style checklists  - [ ] item   - [x] item
 //   - blockquotes  > text
 //   - horizontal rules  --- / *** / ___
@@ -18,8 +20,9 @@
 //   - hard line breaks (two trailing spaces)
 //
 // XSS strategy: every raw string segment is HTML-escaped FIRST, then a small
-// set of safe markup is reintroduced. No raw HTML pass-through. Link hrefs
-// are validated to start with http://, https://, or mailto:.
+// set of safe markup is reintroduced. No raw HTML pass-through. Link and
+// image URLs are validated against a scheme allowlist (http/https/mailto for
+// links, http/https only for images — never data:/javascript:).
 
 import { escapeHtml } from './utils.js';
 
@@ -179,11 +182,8 @@ function _renderBlock(block, ctx) {
     case 'code':
       return `<pre><code${block.lang ? ` class="language-${escapeHtml(block.lang)}" data-lang="${escapeHtml(block.lang)}"` : ''}>${escapeHtml(block.body)}</code></pre>`;
 
-    case 'list': {
-      const tag = block.ordered ? 'ol' : 'ul';
-      const itemsHtml = block.items.map((it) => _renderListItem(it, ctx)).join('\n');
-      return `<${tag}>\n${itemsHtml}\n</${tag}>`;
-    }
+    case 'list':
+      return _renderListTree(block.items, ctx);
 
     case 'blockquote':
       // Recursively render the quoted content so nested headings/lists work
@@ -210,19 +210,54 @@ function _renderBlock(block, ctx) {
   return '';
 }
 
-function _renderListItem(rawLine, ctx) {
-  const stripped = rawLine.replace(/^[ \t]*(?:[-*+]|\d+\.)[ \t]+/, '');
+/**
+ * Build nested <ul>/<ol> HTML from a flat array of raw list-item lines (each
+ * still carrying its original leading whitespace). A run of lines indented
+ * further than the item above them becomes that item's nested sub-list —
+ * any consistent indent step (2 spaces, 4 spaces, or a tab) works, since
+ * levels are compared relatively rather than against a fixed column width.
+ */
+function _renderListTree(rawLines, ctx) {
+  const items = rawLines.map((raw) => ({
+    indent:  raw.match(/^[ \t]*/)[0].replace(/\t/g, '    ').length,
+    ordered: /^[ \t]*\d+\.[ \t]+/.test(raw),
+    content: raw.replace(/^[ \t]*(?:[-*+]|\d+\.)[ \t]+/, ''),
+  }));
+  return _buildListLevel(items, 0, items.length, ctx);
+}
 
+/** Renders items[start, end) that share a base indent as one <ul>/<ol>. */
+function _buildListLevel(items, start, end, ctx) {
+  if (start >= end) return '';
+  const baseIndent = items[start].indent;
+  const tag = items[start].ordered ? 'ol' : 'ul';
+  let html = '';
+  let i = start;
+  while (i < end && items[i].indent <= baseIndent) {
+    const item = items[i];
+    // Consume the run of more-indented lines that follow as this item's
+    // nested sub-list.
+    let j = i + 1;
+    while (j < end && items[j].indent > baseIndent) j++;
+    const isTask   = /^\[( |x|X)\][ \t]+/.test(item.content);
+    const inner    = _renderListItemContent(item.content, ctx);
+    const children = j > i + 1 ? `\n${_buildListLevel(items, i + 1, j, ctx)}` : '';
+    html += `<li${isTask ? ' class="md-task"' : ''}>${inner}${children}</li>\n`;
+    i = j;
+  }
+  return `<${tag}>\n${html}</${tag}>`;
+}
+
+function _renderListItemContent(strippedContent, ctx) {
   // Checklist item?
-  const cb = stripped.match(/^\[( |x|X)\][ \t]+(.*)$/);
+  const cb = strippedContent.match(/^\[( |x|X)\][ \t]+(.*)$/);
   if (cb) {
     const checked = cb[1].toLowerCase() === 'x';
     const text    = cb[2];
     const idx     = ctx.cbCounter++;
-    return `<li class="md-task"><label><input type="checkbox" data-cb-index="${idx}"${checked ? ' checked' : ''} />${_renderInline(text)}</label></li>`;
+    return `<label><input type="checkbox" data-cb-index="${idx}"${checked ? ' checked' : ''} />${_renderInline(text)}</label>`;
   }
-
-  return `<li>${_renderInline(stripped)}</li>`;
+  return _renderInline(strippedContent);
 }
 
 // ── Inline renderer ──────────────────────────────────────────────────────────
@@ -238,7 +273,15 @@ function _renderInline(raw) {
   // 2. Escape everything else
   text = escapeHtml(text);
 
-  // 3. Bold, italic, strikethrough (non-greedy).
+  // 3. Images — http/https only (never data:/javascript:). Processed before
+  // emphasis markup so ** or _ characters inside alt text aren't turned into
+  // literal <strong>/<em> tags sitting inside the alt="" attribute value.
+  text = text.replace(/!\[([^\]\n]*)\]\(([^)\s]+)\)/g, (full, alt, url) => {
+    if (!/^https?:/i.test(url)) return full;
+    return `<img src="${url}" alt="${alt}" loading="lazy">`;
+  });
+
+  // 4. Bold, italic, strikethrough (non-greedy).
   // Word-boundary guards (negative lookbehind/ahead on [a-zA-Z0-9]) prevent
   // underscore-based markers from matching inside identifiers like snake_case.
   // Asterisk/tilde markers are left without boundary guards.
@@ -248,7 +291,7 @@ function _renderInline(raw) {
   text = text.replace(/(?<![a-zA-Z0-9])_([^_\n]+?)_(?![a-zA-Z0-9])/g,   '<em>$1</em>');
   text = text.replace(/~~([^~\n]+?)~~/g,     '<del>$1</del>');
 
-  // 4. Links — http/https/mailto only.
+  // 5. Links — http/https/mailto only.
   // NOTE: `url` here comes from step-2-escaped text, so special chars like &
   // are already encoded as &amp;. Do NOT call escapeHtml() again — that would
   // produce double-encoded hrefs like &amp;amp; for URLs with query params.
@@ -257,11 +300,43 @@ function _renderInline(raw) {
     return `<a href="${url}" target="_blank" rel="noopener noreferrer">${label}</a>`;
   });
 
-  // 5. Hard line breaks
+  // 6. Autolink bare http(s) URLs. The "pre" capture requires the URL to
+  // start at the beginning of the string, after whitespace, or after '(' —
+  // this naturally excludes matches inside an href="…"/src="…" attribute
+  // (always preceded by '"' there) without extra lookaheads. Existing
+  // <a>...</a> elements are additionally hidden as opaque placeholders first
+  // so a URL used as a link's own visible text (e.g. from a Markdown link
+  // whose label is itself a URL) is never re-wrapped in a second, invalid
+  // nested anchor.
+  const anchorSlots = [];
+  text = text.replace(/<a\b[^>]*>[\s\S]*?<\/a>/g, (m) => {
+    anchorSlots.push(m);
+    return `L${anchorSlots.length - 1}`;
+  });
+  text = text.replace(/(^|[\s(])(https?:\/\/[^\s<>"']+)/g, (full, pre, rawUrl) => {
+    // Trim trailing punctuation that's more likely sentence punctuation than
+    // part of the URL (e.g. "See https://x.com." shouldn't swallow the period).
+    let url = rawUrl;
+    let trail = '';
+    const trailing = url.match(/[.,!?;:'")\]]+$/);
+    if (trailing) {
+      let cut = trailing[0];
+      // Keep a trailing ')' when the URL has an unmatched '(' (Wikipedia-style URLs).
+      if (cut.endsWith(')') && (url.match(/\(/g) || []).length > (url.match(/\)/g) || []).length) {
+        cut = cut.slice(0, -1);
+      }
+      if (cut) { url = url.slice(0, -cut.length); trail = cut; }
+    }
+    if (!url) return full;
+    return `${pre}<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>${trail}`;
+  });
+  text = text.replace(/L(\d+)/g, (_, n) => anchorSlots[Number(n)]);
+
+  // 7. Hard line breaks
   text = text.replace(/ {2,}\n/g, '<br>\n');
   text = text.replace(/\n/g, ' ');
 
-  // 6. Restore code spans
+  // 8. Restore code spans
   text = text.replace(/(\d+)/g, (_, n) => `<code>${codeSlots[Number(n)]}</code>`);
 
   return text;

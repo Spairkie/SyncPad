@@ -62,6 +62,9 @@
 ### Content & Editing
 - **Markdown** — Write, Preview, and Split view modes
 - **Safe Markdown rendering** — custom renderer with no raw HTML pass-through; XSS-safe
+- **Images** — `![alt](https://…)` renders inline (http/https only)
+- **Bare URL autolinking** — plain `https://…` text becomes a clickable link automatically
+- **Nested lists** — indented bullet/numbered sub-items render as proper nested lists
 - **Checklist preview** — GFM-style checkboxes; click to toggle in preview
 - **Templates Library v2** — 13 built-in templates (meeting, checklist, standup, bug report, code review, and more); searchable modal with two-column preview pane
 - **Custom templates** — save, rename, delete, export/import as JSON (localStorage-backed, up to 50 000 chars each)
@@ -85,6 +88,9 @@
 
 ### Files
 - **File attachments** — upload up to 10 MB per file; signed download URLs (1 h TTL)
+- **Multi-file upload** — select or drag-and-drop multiple files at once; uploaded sequentially with progress
+- **Bulk select & delete** — multi-select checkboxes with a confirmation modal for deleting several files at once
+- **Correct download filenames** — downloads are saved under the original uploaded filename, not the internal Storage path
 - **File preview** — see [File Preview](#file-preview) below
 - **Drag-and-drop upload** — drop anywhere on the Files panel or editor area; visible overlay
 - **Read-only file access** — read-only users can preview and download files but cannot upload or delete
@@ -209,7 +215,6 @@ ORDER  BY room_id, uploaded_at;
 | Files are not end-to-end encrypted | Text encryption covers note content only unless file encryption is explicitly added |
 | Passcode is a convenience gate | Hash is checked client-side; not server-enforced |
 | Storage cleanup needs service-role maintenance | Admin room deletion removes known physical objects first; backend cleanup paths need the optional `syncpad-cleanup` Edge Function because SQL cannot delete Storage objects |
-| File upload is one file at a time | Multi-file upload not implemented |
 
 ---
 
@@ -305,6 +310,10 @@ See [`docs/playwright.md`](docs/playwright.md) for the full test guide.
 
 ### Recently completed
 
+- [x] Multi-file upload — drag-and-drop and file-picker both accept multiple files at once, uploaded sequentially with per-file progress
+- [x] Correct download filenames — downloads now carry the original uploaded filename via a forced-download signed URL, instead of the sanitized/timestamped Storage path name
+- [x] PWA last-room resume — installed/standalone launches reopen the last room instead of the landing screen
+- [x] Markdown: image embedding (`![alt](url)`), bare-URL autolinking, and nested lists
 - [x] Find & Replace — case-sensitive toggle (`Aa`), Replace / Replace All
 - [x] Expiration countdown — live "expires in Xh Xm Xs" bar; relative time in settings panel
 - [x] Syntax highlighting in preview — Prism.js autoloader for fenced code blocks
@@ -331,7 +340,6 @@ See [`docs/playwright.md`](docs/playwright.md) for the full test guide.
 
 ### Outside current demo scope
 
-- Optional multi-file upload
 - Read-only link PIN
 - Production-grade backend authorization and rate limiting
 - Live deployment verification after Supabase/GitHub Pages secrets are configured

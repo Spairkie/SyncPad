@@ -97,4 +97,61 @@ test.describe('Markdown preview', () => {
     expect(await preview.locator('em').count()).toBe(0);
     await expect(preview).toContainText('foo_bar_baz');
   });
+
+  test('renders images with http(s) src', async ({ page }) => {
+    const preview = await withPreview(page, '![a picture](https://example.com/pic.png)');
+    const img = preview.locator('img');
+    await expect(img).toHaveAttribute('src', 'https://example.com/pic.png');
+    await expect(img).toHaveAttribute('alt', 'a picture');
+  });
+
+  test('blocks javascript: and data: image URLs', async ({ page }) => {
+    const preview = await withPreview(page, '![x](javascript:alert(1))\n\n![y](data:text/html,<script>alert(1)</script>)');
+    expect(await preview.locator('img').count()).toBe(0);
+  });
+
+  test('autolinks bare URLs', async ({ page }) => {
+    const preview = await withPreview(page, 'Check out https://example.com for more.');
+    const link = preview.locator('a');
+    await expect(link).toHaveAttribute('href', 'https://example.com');
+    await expect(link).toHaveAttribute('target', '_blank');
+  });
+
+  test('autolink trims trailing sentence punctuation', async ({ page }) => {
+    const preview = await withPreview(page, 'See https://example.com/page. Thanks.');
+    const link = preview.locator('a');
+    const href = await link.getAttribute('href');
+    expect(href).toBe('https://example.com/page');
+    await expect(preview).toContainText('page. Thanks.');
+  });
+
+  test('autolink does not corrupt plain digit tokens near a URL', async ({ page }) => {
+    // Regression check: bare "L2"/numbers must not be mistaken for an
+    // internal placeholder and rendered as "undefined".
+    const preview = await withPreview(page, 'Our L2 cache, see https://example.com/l2 for details.');
+    await expect(preview).not.toContainText('undefined');
+    await expect(preview).toContainText('L2 cache');
+  });
+
+  test('does not double-wrap a link whose label is itself a URL', async ({ page }) => {
+    const preview = await withPreview(page, '[https://example.com](https://example.com)');
+    expect(await preview.locator('a').count()).toBe(1);
+  });
+
+  test('renders nested unordered lists', async ({ page }) => {
+    const preview = await withPreview(page, '- a\n  - a1\n  - a2\n- b');
+    const topList = preview.locator('ul').first();
+    const topItems = topList.locator(':scope > li');
+    expect(await topItems.count()).toBe(2);
+    const nestedList = topItems.first().locator('ul');
+    expect(await nestedList.locator('li').count()).toBe(2);
+  });
+
+  test('renders nested checklist items with independently toggleable checkboxes', async ({ page }) => {
+    const preview = await withPreview(page, '- [ ] parent\n  - [x] child');
+    const checkboxes = preview.locator('input[type="checkbox"]');
+    expect(await checkboxes.count()).toBe(2);
+    expect(await checkboxes.nth(0).isChecked()).toBe(false);
+    expect(await checkboxes.nth(1).isChecked()).toBe(true);
+  });
 });
