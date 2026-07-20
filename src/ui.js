@@ -412,8 +412,10 @@ export function renderFilesList(files, onDownload, onDelete, opts = {}) {
   });
 }
 
-export function setUploadingState(uploading) {
+export function setUploadingState(uploading, label = 'Uploading…') {
   document.getElementById('uploading-indicator')?.classList.toggle('hidden', !uploading);
+  const textEl = document.getElementById('uploading-indicator-text');
+  if (textEl && uploading) textEl.textContent = label;
 }
 
 // ── Panels ────────────────────────────────────────────────────────────────────
@@ -848,7 +850,14 @@ export function setViewOnceConsumedPanel({
 
 // ── File upload zone ──────────────────────────────────────────────────────────
 
-export function setFileHandlers(onFileSelected) {
+/**
+ * Wire all file-upload entry points (picker, upload zone drop, panel-wide
+ * drop, editor-area drop). Every entry point can yield more than one file
+ * (multi-select picker, multi-file drag-and-drop); onFilesSelected always
+ * receives a non-empty array of File objects.
+ * @param {(files: File[]) => void} onFilesSelected
+ */
+export function setFileHandlers(onFilesSelected) {
   const input       = document.getElementById('file-input');
   const zone        = document.getElementById('files-upload-zone');
   const panel       = document.getElementById('files-panel');
@@ -856,7 +865,7 @@ export function setFileHandlers(onFileSelected) {
 
   if (input) {
     input.onchange = () => {
-      if (input.files[0]) onFileSelected(input.files[0]);
+      if (input.files.length) onFilesSelected(Array.from(input.files));
       input.value = '';
     };
   }
@@ -870,8 +879,8 @@ export function setFileHandlers(onFileSelected) {
     zone.ondragleave = ()  => zone.classList.remove('drag-over');
     zone.ondrop      = (e) => {
       e.preventDefault(); zone.classList.remove('drag-over');
-      const f = e.dataTransfer?.files?.[0];
-      if (f) onFileSelected(f);
+      const files = Array.from(e.dataTransfer?.files || []);
+      if (files.length) onFilesSelected(files);
     };
   }
 
@@ -879,7 +888,7 @@ export function setFileHandlers(onFileSelected) {
   // Shows an overlay across the entire panel so users can drop anywhere.
   if (panel) {
     let _dragDepth = 0;  // track enter/leave depth for nested elements
-    const overlay  = _ensureDropOverlay(panel, 'Drop file here to upload');
+    const overlay  = _ensureDropOverlay(panel, 'Drop files here to upload');
 
     panel.addEventListener('dragenter', (e) => {
       if (!e.dataTransfer?.types?.includes('Files')) return;
@@ -899,16 +908,16 @@ export function setFileHandlers(onFileSelected) {
       e.preventDefault();
       _dragDepth = 0;
       overlay?.classList.remove('visible');
-      const f = e.dataTransfer?.files?.[0];
-      if (f) onFileSelected(f);
+      const files = Array.from(e.dataTransfer?.files || []);
+      if (files.length) onFilesSelected(files);
     });
   }
 
   // ── Editor-area drop ───────────────────────────────────────────────────────
-  // Allows dropping a file onto the note editor area to trigger an upload.
+  // Allows dropping files onto the note editor area to trigger an upload.
   if (editorArea) {
     let _edDragDepth = 0;
-    const edOverlay = _ensureDropOverlay(editorArea, 'Drop file to upload to this room');
+    const edOverlay = _ensureDropOverlay(editorArea, 'Drop files to upload to this room');
 
     editorArea.addEventListener('dragenter', (e) => {
       if (!e.dataTransfer?.types?.includes('Files')) return;
@@ -929,8 +938,8 @@ export function setFileHandlers(onFileSelected) {
       e.preventDefault();
       _edDragDepth = 0;
       edOverlay?.classList.remove('visible');
-      const f = e.dataTransfer?.files?.[0];
-      if (f) onFileSelected(f);
+      const files = Array.from(e.dataTransfer?.files || []);
+      if (files.length) onFilesSelected(files);
     });
   }
 }

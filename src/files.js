@@ -22,7 +22,23 @@ const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
 // Supabase signed URLs are valid for 3600 s (1 hour). We cache them for 55 min
 // (3300 s) to avoid redundant API calls on every download/preview interaction
 // while leaving a 5-minute safety margin before expiry.
-const _urlCache  = new Map(); // filePath → { url: string, expiresAt: number }
+//
+// Two separate caches are kept because they request different Content-Disposition
+// behavior from Storage:
+//   _urlCache          – plain signed URL, served inline. Used for previews
+//                        (images, PDFs/SVGs opened in a new tab, fetch()'d text/
+//                        markdown/CSV) where the browser must render the content,
+//                        not download it.
+//   _downloadUrlCache   – signed URL requested with `download: <original filename>`,
+//                        which makes Storage return a Content-Disposition: attachment
+//                        header carrying the real filename. This is required because
+//                        the storage path is `${roomId}/${timestamp}_${sanitizedName}`
+//                        and the anchor `download` attribute is not honored by modern
+//                        browsers for cross-origin URLs — without this, a saved file
+//                        would be named e.g. "1737483920123_my_file.pdf" instead of
+//                        the name the uploader actually gave it.
+const _urlCache         = new Map(); // filePath → { url: string, expiresAt: number }
+const _downloadUrlCache = new Map(); // filePath → { url: string, expiresAt: number }
 const URL_TTL_MS = 55 * 60 * 1000; // 55 minutes in milliseconds
 
 export async function uploadFile(roomId, file) {
@@ -61,6 +77,11 @@ export async function uploadFile(roomId, file) {
   return data;
 }
 
+/**
+ * Get an inline signed URL for a file — used for previews (images, PDFs/SVGs
+ * opened in a new tab, fetch()'d text/markdown/CSV). Renders in the browser
+ * rather than forcing a download; does not carry the original filename.
+ */
 export async function getDownloadUrl(filePath) {
   // Return cached URL if still valid
   const cached = _urlCache.get(filePath);
@@ -73,6 +94,27 @@ export async function getDownloadUrl(filePath) {
     throw new Error('Could not generate download link.');
   }
   _urlCache.set(filePath, { url: data.signedUrl, expiresAt: Date.now() + URL_TTL_MS });
+  return data.signedUrl;
+}
+
+/**
+ * Get a signed URL that forces a browser download with the file's original
+ * name via a server-set Content-Disposition header. Use this for actual
+ * "Download" actions; use getDownloadUrl() for inline preview.
+ * @param {string} filePath
+ * @param {string} filename  – original filename to save as
+ */
+export async function getForceDownloadUrl(filePath, filename) {
+  const cached = _downloadUrlCache.get(filePath);
+  if (cached && Date.now() < cached.expiresAt) return cached.url;
+
+  const { data, error } = await getSupabaseClient()
+    .storage.from(BUCKET).createSignedUrl(filePath, 3600, { download: filename || true });
+  if (error) {
+    logSupabaseError('getForceDownloadUrl', error, { file_path: filePath });
+    throw new Error('Could not generate download link.');
+  }
+  _downloadUrlCache.set(filePath, { url: data.signedUrl, expiresAt: Date.now() + URL_TTL_MS });
   return data.signedUrl;
 }
 
@@ -91,8 +133,9 @@ export async function getDownloadUrl(filePath) {
 export async function deleteFile(fileId, filePath) {
   const sb = getSupabaseClient();
 
-  // Evict cached signed URL so stale links are not returned after deletion.
+  // Evict cached signed URLs so stale links are not returned after deletion.
   _urlCache.delete(filePath);
+  _downloadUrlCache.delete(filePath);
 
   // Step 1: Delete from storage. Abort if this fails.
   const { error: se } = await sb.storage.from(BUCKET).remove([filePath]);
