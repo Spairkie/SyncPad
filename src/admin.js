@@ -1858,11 +1858,12 @@ function _ensureAdminDialogStyles() {
 .admin-dialog-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:9999}
 .admin-dialog{background:var(--bg-surface,#1e1e2e);border:1px solid var(--border,#333);border-radius:10px;padding:1.5rem;max-width:440px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.4)}
 .admin-dialog-title{font-weight:700;font-size:1rem;margin-bottom:.5rem;color:var(--text-primary,#e0e0e0)}
-.admin-dialog-msg{margin:0 0 1rem;font-size:.9rem;color:var(--text-secondary,#aaa);line-height:1.5;white-space:pre-wrap}
+.admin-dialog-msg{margin:0 0 1rem;font-size:.9rem;color:var(--text-secondary,#aaa);line-height:1.5;white-space:pre-wrap;overflow-wrap:break-word;word-break:break-word}
 .admin-dialog-msg--error{color:var(--red,#f87171)}
+.admin-dialog-title{overflow-wrap:break-word;word-break:break-word}
 .admin-dialog-input{width:100%;padding:.5rem .75rem;font-size:.875rem;border:1px solid var(--border,#333);border-radius:6px;background:var(--bg-elevated,#252538);color:var(--text-primary,#e0e0e0);margin-bottom:1rem;box-sizing:border-box;font-family:monospace}
 .admin-dialog-input:focus{outline:none;border-color:var(--accent,#f5a623)}
-.admin-dialog-actions{display:flex;justify-content:flex-end;gap:.5rem}
+.admin-dialog-actions{display:flex;justify-content:flex-end;gap:.5rem;flex-wrap:wrap}
 .admin-dialog-btn{padding:.45rem 1rem;border-radius:6px;border:1px solid var(--border,#333);font-size:.875rem;cursor:pointer;transition:opacity .15s}
 .admin-dialog-btn:disabled{opacity:.4;cursor:not-allowed}
 .admin-dialog-btn--primary{background:var(--accent,#f5a623);color:var(--text-inverse,#000);border-color:var(--accent,#f5a623)}

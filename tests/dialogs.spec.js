@@ -116,6 +116,46 @@ test.describe('showPrompt dialog', () => {
   });
 });
 
+// ── Long-content wrapping ────────────────────────────────────────────────────
+
+test.describe('Confirm modal wraps long content', () => {
+  test('a long filename in the confirm message wraps instead of overflowing', async ({ page }) => {
+    await goToLanding(page);
+    const longName = 'AVD-Instructions-For-New-Employees-Onboarding-2024-Final-Draft-VeryLongFilename.pdf';
+    await page.evaluate(async (name) => {
+      const { showConfirm } = await import('/SyncPad/src/ui.js');
+      showConfirm(`Delete "${name}"?`, { confirmLabel: 'Delete', danger: true });
+    }, longName);
+    await page.waitForSelector('#sp-confirm-modal.visible', { timeout: 5000 });
+
+    const overflows = await page.evaluate(() => {
+      const msg = document.getElementById('sp-confirm-message');
+      return msg.scrollWidth > msg.clientWidth + 1;
+    });
+    expect(overflows).toBe(false);
+
+    await page.evaluate(() => document.getElementById('sp-confirm-cancel').click());
+  });
+});
+
+test.describe('Toast wraps long messages', () => {
+  test('a long toast message wraps instead of overflowing its bounds', async ({ page }) => {
+    await goToLanding(page);
+    const longMessage = 'File removed from storage, but the metadata row could not be deleted. Refresh the file list.';
+    await page.evaluate(async (msg) => {
+      const { showToast } = await import('/SyncPad/src/ui.js');
+      showToast(msg, 'error', 10000);
+    }, longMessage);
+    await page.waitForSelector('.toast', { timeout: 5000 });
+
+    const overflows = await page.evaluate(() => {
+      const toast = document.querySelector('.toast');
+      return toast.scrollWidth > toast.clientWidth + 1;
+    });
+    expect(overflows).toBe(false);
+  });
+});
+
 // ── Modal focus trapping (A-2) ─────────────────────────────────────────────────
 
 test.describe('Confirm modal focus trap (A-2)', () => {

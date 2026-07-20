@@ -1096,8 +1096,11 @@ body.lock-mode .md-toolbar { opacity: 0.4; pointer-events: none; }
 .modal-backdrop.visible .modal { transform: scale(1) translateY(0); }
 .modal h3 { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
 .modal p  { font-size: 14px; color: var(--text-secondary); margin-bottom: 18px; line-height: 1.5; }
-.modal-actions { display: flex; gap: 10px; margin-top: 20px; }
-.modal-actions button { flex: 1; padding: 10px; border-radius: var(--radius-md); font-size: 14px; font-weight: 500; }
+.modal-actions { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
+/* min-width: 0 overrides the flex default (min-width: auto), which would
+   otherwise refuse to shrink a button below its label's intrinsic width and
+   push the row wider than the modal for longer confirm/cancel labels. */
+.modal-actions button { flex: 1 1 auto; min-width: 0; padding: 10px; border-radius: var(--radius-md); font-size: 14px; font-weight: 500; }
 .modal-btn-cancel  { background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-primary); transition: background var(--transition); }
 .modal-btn-cancel:hover  { background: var(--bg-base); }
 .modal-btn-confirm { background: var(--accent); color: var(--text-inverse); transition: opacity var(--transition); }
@@ -1105,10 +1108,14 @@ body.lock-mode .md-toolbar { opacity: 0.4; pointer-events: none; }
 .modal-btn-danger  { background: var(--red); color: var(--text-inverse); transition: opacity var(--transition); }
 .modal-btn-danger:hover  { opacity: 0.85; }
 /* Confirm dialog specifics */
-.confirm-modal-inner { max-width: 340px; }
+.confirm-modal-inner { max-width: 340px; width: 100%; }
 .confirm-modal-message {
   font-size: 15px; color: var(--text-primary); line-height: 1.55;
   margin-bottom: 0; text-align: center;
+  /* Long unbroken tokens (filenames, URLs) must wrap instead of overflowing
+     the modal — e.g. Delete "some-long-filename-with-no-spaces.pdf"? */
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 .prompt-modal-input { margin: 12px 0 4px; }
 
@@ -1406,7 +1413,11 @@ body.lock-mode .md-toolbar { opacity: 0.4; pointer-events: none; }
   font-size: 13px; color: var(--text-primary);
   box-shadow: var(--shadow-md); pointer-events: auto;
   animation: toast-in 0.2s ease forwards;
-  white-space: nowrap; max-width: calc(100vw - 48px);
+  /* Short status toasts ("Room cleared.") stay on one line naturally; longer
+     ones (some error messages run a full sentence) must wrap instead of
+     spilling silently past the pill's visible bounds. */
+  max-width: min(calc(100vw - 48px), 420px);
+  overflow-wrap: break-word; word-break: break-word; text-align: center;
 }
 .toast.success { border-color: rgba(74,222,128,0.35); color: var(--green); }
 .toast.error   { border-color: rgba(248,113,113,0.35); color: var(--red); }
