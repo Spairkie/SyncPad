@@ -434,6 +434,16 @@ async function _emptyContentForCurrentEncryption() {
   return _encKey ? await encryptContent('', _encKey) : '';
 }
 
+function _showQuarantinedScreen(room) {
+  UI.setInfoScreen({
+    title: 'Room unavailable',
+    message: room?.quarantine_reason
+      ? `This room has been quarantined by an administrator. Reason: ${room.quarantine_reason}`
+      : 'This room has been quarantined by an administrator and is no longer accessible.',
+  });
+  UI.showScreen('info');
+}
+
 // ── Join flow ─────────────────────────────────────────────────────────────────
 
 async function joinReadOnlyShareRoute(token) {
@@ -487,6 +497,16 @@ async function joinRoom(roomId) {
       'Could not load room — check your connection and try again.',
       () => joinRoom(roomId),  // retry callback
     );
+    return;
+  }
+
+  // Quarantine blocks the room entirely — before any passcode prompt,
+  // decryption attempt, or editor initialization. quarantined_at/
+  // quarantine_reason only exist if the optional admin-dashboard migration
+  // has been applied; absent columns are simply undefined/falsy here, so
+  // this is a no-op for installs that haven't run it.
+  if (_room.quarantined_at) {
+    _showQuarantinedScreen(_room);
     return;
   }
 
@@ -830,6 +850,15 @@ function _enterEncryptedNoKeyMode(newRoom, { showToast = false } = {}) {
 async function _handleRoomStateTransition(prev, newRoom) {
   if (!newRoom) return;
 
+  // Live quarantine: an admin can quarantine a room while it's open in this
+  // tab. Tear down and block immediately, before applying any other part of
+  // this update, so no further content/settings changes are processed.
+  if (newRoom.quarantined_at) {
+    teardownRealtimeSession();
+    _showQuarantinedScreen(newRoom);
+    return;
+  }
+
   // Save echoes from our own writes
   const ourId = getDeviceId();
   const isOwnWrite = newRoom.updated_by_device === ourId;
@@ -1072,6 +1101,7 @@ async function refreshFiles() {
     },
     {
       canDelete: canDeleteFiles(),
+      canDownload: !_room?.downloads_disabled,
       selectMode: _filesSelectMode,
       selectedIds: _selectedFiles,
       onSelectionChange: (file, checked) => {
@@ -2217,6 +2247,11 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
   // We intercept the paste event on the editor and substitute plain-text only.
   editor?.addEventListener('paste', (e) => {
     if (!_stripPaste) return;
+    // Must not mutate the editor when editing is blocked (read-only, locked,
+    // encrypted without a key) — the other paste listener above only calls
+    // preventDefault() for the native paste, which does not stop this
+    // separate listener on the same event from still running.
+    if (!canPaste()) return;
     const plain = e.clipboardData?.getData('text/plain');
     if (plain === undefined) return;
     e.preventDefault();
@@ -2424,9 +2459,12 @@ function teardownRealtimeSession() {
   _markdownMode = 'write';
   _showPreview  = false;
   UI.setMarkdownMode('write', null);
-  // Reset expiration preset so the settings panel shows a sensible default
-  // rather than whatever preset was last selected in the previous room.
-  _expPreset = '10m';
+  // Reset expiration preset — both the variable AND the settings-panel DOM
+  // (preset button highlighting, custom-row visibility) — so a room where
+  // "Custom" was selected doesn't leave the panel visually showing Custom
+  // with its inputs open in the next room even though _expPreset is back to
+  // the default.
+  _selectExpirationPreset('10m');
   // Exit bulk-select mode so the next room starts with a clean files panel.
   _filesSelectMode = false;
   _selectedFiles   = new Set();
