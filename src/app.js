@@ -123,6 +123,30 @@ function _rememberLastRoom(roomId) {
   try { localStorage.setItem(LAST_ROOM_KEY, roomId); } catch {}
 }
 
+// Any control that deliberately navigates to the app root (header logo,
+// "Back to SyncPad" links, view-once "Go home" button, etc.) must call this
+// first so boot() shows the real landing screen instead of immediately
+// resuming back into this room.
+function _suppressNextResume() {
+  try { sessionStorage.setItem(RESUME_SUPPRESS_KEY, '1'); } catch {}
+}
+
+// A plain <a href="{BASE}/"> to the app root — the header logo and every
+// "Back to SyncPad" link on the contact/privacy/terms/info screens — is a
+// real page navigation, so it can't be caught by the room-scoped, one-time
+// wireEvents() wiring (some of those screens are reachable without ever
+// joining a room in this session at all). One delegated listener here
+// catches all of them, present and future, instead of wiring each link
+// individually and risking new ones being missed.
+document.addEventListener('click', (e) => {
+  const a = e.target.closest?.('a[href]');
+  if (!a) return;
+  const rootUrl = `${location.origin}${BASE}/`;
+  if (a.href === rootUrl || a.href === `${location.origin}${BASE}`) {
+    _suppressNextResume();
+  }
+});
+
 function _normalizeBasePath(basePath) {
   const raw = String(basePath || '').trim();
   if (!raw || raw === '/') return '';
@@ -969,6 +993,7 @@ function _updateViewOnceConsumedUI() {
   UI.setViewOnceConsumedPanel({
     visible: !!consumed,
     readOnly: !!_isReadOnly,
+    onGoHome: _suppressNextResume,
     onStartNew: async () => {
       if (_isReadOnly) return;
       try {
@@ -1275,14 +1300,6 @@ function wireEvents() {
   // shortcuts are re-wired above, but these must not accumulate.
   if (_eventsWired) return;
   _eventsWired = true;
-
-  // Deliberately navigating Home should land on the real landing screen, not
-  // bounce straight back into this room via the PWA resume-last-room behavior.
-  // The flag is one-shot (cleared the next time boot() reads it), so a later
-  // fresh PWA launch still resumes normally.
-  document.querySelector('.header-logo')?.addEventListener('click', () => {
-    try { sessionStorage.setItem(RESUME_SUPPRESS_KEY, '1'); } catch {}
-  });
 
   const editor = document.getElementById('note-editor');
 

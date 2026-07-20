@@ -273,12 +273,17 @@ function _renderInline(raw) {
   // 2. Escape everything else
   text = escapeHtml(text);
 
-  // 3. Images — http/https only (never data:/javascript:). Processed before
-  // emphasis markup so ** or _ characters inside alt text aren't turned into
-  // literal <strong>/<em> tags sitting inside the alt="" attribute value.
+  // 3. Images — http/https only (never data:/javascript:). Rendered into an
+  // opaque placeholder rather than the final <img> markup, so ** or _
+  // characters in the alt text or URL are never touched by the emphasis/
+  // link rules that run afterward (mirrors the code-span and autolink
+  // protection below) — otherwise e.g. a URL containing "a*b*.png" would
+  // have its src corrupted with a literal <em> tag.
+  const imgSlots = [];
   text = text.replace(/!\[([^\]\n]*)\]\(([^)\s]+)\)/g, (full, alt, url) => {
     if (!/^https?:/i.test(url)) return full;
-    return `<img src="${url}" alt="${alt}" loading="lazy">`;
+    imgSlots.push(`<img src="${url}" alt="${alt}" loading="lazy">`);
+    return `I${imgSlots.length - 1}`;
   });
 
   // 4. Bold, italic, strikethrough (non-greedy).
@@ -315,18 +320,28 @@ function _renderInline(raw) {
   });
   text = text.replace(/(^|[\s(])(https?:\/\/[^\s<>"']+)/g, (full, pre, rawUrl) => {
     // Trim trailing punctuation that's more likely sentence punctuation than
-    // part of the URL (e.g. "See https://x.com." shouldn't swallow the period).
-    let url = rawUrl;
-    let trail = '';
-    const trailing = url.match(/[.,!?;:'")\]]+$/);
-    if (trailing) {
-      let cut = trailing[0];
-      // Keep a trailing ')' when the URL has an unmatched '(' (Wikipedia-style URLs).
-      if (cut.endsWith(')') && (url.match(/\(/g) || []).length > (url.match(/\)/g) || []).length) {
-        cut = cut.slice(0, -1);
+    // part of the URL (e.g. "See https://x.com." shouldn't swallow the
+    // period). Walk backwards one character at a time rather than matching
+    // the whole trailing run at once, so a ')' immediately followed by more
+    // punctuation (e.g. the "." in ".../Function_(mathematics).") is still
+    // evaluated on its own merits — trimmed only when it's unmatched by an
+    // earlier '(' in the URL, never when it legitimately closes one.
+    let end = rawUrl.length;
+    while (end > 0) {
+      const ch = rawUrl[end - 1];
+      if (ch === ')') {
+        const upTo   = rawUrl.slice(0, end);
+        const opens  = (upTo.match(/\(/g) || []).length;
+        const closes = (upTo.match(/\)/g) || []).length;
+        if (closes <= opens) break; // matched by an earlier '(' — keep it, stop trimming
+        end--;
+        continue;
       }
-      if (cut) { url = url.slice(0, -cut.length); trail = cut; }
+      if (/[.,!?;:'"\]]/.test(ch)) { end--; continue; }
+      break;
     }
+    const url   = rawUrl.slice(0, end);
+    const trail = rawUrl.slice(end);
     if (!url) return full;
     return `${pre}<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>${trail}`;
   });
@@ -336,7 +351,10 @@ function _renderInline(raw) {
   text = text.replace(/ {2,}\n/g, '<br>\n');
   text = text.replace(/\n/g, ' ');
 
-  // 8. Restore code spans
+  // 8. Restore images
+  text = text.replace(/I(\d+)/g, (_, n) => imgSlots[Number(n)]);
+
+  // 9. Restore code spans
   text = text.replace(/(\d+)/g, (_, n) => `<code>${codeSlots[Number(n)]}</code>`);
 
   return text;
