@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Phase 16 — Responsive text wrapping in modals and toasts
+
+Branch: `claude/repo-review-refactor-kba1k5`
+
+#### Fixed
+- **Confirm/prompt modal message overflowed instead of wrapping**: a long unbroken token (a filename with no spaces, e.g. `Delete "AVD-Instructions.pdf"?` with a much longer real-world filename) ran past the modal's bounds at every viewport size, including desktop — `overflow-wrap`/`word-break` were never set on `.confirm-modal-message`. Also hardened `.modal-actions` (`flex-wrap` + `min-width: 0` on buttons) against longer confirm/cancel labels overflowing the row.
+- **Admin dashboard's separate dialog system had the identical bug**: `.admin-dialog-msg`/`.admin-dialog-title` (used for messages like `Delete file "..."?` and `Delete room "..."?`) had no wrap protection either.
+- **Toast messages could be almost entirely cut off**: `.toast` used `white-space: nowrap` with only a `max-width` cap and no overflow handling — a longer message (several existing error toasts run a full sentence) rendered at roughly double its visible width, silently hiding most of the text. Toasts now wrap normally, capped at a reasonable width.
+- Bumped service worker cache to `syncpad-v19`.
+
 ### Phase 15 — Codex review follow-ups (PWA resume, image/autolink corruption)
 
 Branch: `claude/repo-review-refactor-kba1k5`
