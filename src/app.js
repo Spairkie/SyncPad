@@ -100,6 +100,8 @@ const _SMART_PUNCT_KEY = 'syncpad_smart_punct';
 let _smartPunct = localStorage.getItem(_SMART_PUNCT_KEY) === 'true';
 const _FOCUS_MODE_KEY = 'syncpad_focus_mode';
 let _focusMode = localStorage.getItem(_FOCUS_MODE_KEY) === 'true';
+const _TYPEWRITER_MODE_KEY = 'syncpad_typewriter_mode';
+let _typewriterMode = localStorage.getItem(_TYPEWRITER_MODE_KEY) === 'true';
 
 // ── Files state ───────────────────────────────────────────────────────────────
 let _filesSelectMode = false;
@@ -724,6 +726,7 @@ async function startApp() {
   UI.setStatus('connected');
   UI.setMonospace(_monospace);
   UI.setFocusMode(_focusMode);
+  UI.setTypewriterMode(_typewriterMode);
   UI.setReadOnlyMode(_isReadOnly);
   // Ensure the editor always starts in write mode when entering a new room,
   // since _markdownMode was reset to 'write' in teardownRealtimeSession().
@@ -1430,6 +1433,7 @@ function wireEvents() {
     setTyping(true);
     UI.updateWordCount(UI.getEditorValue());
     UI.refreshFocusMode(); // no-op unless focus mode is on
+    UI.refreshTypewriterMode(); // no-op unless typewriter mode is on
     // Debounced so large documents don't re-render markdown on every keystroke.
     _debouncedRefreshPreview();
   });
@@ -1652,6 +1656,7 @@ function wireEvents() {
     const line   = (before.match(/\n/g) || []).length + 1;
     setCursorLine(line);
     UI.refreshFocusMode(); // no-op unless focus mode is on
+    UI.refreshTypewriterMode(); // no-op unless typewriter mode is on
   };
   editor?.addEventListener('keyup',    _broadcastCursor);
   editor?.addEventListener('mouseup',  _broadcastCursor);
@@ -1660,8 +1665,13 @@ function wireEvents() {
   // Focus mode's dimmed band tracks the caret's pixel position, which shifts
   // under scrolling (same line, different viewport offset) and under
   // resizing (text re-wraps at a different width, changing the caret's line).
+  // Typewriter mode only re-centers on resize, not on scroll — re-centering
+  // on every scroll event would fight the user's own manual scrolling.
   editor?.addEventListener('scroll', () => UI.refreshFocusMode());
-  window.addEventListener('resize', () => UI.refreshFocusMode());
+  window.addEventListener('resize', () => {
+    UI.refreshFocusMode();
+    UI.refreshTypewriterMode();
+  });
 
   // Block paste keystrokes when the editor is locked. The textarea readonly
   // attribute does the heavy lifting; this is belt-and-suspenders.
@@ -2642,6 +2652,23 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
     UI.setFocusMode(_focusMode);
     _updateFocusModeUI();
     UI.showToast(_focusMode ? 'Focus mode: On' : 'Focus mode: Off', 'info', 2000);
+  });
+
+  // ── Typewriter-mode setting button ───────────────────────────────────────────
+  const _updateTypewriterModeUI = () => {
+    const btn = document.getElementById('setting-typewriter-mode-btn');
+    if (!btn) return;
+    btn.textContent = _typewriterMode ? 'On' : 'Off';
+    btn.setAttribute('aria-pressed', String(_typewriterMode));
+  };
+  _updateTypewriterModeUI();
+
+  document.getElementById('setting-typewriter-mode-btn')?.addEventListener('click', () => {
+    _typewriterMode = !_typewriterMode;
+    try { localStorage.setItem(_TYPEWRITER_MODE_KEY, String(_typewriterMode)); } catch {}
+    UI.setTypewriterMode(_typewriterMode);
+    _updateTypewriterModeUI();
+    UI.showToast(_typewriterMode ? 'Typewriter mode: On' : 'Typewriter mode: Off', 'info', 2000);
   });
 }
 

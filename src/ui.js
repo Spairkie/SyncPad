@@ -845,6 +845,47 @@ function _measureCaretPixelY(editor) {
   return y;
 }
 
+// ── Typewriter mode ──────────────────────────────────────────────────────────
+//
+// Keeps the caret's line vertically centered in the editor's viewport, like
+// Typora's typewriter mode. The textarea is given top/bottom padding equal
+// to half its own viewport height — via the --typewriter-pad custom property,
+// consumed by the .typewriter-mode rule in style.css — so that even the
+// first/last line of the document can still be scrolled to center. The
+// caret's pixel position reuses the same mirror-div measurement as focus
+// mode (which already accounts for that padding, since the mirror clones
+// the textarea's live computed style).
+
+let _typewriterModeOn = false;
+
+export function setTypewriterMode(on) {
+  _typewriterModeOn = on;
+  const editor = document.getElementById('note-editor');
+  if (!editor) return;
+  if (on) {
+    // Measure — and set --typewriter-pad — before the class (and its
+    // padding) is applied, so this first measurement reflects the editor's
+    // normal un-padded box rather than being skewed by the CSS rule's own
+    // fallback padding (var(--typewriter-pad, 40vh)), which briefly applies
+    // once the class lands but before this property has a real value.
+    editor.style.setProperty('--typewriter-pad', `${editor.clientHeight / 2}px`);
+  }
+  editor.classList.toggle('typewriter-mode', on);
+  if (on) refreshTypewriterMode();
+}
+
+/** Recompute the centering scroll position — call on cursor move, input, or resize. */
+export function refreshTypewriterMode() {
+  if (!_typewriterModeOn) return;
+  const editor = document.getElementById('note-editor');
+  if (!editor) return;
+  editor.style.setProperty('--typewriter-pad', `${editor.clientHeight / 2}px`);
+  const caretY     = _measureCaretPixelY(editor);
+  const lineHeight = parseFloat(getComputedStyle(editor).lineHeight) || 24;
+  const target     = caretY + lineHeight / 2 - editor.clientHeight / 2;
+  editor.scrollTop = Math.max(0, target);
+}
+
 /**
  * Toggle the textarea between editable and readonly. Keeps the textarea
  * selectable (so the user can copy text in read-only mode), but blocks
