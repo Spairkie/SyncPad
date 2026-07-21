@@ -1237,6 +1237,7 @@ export function setMarkdownMode(mode, renderFn, { live = false } = {}) {
   // Clear all stale mode classes so no previous mode leaks into the next.
   // split-mode is the legacy alias — keep removing it for backward compat.
   wrap?.classList.remove('mode-write', 'mode-preview', 'mode-split', 'split-mode');
+  wrap?.classList.toggle('live-preview', !!(live && livePane));
 
   // Update segmented control
   document.querySelectorAll('.md-seg-btn').forEach(btn => {

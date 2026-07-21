@@ -707,6 +707,15 @@ svg { display: block; flex-shrink: 0; }
   display: inline-block; width: 100%; height: 2px;
   background: var(--border); border-radius: 1px; vertical-align: middle;
 }
+.note-live .cm-md-image {
+  max-width: 100%; height: auto; border-radius: var(--radius-sm);
+  display: block; margin: 0.4em 0;
+  min-height: 1.6em; min-width: 3em;
+  background: var(--bg-elevated);
+}
+.note-live .cm-md-image.cm-md-image-broken {
+  border: 1px dashed var(--border); box-sizing: border-box;
+}
 
 /* Remote collaborator carets (Google-Docs style) */
 .note-live .cm-remote-caret {
@@ -815,7 +824,10 @@ body.lock-mode .note-preview li.md-task input[type="checkbox"] { cursor: not-all
   overflow: hidden;
 }
 /* Hide in preview mode (no editable text to format) */
-.editor-wrap.mode-preview .md-toolbar { display: none; }
+/* Preview mode hides the toolbar only when the live editable surface didn't
+   mount (rendered-HTML fallback, which formatting can't act on). When the
+   live surface is up, .live-preview is set and the toolbar stays usable. */
+.editor-wrap.mode-preview:not(.live-preview) .md-toolbar { display: none; }
 /* Muted in read-only / locked — pointer-events off prevents clicks */
 body.read-only-mode .md-toolbar,
 body.lock-mode .md-toolbar { opacity: 0.4; pointer-events: none; }
