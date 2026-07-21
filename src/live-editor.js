@@ -24,6 +24,7 @@ import {
 let _view             = null;
 let _onChange         = null;
 let _onCursorActivity = null;
+let _scrollSync       = null; // { editorEl, scrollEl, onEditorScroll, onSelfScroll }
 const _readOnly = new Compartment();
 
 // Marks transactions applied from outside (textarea → CM6) so the update
@@ -108,6 +109,39 @@ class _HrWidget extends WidgetType {
 
 const _bulletWidget = new _BulletWidget();
 const _hrWidget     = new _HrWidget();
+
+// Images pasted straight into the editor use the syncpad-file: pseudo-scheme
+// (see markdown.js) since the Storage bucket is private and a real signed
+// URL can't be baked into persisted content. Set once via
+// setFileImageResolver() — same pattern as ui.js's rendered-preview path —
+// so this module doesn't need its own import of files.js.
+let _fileImageResolver = null;
+
+/** @param {(filePath: string) => Promise<string>} resolver */
+export function setFileImageResolver(resolver) { _fileImageResolver = resolver; }
+
+class _ImageWidget extends WidgetType {
+  constructor(alt, url) { super(); this.alt = alt || ''; this.url = url || ''; }
+  eq(other) { return other.alt === this.alt && other.url === this.url; }
+  toDOM() {
+    const img = document.createElement('img');
+    img.alt = this.alt;
+    img.className = 'cm-md-image';
+    img.addEventListener('error', () => img.classList.add('cm-md-image-broken'));
+
+    const fileMatch = /^syncpad-file:(.+)$/i.exec(this.url);
+    if (fileMatch && _fileImageResolver) {
+      _fileImageResolver(fileMatch[1])
+        .then((resolvedUrl) => { img.src = resolvedUrl; })
+        .catch(() => img.classList.add('cm-md-image-broken'));
+    } else if (/^https?:\/\//i.test(this.url)) {
+      img.src = this.url;
+    } else {
+      img.classList.add('cm-md-image-broken');
+    }
+    return img;
+  }
+}
 
 // ── Live remote cursors ──────────────────────────────────────────────────────
 //
@@ -258,6 +292,22 @@ const _seamless = ViewPlugin.fromClass(class {
             return;
           }
 
+          // Inline images render as an actual <img>, replacing the whole
+          // ![alt](url) span, while the selection isn't touching it. Read
+          // alt/url from the node's own children (not a raw-text regex) so
+          // a URL containing parentheses — e.g. a query string — still
+          // parses correctly; the syntax tree already found its boundary.
+          if (name === 'Image') {
+            if (_selectionTouches(state, nodeRef.from, nodeRef.to)) return; // fall through to raw-text editing
+            const marks = nodeRef.node.getChildren('LinkMark');
+            const urlNode = nodeRef.node.getChild('URL');
+            if (marks.length < 2 || !urlNode) return; // malformed — leave as plain text
+            const alt = state.doc.sliceString(marks[0].to, marks[1].from);
+            const url = state.doc.sliceString(urlNode.from, urlNode.to);
+            ranges.push(Decoration.replace({ widget: new _ImageWidget(alt, url) }).range(nodeRef.from, nodeRef.to));
+            return false; // skip descending into the marks this widget already replaces
+          }
+
           // Quote marks and link syntax fold like wave-1 markers do.
           if (name === 'QuoteMark') {
             const parent = nodeRef.node.parent;
@@ -372,10 +422,52 @@ export function mount(container, initialValue, { onChange, onCursorActivity, rea
 }
 
 export function destroy() {
+  unwireScrollSync();
   _view?.destroy();
   _view = null;
   _onChange = null;
   _onCursorActivity = null;
+}
+
+// ── Split-mode scroll sync ───────────────────────────────────────────────────
+//
+// Proportional (percent-of-scrollable-range) sync between the Write textarea
+// and this surface's own scroller, mirroring the sync the old rendered pane
+// had. Rewired on every mount() since CM6's scrollDOM is a fresh element
+// each time the view is (re)created, unlike the old #note-preview div.
+
+export function wireScrollSync(editorEl) {
+  unwireScrollSync();
+  if (!_view || !editorEl) return;
+  const scrollEl = _view.scrollDOM;
+  let lock = false;
+  const onEditorScroll = () => {
+    if (lock) return;
+    lock = true;
+    const maxScroll = editorEl.scrollHeight - editorEl.clientHeight;
+    const ratio = maxScroll > 0 ? editorEl.scrollTop / maxScroll : 0;
+    scrollEl.scrollTop = ratio * (scrollEl.scrollHeight - scrollEl.clientHeight);
+    requestAnimationFrame(() => { lock = false; });
+  };
+  const onSelfScroll = () => {
+    if (lock) return;
+    lock = true;
+    const maxScroll = scrollEl.scrollHeight - scrollEl.clientHeight;
+    const ratio = maxScroll > 0 ? scrollEl.scrollTop / maxScroll : 0;
+    editorEl.scrollTop = ratio * (editorEl.scrollHeight - editorEl.clientHeight);
+    requestAnimationFrame(() => { lock = false; });
+  };
+  editorEl.addEventListener('scroll', onEditorScroll);
+  scrollEl.addEventListener('scroll', onSelfScroll);
+  _scrollSync = { editorEl, scrollEl, onEditorScroll, onSelfScroll };
+}
+
+export function unwireScrollSync() {
+  if (!_scrollSync) return;
+  const { editorEl, scrollEl, onEditorScroll, onSelfScroll } = _scrollSync;
+  editorEl.removeEventListener('scroll', onEditorScroll);
+  scrollEl.removeEventListener('scroll', onSelfScroll);
+  _scrollSync = null;
 }
 
 /** Replace the doc from the textarea's value. No-op when already identical. */
@@ -408,3 +500,39 @@ export function setReadOnly(on) {
 }
 
 export function focus() { _view?.focus(); }
+export function hasFocus() { return !!_view?.hasFocus; }
+
+export function getSelection() {
+  if (!_view) return { from: 0, to: 0 };
+  const sel = _view.state.selection.main;
+  return { from: sel.from, to: sel.to };
+}
+
+/** Replace the whole doc and set a new selection — a deliberate user action
+ *  (toolbar formatting), not a per-keystroke sync, so a full replace is fine. */
+export function applyEdit(text, from, to) {
+  if (!_view) return;
+  const current = _view.state.doc.toString();
+  _view.dispatch({
+    changes: { from: 0, to: current.length, insert: text ?? '' },
+    selection: { anchor: from ?? 0, head: to ?? from ?? 0 },
+  });
+  _view.focus();
+}
+
+/**
+ * A minimal textarea-shaped adapter so callers written against a real
+ * <textarea> (e.g. app.js's toolbar formatting logic) can operate on this
+ * surface unmodified: they read .value/.selectionStart/.selectionEnd, set
+ * new ones, then call dispatchEvent() to commit — mirroring the exact
+ * property-then-dispatch sequence those callers already use.
+ */
+export function asEditorProxy() {
+  const sel = getSelection();
+  return {
+    value: getValue() ?? '',
+    selectionStart: sel.from,
+    selectionEnd: sel.to,
+    dispatchEvent() { applyEdit(this.value, this.selectionStart, this.selectionEnd); },
+  };
+}

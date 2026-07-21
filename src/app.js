@@ -212,6 +212,7 @@ window.addEventListener('popstate', () => {
 // stateless with respect to the current room, so it's wired once here rather
 // than re-wired on every room join.
 UI.setFileImageResolver(getDownloadUrl);
+LiveEditor.setFileImageResolver(getDownloadUrl);
 
 function _normalizeBasePath(basePath) {
   const raw = String(basePath || '').trim();
@@ -1689,8 +1690,15 @@ function _wireEditorToolbarAndLifecycle() {
     if (!btn) return;
     e.preventDefault(); // keep editor focus
     if (!canEdit()) return;
-    if (!editor) return;
-    _applyMarkdownFormat(btn.dataset.mdAction, editor);
+    // Preview mode: the textarea is hidden, so the live surface is the only
+    // real target. Split mode: act on whichever pane currently has focus,
+    // textarea by default (matches the toolbar's pre-live-surface behaviour).
+    const useLive = LiveEditor.isMounted() && (_markdownMode === 'preview' || LiveEditor.hasFocus());
+    if (useLive) {
+      _applyMarkdownFormat(btn.dataset.mdAction, LiveEditor.asEditorProxy());
+    } else if (editor) {
+      _applyMarkdownFormat(btn.dataset.mdAction, editor);
+    }
   });
 
   // Broadcast cursor line on selection/click (throttled in presence.js at 800ms)
@@ -3102,6 +3110,13 @@ function _applyMarkdownMode(mode) {
 
   UI.setMarkdownMode(mode, () => renderMarkdown(UI.getEditorValue()), { live });
   if (_showPreview && !live) _wirePreviewClickOnce();
+
+  // Proportional scroll sync only makes sense when both panes are visible.
+  if (mode === 'split' && live) {
+    LiveEditor.wireScrollSync(document.getElementById('note-editor'));
+  } else {
+    LiveEditor.unwireScrollSync();
+  }
 }
 
 // User edits in the live surface flow back through the textarea's normal

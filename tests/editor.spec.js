@@ -109,6 +109,65 @@ test.describe('Editor', () => {
     await expect(content).not.toContainText('# Title');
   });
 
+  test('formatting toolbar acts on the live surface in preview mode', async ({ page }) => {
+    await createRoom(page);
+    await page.locator('#note-editor').fill('hello world');
+    await setEditorMode(page, 'preview');
+    const content = page.locator('#note-live .cm-content');
+    await expect(content).toBeVisible();
+
+    // Select "world" inside the live surface, then click Bold on the toolbar.
+    await content.click();
+    await page.keyboard.press('Control+End');
+    await page.keyboard.down('Shift');
+    for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowLeft');
+    await page.keyboard.up('Shift');
+
+    await page.locator('[data-md-action="bold"]').click();
+
+    await expect
+      .poll(async () => page.locator('#note-editor').inputValue())
+      .toBe('hello **world**');
+  });
+
+  test('the markdown toolbar is visible in preview mode (live surface active)', async ({ page }) => {
+    await createRoom(page);
+    await setEditorMode(page, 'preview');
+    await expect(page.locator('#note-live')).toBeVisible();
+    await expect(page.locator('#md-toolbar')).toBeVisible();
+  });
+
+  test('images render inline in the live surface instead of folding to alt text', async ({ page }) => {
+    await createRoom(page);
+    await page.locator('#note-editor').fill('![a pic](https://example.com/pic.png)\n\ntail');
+    await setEditorMode(page, 'preview');
+    const content = page.locator('#note-live .cm-content');
+    await expect(content).toBeVisible();
+    await content.click();
+    await page.keyboard.press('Control+End');
+
+    const img = page.locator('#note-live .cm-md-image');
+    await expect(img).toBeVisible();
+    await expect(img).toHaveAttribute('src', 'https://example.com/pic.png');
+    await expect(img).toHaveAttribute('alt', 'a pic');
+  });
+
+  test('split mode scroll-syncs the textarea and the live surface', async ({ page }) => {
+    await createRoom(page);
+    const longDoc = Array.from({ length: 150 }, (_, i) => `Line ${i}`).join('\n');
+    await page.locator('#note-editor').fill(longDoc);
+    await setEditorMode(page, 'split');
+
+    const editor = page.locator('#note-editor');
+    const scroller = page.locator('#note-live .cm-scroller');
+    await expect(scroller).toBeVisible();
+
+    await editor.evaluate((el) => { el.scrollTop = el.scrollHeight; el.dispatchEvent(new Event('scroll')); });
+    await expect
+      .poll(async () => scroller.evaluate((el) => el.scrollTop))
+      .toBeGreaterThan(0);
+  });
+
   test('export modal opens when export button clicked', async ({ page }) => {
     await createRoom(page);
     await page.locator('#note-editor').fill('export me');
