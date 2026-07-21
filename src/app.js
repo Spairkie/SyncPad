@@ -1498,6 +1498,70 @@ function wireEvents() {
         editor.selectionStart = editor.selectionEnd = pos + insertion.length;
       }
       editor.dispatchEvent(new Event('input', { bubbles: true }));
+      return;
+    }
+
+    // Auto-pair ( [ ` " — the unambiguous set only. Markdown's *, _ are
+    // deliberately excluded: they're used both singly (italic) and doubled
+    // (bold), so "does typing * open or close a pair" has no single correct
+    // answer the way it does for parens/brackets/backtick/quote.
+    const AUTOPAIR_OPEN_TO_CLOSE = { '(': ')', '[': ']', '`': '`', '"': '"' };
+    if (Object.prototype.hasOwnProperty.call(AUTOPAIR_OPEN_TO_CLOSE, e.key)) {
+      const start = editor.selectionStart;
+      const end   = editor.selectionEnd;
+      const closeChar = AUTOPAIR_OPEN_TO_CLOSE[e.key];
+
+      if (start !== end) {
+        // Wrap the selection instead of replacing it, and keep the original
+        // text selected — matches the toolbar's bold/italic/link wrapping.
+        e.preventDefault();
+        const selected = editor.value.slice(start, end);
+        editor.value = editor.value.slice(0, start) + e.key + selected + closeChar + editor.value.slice(end);
+        editor.selectionStart = start + 1;
+        editor.selectionEnd   = start + 1 + selected.length;
+        editor.dispatchEvent(new Event('input', { bubbles: true }));
+        return;
+      }
+
+      // ` and " are symmetric — the same character both opens and closes a
+      // pair. Typing one immediately before its own kind already sitting at
+      // the cursor means "close/skip over", not "open a new nested pair".
+      if ((e.key === '`' || e.key === '"') && editor.value[start] === e.key) {
+        e.preventDefault();
+        editor.selectionStart = editor.selectionEnd = start + 1;
+        return;
+      }
+
+      e.preventDefault();
+      editor.value = editor.value.slice(0, start) + e.key + closeChar + editor.value.slice(start);
+      editor.selectionStart = editor.selectionEnd = start + 1;
+      editor.dispatchEvent(new Event('input', { bubbles: true }));
+      return;
+    }
+
+    // ) and ] are only ever closers — skip over one already at the cursor
+    // rather than typing a second, redundant one right next to it.
+    if ((e.key === ')' || e.key === ']') && editor.selectionStart === editor.selectionEnd && editor.value[editor.selectionStart] === e.key) {
+      e.preventDefault();
+      editor.selectionStart = editor.selectionEnd = editor.selectionStart + 1;
+      return;
+    }
+
+    // Backspace right in the middle of an empty auto-inserted pair (e.g. the
+    // cursor sitting between "(" and ")" with nothing typed in between yet)
+    // removes both characters, not just the opener — otherwise every
+    // auto-paired closer left behind has to be deleted separately by hand.
+    if (e.key === 'Backspace' && editor.selectionStart === editor.selectionEnd && editor.selectionStart > 0) {
+      const pos  = editor.selectionStart;
+      const prev = editor.value[pos - 1];
+      const next = editor.value[pos];
+      if (AUTOPAIR_OPEN_TO_CLOSE[prev] === next) {
+        e.preventDefault();
+        editor.value = editor.value.slice(0, pos - 1) + editor.value.slice(pos + 1);
+        editor.selectionStart = editor.selectionEnd = pos - 1;
+        editor.dispatchEvent(new Event('input', { bubbles: true }));
+        return;
+      }
     }
   });
 

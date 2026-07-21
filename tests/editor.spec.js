@@ -77,3 +77,59 @@ test.describe('Editor', () => {
     await waitForToast(page, 'empty');
   });
 });
+
+test.describe('Editor auto-pair', () => {
+  test('typing an opening bracket/paren/quote/backtick inserts the matching closer', async ({ page }) => {
+    await createRoom(page);
+    const editor = page.locator('#note-editor');
+    await editor.fill('');
+    await editor.focus();
+    // Each press inserts a pair with the cursor left in the middle, so the
+    // next press nests inside the previous one rather than appending after it.
+    await editor.press('(');
+    await editor.press('[');
+    await editor.press('"');
+    await editor.press('`');
+    expect(await editor.inputValue()).toBe('(["``"])');
+  });
+
+  test('typing a closer right after an auto-inserted one skips over instead of duplicating', async ({ page }) => {
+    await createRoom(page);
+    const editor = page.locator('#note-editor');
+    await editor.fill('');
+    await editor.focus();
+    await editor.press('(');       // -> "()" cursor between
+    await editor.press(')');       // should skip over, not insert a second ")"
+    await editor.press('x');       // typed after skipping past the closer
+    expect(await editor.inputValue()).toBe('()x');
+  });
+
+  test('typing an opener while text is selected wraps the selection', async ({ page }) => {
+    await createRoom(page);
+    const editor = page.locator('#note-editor');
+    await editor.fill('hello');
+    await editor.focus();
+    await page.keyboard.press('Control+A');
+    await editor.press('"');
+    expect(await editor.inputValue()).toBe('"hello"');
+  });
+
+  test('backspace inside an empty auto-inserted pair removes both characters', async ({ page }) => {
+    await createRoom(page);
+    const editor = page.locator('#note-editor');
+    await editor.fill('');
+    await editor.focus();
+    await editor.press('[');       // -> "[]" cursor between
+    await editor.press('Backspace');
+    expect(await editor.inputValue()).toBe('');
+  });
+
+  test('does not interfere with normal typing of unmatched closing characters', async ({ page }) => {
+    await createRoom(page);
+    const editor = page.locator('#note-editor');
+    await editor.fill('');
+    await editor.focus();
+    await editor.pressSequentially(')) hi'); // no opener before these — plain typing
+    expect(await editor.inputValue()).toBe(')) hi');
+  });
+});
