@@ -147,6 +147,20 @@ document.addEventListener('click', (e) => {
   }
 });
 
+// The app changes the URL with history.pushState/replaceState (room joins,
+// the admin route, contact-form success, etc.) but never listens for the
+// browser's own Back/Forward buttons, which fire `popstate` without
+// reloading — so the address bar changed but every on-screen room, panel,
+// and realtime connection stayed exactly as they were. boot() is a single
+// entry point with several one-shot, order-dependent side effects (consuming
+// the PWA-resume-suppression flag, a sessionStorage 404-redirect, generating
+// a fresh room id) that isn't safe to silently re-run mid-session on an
+// arbitrary popstate. A full reload re-runs that same already-correct,
+// already-tested boot sequence against the URL the browser just navigated
+// to — the same trade-off the app already makes for "join a different room
+// by editing the URL bar and pressing Enter".
+window.addEventListener('popstate', () => location.reload());
+
 function _normalizeBasePath(basePath) {
   const raw = String(basePath || '').trim();
   if (!raw || raw === '/') return '';
@@ -1149,6 +1163,16 @@ async function refreshFiles() {
             }
           );
         } catch { UI.showToast('Could not open preview.', 'error'); }
+      },
+      onCopyLink: async (file) => {
+        try {
+          const url = await getForceDownloadUrl(file.file_path, file.filename);
+          const ok  = await copyToClipboard(url);
+          UI.showToast(
+            ok ? `Link copied — valid ~55 min.` : 'Could not copy link.',
+            ok ? 'success' : 'error',
+          );
+        } catch { UI.showToast('Could not create link.', 'error'); }
       },
     }
   );
