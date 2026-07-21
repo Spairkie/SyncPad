@@ -22,12 +22,37 @@ function requireEnv(name: string): string {
   return value;
 }
 
-function authorize(req: Request): boolean {
+/**
+ * Two independent ways to call this function:
+ *  1. The shared SYNCPAD_CLEANUP_SECRET (cron, curl, CI) — unchanged.
+ *  2. A logged-in SyncPad admin's own Supabase session, invoked from the
+ *     admin dashboard (supabase-js's functions.invoke() sends the current
+ *     session's access token as the Authorization bearer automatically).
+ *     Verified by resolving the token to a user via Auth, then checking
+ *     that user_id directly against syncpad_admins with the service-role
+ *     client — not by calling the is_syncpad_admin() RPC, which reads
+ *     auth.uid() from a PostgREST-attached JWT context this service-role
+ *     client doesn't have.
+ */
+async function authorize(req: Request, sb: SupabaseAdminClient): Promise<boolean> {
   const secret = Deno.env.get('SYNCPAD_CLEANUP_SECRET');
-  if (!secret) return false;
   const bearer = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
   const explicit = req.headers.get('x-syncpad-cleanup-secret');
-  return bearer === secret || explicit === secret;
+  if (secret && (bearer === secret || explicit === secret)) return true;
+
+  if (bearer) {
+    const { data: userData, error: userErr } = await sb.auth.getUser(bearer);
+    if (!userErr && userData?.user) {
+      const { data: adminRow } = await sb
+        .from('syncpad_admins')
+        .select('user_id')
+        .eq('user_id', userData.user.id)
+        .maybeSingle();
+      if (adminRow) return true;
+    }
+  }
+
+  return false;
 }
 
 function chunk<T>(items: T[], size: number): T[][] {
@@ -164,21 +189,7 @@ Deno.serve(async (req) => {
     return json({ error: 'POST required' }, 405);
   }
 
-  if (!authorize(req)) {
-    return json({ error: 'Unauthorized cleanup request' }, 401);
-  }
-
   try {
-    const body = await req.json().catch(() => ({})) as {
-      dryRun?: boolean;
-      mode?: CleanupMode;
-    };
-    const dryRun = body.dryRun !== false;
-    const mode = body.mode ?? 'all';
-    if (!['expired', 'orphans', 'all'].includes(mode)) {
-      return json({ error: 'mode must be "expired", "orphans", or "all"' }, 400);
-    }
-
     const sb = createClient(
       requireEnv('SUPABASE_URL'),
       requireEnv('SUPABASE_SERVICE_ROLE_KEY'),
@@ -189,6 +200,20 @@ Deno.serve(async (req) => {
         },
       },
     );
+
+    if (!(await authorize(req, sb))) {
+      return json({ error: 'Unauthorized cleanup request' }, 401);
+    }
+
+    const body = await req.json().catch(() => ({})) as {
+      dryRun?: boolean;
+      mode?: CleanupMode;
+    };
+    const dryRun = body.dryRun !== false;
+    const mode = body.mode ?? 'all';
+    if (!['expired', 'orphans', 'all'].includes(mode)) {
+      return json({ error: 'mode must be "expired", "orphans", or "all"' }, 400);
+    }
 
     const result: JsonRecord = { dryRun, mode };
     if (mode === 'expired' || mode === 'all') {
