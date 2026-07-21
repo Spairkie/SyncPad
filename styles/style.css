@@ -646,6 +646,15 @@ svg { display: block; flex-shrink: 0; }
   #note-editor { padding: 2rem max(5%, calc((100% - 800px) / 2)); font-size: 16px; }
 }
 
+/* Typewriter mode — top/bottom padding equal to half the editor's own
+   viewport height, so the caret's line can always be scrolled to center,
+   even on the first/last line. --typewriter-pad is set in ui.js from the
+   editor's actual measured clientHeight. */
+#note-editor.typewriter-mode {
+  padding-top: var(--typewriter-pad, 40vh);
+  padding-bottom: var(--typewriter-pad, 40vh);
+}
+
 /* Split mode: 1px border divider between editor and preview panes.
    The old .split-mode selector is kept as a fallback alias. */
 .editor-wrap.mode-split #note-editor,

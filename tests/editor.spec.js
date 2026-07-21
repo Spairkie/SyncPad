@@ -275,3 +275,58 @@ test.describe('Focus mode (opt-in)', () => {
     await expect(page.locator('#note-editor')).toHaveClass(/focus-mode/);
   });
 });
+
+test.describe('Typewriter mode (opt-in)', () => {
+  test('is off by default and the editor has no typewriter class', async ({ page }) => {
+    await createRoom(page);
+    const editor = page.locator('#note-editor');
+    await expect(editor).not.toHaveClass(/typewriter-mode/);
+  });
+
+  test('toggling the setting applies and removes the typewriter-mode class', async ({ page }) => {
+    await createRoom(page);
+    await openPanel(page, 'settings');
+    const btn = page.locator('#setting-typewriter-mode-btn');
+    const editor = page.locator('#note-editor');
+
+    await btn.click();
+    await expect(btn).toHaveAttribute('aria-pressed', 'true');
+    await expect(editor).toHaveClass(/typewriter-mode/);
+
+    await btn.click();
+    await expect(btn).toHaveAttribute('aria-pressed', 'false');
+    await expect(editor).not.toHaveClass(/typewriter-mode/);
+  });
+
+  test('scrolls to keep the caret line centered as it moves through a long document', async ({ page }) => {
+    await createRoom(page);
+    const editor = page.locator('#note-editor');
+    const lines = Array.from({ length: 60 }, (_, i) => `Line number ${i}`);
+    await editor.fill(lines.join('\n'));
+
+    await openPanel(page, 'settings');
+    await page.locator('#setting-typewriter-mode-btn').click();
+    await page.locator('.panel-close').first().click(); // close settings, back to the editor
+
+    await editor.focus();
+    await page.keyboard.press('Control+Home'); // caret at the very start
+    await page.waitForTimeout(50);
+    const scrollAtStart = await editor.evaluate((el) => el.scrollTop);
+
+    await page.keyboard.press('Control+End'); // caret at the very end
+    await page.waitForTimeout(50);
+    const scrollAtEnd = await editor.evaluate((el) => el.scrollTop);
+
+    expect(scrollAtEnd).toBeGreaterThan(scrollAtStart);
+  });
+
+  test('the preference persists across a page reload', async ({ page }) => {
+    await createRoom(page);
+    await openPanel(page, 'settings');
+    await page.locator('#setting-typewriter-mode-btn').click();
+    await page.reload();
+    await openPanel(page, 'settings');
+    await expect(page.locator('#setting-typewriter-mode-btn')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('#note-editor')).toHaveClass(/typewriter-mode/);
+  });
+});
