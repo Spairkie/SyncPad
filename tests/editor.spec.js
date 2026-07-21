@@ -3,7 +3,7 @@
 // split/preview mode, export actions.
 
 import { test, expect } from '@playwright/test';
-import { createRoom, openMoreMenu, setEditorMode, waitForToast } from './helpers.js';
+import { createRoom, openMoreMenu, openPanel, setEditorMode, waitForToast } from './helpers.js';
 
 test.describe('Editor', () => {
   test('displays the text area and accepts input', async ({ page }) => {
@@ -131,5 +131,90 @@ test.describe('Editor auto-pair', () => {
     await editor.focus();
     await editor.pressSequentially(')) hi'); // no opener before these — plain typing
     expect(await editor.inputValue()).toBe(')) hi');
+  });
+});
+
+test.describe('Smart punctuation (opt-in)', () => {
+  async function enableSmartPunct(page) {
+    await openPanel(page, 'settings');
+    const btn = page.locator('#setting-smart-punct-btn');
+    if ((await btn.getAttribute('aria-pressed')) !== 'true') await btn.click();
+    await expect(btn).toHaveAttribute('aria-pressed', 'true');
+  }
+
+  test('is off by default — quotes stay straight (plain auto-pair still applies) and hyphens stay literal', async ({ page }) => {
+    await createRoom(page);
+    const editor = page.locator('#note-editor');
+    await editor.fill('');
+    await editor.focus();
+    await editor.press('"');            // plain auto-pair from a separate feature: "" cursor between
+    await editor.pressSequentially('hi');
+    await editor.press('-'); await editor.press('-'); // typed inside the still-open pair — no dash conversion
+    expect(await editor.inputValue()).toBe('"hi--"');
+  });
+
+  test('converts straight double quotes to curly quotes around a word', async ({ page }) => {
+    await createRoom(page);
+    await enableSmartPunct(page);
+    const editor = page.locator('#note-editor');
+    await editor.fill('');
+    await editor.focus();
+    await editor.press('"');
+    await editor.pressSequentially('hello');
+    await editor.press('"');
+    expect(await editor.inputValue()).toBe('“hello”');
+  });
+
+  test('a contraction apostrophe becomes the closing curly form, not an opening quote', async ({ page }) => {
+    await createRoom(page);
+    await enableSmartPunct(page);
+    const editor = page.locator('#note-editor');
+    await editor.fill('don');
+    await editor.focus();
+    await page.keyboard.press('End');
+    await editor.press("'");
+    await editor.pressSequentially('t');
+    expect(await editor.inputValue()).toBe('don’t');
+  });
+
+  test('two hyphens become an en dash, three become an em dash', async ({ page }) => {
+    await createRoom(page);
+    await enableSmartPunct(page);
+    const editor = page.locator('#note-editor');
+
+    await editor.fill('a'); await page.keyboard.press('End');
+    await editor.press('-'); await editor.press('-'); await editor.pressSequentially('b');
+    expect(await editor.inputValue()).toBe('a–b');
+
+    await editor.fill('a'); await page.keyboard.press('End');
+    await editor.press('-'); await editor.press('-'); await editor.press('-'); await editor.pressSequentially('b');
+    expect(await editor.inputValue()).toBe('a—b');
+  });
+
+  test('a lone hyphen (e.g. a hyphenated word) is left alone', async ({ page }) => {
+    await createRoom(page);
+    await enableSmartPunct(page);
+    const editor = page.locator('#note-editor');
+    await editor.fill('well'); await page.keyboard.press('End');
+    await editor.press('-');
+    await editor.pressSequentially('known');
+    expect(await editor.inputValue()).toBe('well-known');
+  });
+
+  test('three periods become an ellipsis character', async ({ page }) => {
+    await createRoom(page);
+    await enableSmartPunct(page);
+    const editor = page.locator('#note-editor');
+    await editor.fill('wait'); await page.keyboard.press('End');
+    await editor.press('.'); await editor.press('.'); await editor.press('.');
+    expect(await editor.inputValue()).toBe('wait…');
+  });
+
+  test('the preference persists across a page reload', async ({ page }) => {
+    await createRoom(page);
+    await enableSmartPunct(page);
+    await page.reload();
+    await openPanel(page, 'settings');
+    await expect(page.locator('#setting-smart-punct-btn')).toHaveAttribute('aria-pressed', 'true');
   });
 });
