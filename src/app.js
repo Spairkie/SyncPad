@@ -819,6 +819,13 @@ async function startApp() {
       setDeviceName(name);
       updatePresenceDeviceName(getDeviceName());
     });
+    // Render remote collaborators' carets in the live surface (no-op when
+    // it isn't mounted).
+    LiveEditor.setRemoteCursors(
+      devices
+        .filter((d) => !d.isMe && typeof d.cursor_pos === 'number')
+        .map((d) => ({ id: d.device_id, name: d.device_name, pos: d.cursor_pos })),
+    );
   }, { readOnly: _isReadOnly });
 
   _unsubRoom = subscribeToRoom(_roomId, async ({ event, room }) => {
@@ -1692,7 +1699,7 @@ function _wireEditorToolbarAndLifecycle() {
     const pos    = editor.selectionStart;
     const before = editor.value.substring(0, pos);
     const line   = (before.match(/\n/g) || []).length + 1;
-    setCursorLine(line);
+    setCursorLine(line, pos);
     UI.refreshFocusMode(); // no-op unless focus mode is on
     UI.refreshTypewriterMode(); // no-op unless typewriter mode is on
   };
@@ -3081,6 +3088,7 @@ function _applyMarkdownMode(mode) {
         if (!LiveEditor.isMounted()) {
           LiveEditor.mount(container, UI.getEditorValue(), {
             onChange: _onLiveEditorChange,
+            onCursorActivity: _onLiveCursorActivity,
             readOnly: !canEdit(),
           });
         } else {
@@ -3104,6 +3112,15 @@ function _onLiveEditorChange(text) {
   if (!editor || !canEdit()) return;
   editor.value = text;
   editor.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+// Cursor movement in the live surface broadcasts the same presence payload
+// the textarea's keyup/mouseup path does — line for the devices list,
+// precise offset for in-text remote carets.
+function _onLiveCursorActivity(pos) {
+  const before = UI.getEditorValue().slice(0, pos);
+  const line   = (before.match(/\n/g) || []).length + 1;
+  setCursorLine(line, pos);
 }
 
 function _refreshPreviewIfActive() {
