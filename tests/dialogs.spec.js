@@ -156,6 +156,38 @@ test.describe('Toast wraps long messages', () => {
   });
 });
 
+// ── Stacking on top of full-screen overlays (admin dashboard, loading screen) ──
+
+test.describe('Shared dialogs stack above the admin screen', () => {
+  test('showConfirm renders above #admin-screen and is the actual click target', async ({ page }) => {
+    await page.goto('/SyncPad/admin');
+    await page.waitForSelector('#admin-screen:not(.hidden)', { timeout: 10_000 });
+
+    await page.evaluate(async () => {
+      const { showConfirm } = await import('/SyncPad/src/ui.js');
+      showConfirm('Run server-side cleanup to delete all expired rooms?', { confirmLabel: 'Run cleanup' });
+    });
+    await page.waitForSelector('#sp-confirm-modal.visible', { timeout: 5000 });
+
+    const stacking = await page.evaluate(() => {
+      const admin = document.getElementById('admin-screen');
+      const modal = document.getElementById('sp-confirm-modal');
+      const okBtn = document.getElementById('sp-confirm-ok');
+      const rect = okBtn.getBoundingClientRect();
+      const topEl = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      return {
+        adminZ: Number(getComputedStyle(admin).zIndex),
+        modalZ: Number(getComputedStyle(modal).zIndex),
+        okBtnIsClickTarget: topEl === okBtn || okBtn.contains(topEl),
+      };
+    });
+    expect(stacking.modalZ).toBeGreaterThan(stacking.adminZ);
+    expect(stacking.okBtnIsClickTarget).toBe(true);
+
+    await page.evaluate(() => document.getElementById('sp-confirm-cancel').click());
+  });
+});
+
 // ── Modal focus trapping (A-2) ─────────────────────────────────────────────────
 
 test.describe('Confirm modal focus trap (A-2)', () => {

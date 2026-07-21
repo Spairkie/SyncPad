@@ -35,13 +35,49 @@ const HR_RE = /^(?:-[ \t]*){3,}$|^(?:\*[ \t]*){3,}$|^(?:_[ \t]*){3,}$/;
 /**
  * Render Markdown to safe HTML.
  * @param {string} src
+ * @param {object} [_parentCtx] internal — lets blockquote's recursive call
+ *   share this document's checkbox counter and heading-id registry instead
+ *   of starting fresh. Not part of the public API; callers should never pass it.
  * @returns {string} sanitized HTML
  */
-export function renderMarkdown(src) {
+export function renderMarkdown(src, _parentCtx) {
   if (!src) return '';
-  const ctx = { cbCounter: 0, headingSlugs: new Map() };
+  const ctx = _parentCtx || { cbCounter: 0, headingIds: new Set() };
   const blocks = _splitBlocks(String(src));
   return blocks.map((b) => _renderBlock(b, ctx)).join('\n');
+}
+
+/**
+ * Like renderMarkdown(), but also returns the flat list of headings
+ * encountered (including inside blockquotes), with the exact same ids the
+ * rendered HTML's <h1>-<h6> elements carry — for building a table of
+ * contents outside the live preview (e.g. exported/printed HTML), where
+ * ui.js's DOM-scanning _injectTocNav() has no live preview element to scan.
+ * @param {string} src
+ * @returns {{ html: string, headings: Array<{level:number,id:string,text:string}> }}
+ */
+export function renderMarkdownWithToc(src) {
+  const ctx = { cbCounter: 0, headingIds: new Set(), headings: [] };
+  const html = renderMarkdown(src, ctx);
+  return { html, headings: ctx.headings };
+}
+
+/**
+ * Build a standalone "Contents" nav from a headings list (as returned by
+ * renderMarkdownWithToc). Returns '' for fewer than two headings, matching
+ * the live preview's own threshold for showing a TOC at all.
+ * @param {Array<{level:number,id:string,text:string}>} headings
+ * @returns {string} sanitized HTML
+ */
+export function renderTocHtml(headings) {
+  if (!headings || headings.length < 2) return '';
+  const items = headings.map((h) =>
+    `<li style="margin:0.3em 0;padding-left:${(Math.max(1, h.level) - 1) * 0.9}em"><a href="#${h.id}">${escapeHtml(h.text)}</a></li>`
+  ).join('');
+  return `<nav aria-label="Table of contents" style="border:1px solid #ddd;border-radius:8px;background:#f7f7f7;padding:0.8em 1em;margin:0 0 1.4em;font-size:0.9em">
+<strong>Contents</strong>
+<ul style="list-style:none;margin:0.6em 0 0;padding:0">${items}</ul>
+</nav>`;
 }
 
 /**
@@ -178,9 +214,12 @@ function _splitBlocks(src) {
  * Derive a stable, URL-safe id for a heading so it can be jumped to (e.g. by
  * a table-of-contents link). Strips inline markup markers first so
  * "**Setup**" and "Setup" produce the same slug. Duplicate headings within
- * the same document get -2, -3, … suffixes via the shared `seen` map.
+ * the same document get -1, -2, … suffixes; `usedIds` tracks every id
+ * actually emitted so far (not just base-text counts) so a heading whose own
+ * text collides with an already-generated suffix — e.g. "foo", "foo-1",
+ * "foo" — still gets a unique id instead of colliding with the real "foo-1".
  */
-function _slugifyHeading(text, seen) {
+function _slugifyHeading(text, usedIds) {
   const base = String(text)
     .replace(/[*_`~]/g, '')
     .toLowerCase()
@@ -188,9 +227,11 @@ function _slugifyHeading(text, seen) {
     .replace(/[^a-z0-9\s-]/g, '')
     .replace(/\s+/g, '-')
     .replace(/-+/g, '-') || 'section';
-  const count = seen.get(base) || 0;
-  seen.set(base, count + 1);
-  return count === 0 ? base : `${base}-${count}`;
+  let id = base;
+  let n = 1;
+  while (usedIds.has(id)) { id = `${base}-${n}`; n++; }
+  usedIds.add(id);
+  return id;
 }
 
 // ── Block renderers ──────────────────────────────────────────────────────────
@@ -198,7 +239,8 @@ function _slugifyHeading(text, seen) {
 function _renderBlock(block, ctx) {
   switch (block.type) {
     case 'heading': {
-      const id = _slugifyHeading(block.text, ctx.headingSlugs);
+      const id = _slugifyHeading(block.text, ctx.headingIds);
+      ctx.headings?.push({ level: block.level, id, text: block.text.replace(/[*_`~]/g, '') });
       return `<h${block.level} id="${id}">${_renderInline(block.text)}</h${block.level}>`;
     }
 
@@ -209,8 +251,10 @@ function _renderBlock(block, ctx) {
       return _renderListTree(block.items, ctx);
 
     case 'blockquote':
-      // Recursively render the quoted content so nested headings/lists work
-      return `<blockquote>${renderMarkdown(block.text)}</blockquote>`;
+      // Recursively render the quoted content so nested headings/lists work,
+      // sharing this document's ctx so checkbox indices and heading ids stay
+      // unique across the whole document instead of restarting inside the quote.
+      return `<blockquote>${renderMarkdown(block.text, ctx)}</blockquote>`;
 
     case 'hr':
       return `<hr>`;

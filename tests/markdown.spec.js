@@ -173,4 +173,48 @@ test.describe('Markdown preview', () => {
     expect(await checkboxes.nth(0).isChecked()).toBe(false);
     expect(await checkboxes.nth(1).isChecked()).toBe(true);
   });
+
+  test('headings get unique ids for the table of contents', async ({ page }) => {
+    const preview = await withPreview(page, '# Intro\n\n## Setup\n\n## Setup\n\n### Deep bit');
+    const ids = await preview.locator('h1, h2, h3').evaluateAll((els) => els.map((e) => e.id));
+    expect(ids).toEqual(['intro', 'setup', 'setup-1', 'deep-bit']);
+  });
+
+  test('a heading whose text matches an auto-generated suffix still gets a unique id', async ({ page }) => {
+    // "foo", "foo-1", "foo" must not collide on the real "foo-1" heading.
+    const preview = await withPreview(page, '# foo\n\n## foo-1\n\n### foo');
+    const ids = await preview.locator('h1, h2, h3').evaluateAll((els) => els.map((e) => e.id));
+    expect(new Set(ids).size).toBe(3);
+    expect(ids).toEqual(['foo', 'foo-1', 'foo-2']);
+  });
+
+  test('headings inside a blockquote share the document-level id registry', async ({ page }) => {
+    const preview = await withPreview(page, '# Setup\n\n> # Setup');
+    const ids = await preview.locator('h1').evaluateAll((els) => els.map((e) => e.id));
+    expect(new Set(ids).size).toBe(2);
+    expect(ids).toEqual(['setup', 'setup-1']);
+  });
+
+  test('checkbox indices stay unique across a blockquote boundary', async ({ page }) => {
+    const preview = await withPreview(page, '- [ ] outer\n\n> - [ ] inner');
+    const indices = await preview.locator('input[type="checkbox"]')
+      .evaluateAll((els) => els.map((e) => e.dataset.cbIndex));
+    expect(indices).toEqual(['0', '1']);
+  });
+});
+
+test.describe('Table of contents', () => {
+  test('shows a Contents nav for notes with 2+ headings, linking to each one', async ({ page }) => {
+    const preview = await withPreview(page, '# Intro\n\n## Setup\n\n### Deep bit');
+    const toc = preview.locator('.note-toc');
+    await expect(toc).toBeVisible();
+    const links = toc.locator('a');
+    expect(await links.count()).toBe(3);
+    await expect(links.nth(2)).toHaveAttribute('href', '#deep-bit');
+  });
+
+  test('omits the Contents nav for notes with fewer than 2 headings', async ({ page }) => {
+    const preview = await withPreview(page, '# Just one heading\n\nSome text.');
+    await expect(preview.locator('.note-toc')).toHaveCount(0);
+  });
 });
