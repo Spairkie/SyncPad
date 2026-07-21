@@ -727,7 +727,9 @@ svg { display: block; flex-shrink: 0; }
 @media (min-width: 768px) {
   .note-live { padding: 2rem max(5%, calc((100% - 800px) / 2)); font-size: 16px; }
 }
-.editor-wrap.mode-split .note-live { border-left: 1px solid var(--border); }
+/* No border-left here: #note-editor already carries the split divider via
+   its border-right, and doubling them reads as a 2px line. */
+.note-live.monospace { font-family: var(--font-mono); font-size: 14px; }
 .note-preview h1,.note-preview h2,.note-preview h3,
 .note-preview h4,.note-preview h5,.note-preview h6 { margin: 1.2em 0 0.5em; line-height: 1.25; }
 .note-preview h1 { font-size: 1.6em; font-weight: 600; border-bottom: 1px solid var(--border); padding-bottom: 0.3em; }
@@ -1662,6 +1664,7 @@ body.lock-mode .note-preview li.md-task input[type="checkbox"] { cursor: not-all
   .header-room .room-name { max-width: 120px; }
   #note-editor { padding: 16px; font-size: 15px; }
   .note-preview { padding: 16px; font-size: 15px; }
+  .note-live { padding: 16px; font-size: 15px; }
   .side-panel { width: 100vw; max-width: 100vw; }
   .auth-card { padding: 28px 20px; }
   .tools-grid { grid-template-columns: 1fr 1fr 1fr; }
@@ -2371,6 +2374,7 @@ kbd {
      are visually identical. max-width lives only on .editor-wrap, not here. */
   #note-editor  { padding: 36px max(5%, calc((100% - 800px) / 2)) 120px; }
   .note-preview { padding: 36px max(5%, calc((100% - 800px) / 2)) 36px; }
+  .note-live    { padding: 36px max(5%, calc((100% - 800px) / 2)) 36px; }
 }
 
 .empty-state {

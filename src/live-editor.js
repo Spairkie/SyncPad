@@ -14,7 +14,8 @@ import {
   EditorState, EditorView, Compartment, Annotation,
   keymap, drawSelection, placeholder,
   defaultKeymap, history, historyKeymap, indentWithTab,
-  markdown, markdownLanguage,
+  markdown, markdownLanguage, markdownKeymap,
+  closeBrackets, closeBracketsKeymap,
   syntaxHighlighting, HighlightStyle, tags,
   ViewPlugin, Decoration, WidgetType, syntaxTree,
   StateField, StateEffect,
@@ -329,7 +330,11 @@ export function mount(container, initialValue, { onChange, onCursorActivity, rea
       extensions: [
         history(),
         drawSelection(),
-        keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
+        // Editing parity with the Write textarea's smart behaviours:
+        // markdownKeymap continues lists on Enter and deletes markup on
+        // Backspace; closeBrackets auto-pairs brackets/quotes.
+        closeBrackets(),
+        keymap.of([...closeBracketsKeymap, ...markdownKeymap, ...defaultKeymap, ...historyKeymap, indentWithTab]),
         markdown({ base: markdownLanguage }),
         syntaxHighlighting(_mdHighlight),
         _seamless,
@@ -377,9 +382,19 @@ export function destroy() {
 export function syncFromText(text) {
   if (!_view) return;
   const current = _view.state.doc.toString();
-  if (current === (text ?? '')) return;
+  const next = text ?? '';
+  if (current === next) return;
+  // Apply the smallest single-range change (common prefix/suffix trim)
+  // rather than replacing the whole doc — this keeps the surface's own
+  // cursor, scroll position, and undo granularity intact when the change
+  // came from typing in the split-mode textarea.
+  let start = 0;
+  const minLen = Math.min(current.length, next.length);
+  while (start < minLen && current.charCodeAt(start) === next.charCodeAt(start)) start++;
+  let endCur = current.length, endNext = next.length;
+  while (endCur > start && endNext > start && current.charCodeAt(endCur - 1) === next.charCodeAt(endNext - 1)) { endCur--; endNext--; }
   _view.dispatch({
-    changes: { from: 0, to: current.length, insert: text ?? '' },
+    changes: { from: start, to: endCur, insert: next.slice(start, endNext) },
     annotations: External.of(true),
   });
 }
