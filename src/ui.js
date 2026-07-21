@@ -412,6 +412,7 @@ export function renderFilesList(files, onDownload, onDelete, opts = {}) {
   const canDelete         = opts.canDelete         !== false;
   const canDownload       = opts.canDownload       !== false;
   const onPreview         = opts.onPreview         || null;
+  const onCopyLink        = opts.onCopyLink        || null;
   const selectMode        = !!opts.selectMode;
   const selectedIds       = opts.selectedIds        || new Set();
   const onSelectionChange = opts.onSelectionChange  || null;
@@ -428,6 +429,7 @@ export function renderFilesList(files, onDownload, onDelete, opts = {}) {
       </div>
       <div class="file-actions">
         ${(!selectMode && canDownload && onPreview) ? `<button class="file-action-btn preview" title="Preview ${escapeHtml(file.filename)}" aria-label="Preview ${escapeHtml(file.filename)}">${getIcon('eye', 15)}</button>` : ''}
+        ${(!selectMode && canDownload && onCopyLink) ? `<button class="file-action-btn copy-link" title="Copy link to ${escapeHtml(file.filename)}" aria-label="Copy link to ${escapeHtml(file.filename)}">${getIcon('link', 15)}</button>` : ''}
         ${(!selectMode && canDownload) ? `<button class="file-action-btn download" title="Download ${escapeHtml(file.filename)}" aria-label="Download ${escapeHtml(file.filename)}">${getIcon('download', 15)}</button>` : ''}
         ${(!selectMode && canDelete) ? `<button class="file-action-btn delete" title="Delete ${escapeHtml(file.filename)}" aria-label="Delete ${escapeHtml(file.filename)}">${getIcon('trash', 15)}</button>` : ''}
       </div>`;
@@ -443,6 +445,13 @@ export function renderFilesList(files, onDownload, onDelete, opts = {}) {
     }
     if (!selectMode) {
       if (canDownload && onPreview) item.querySelector('.preview').addEventListener('click', () => onPreview(file));
+      if (canDownload && onCopyLink) {
+        const copyBtn = item.querySelector('.copy-link');
+        copyBtn.addEventListener('click', async () => {
+          copyBtn.disabled = true;
+          try { await onCopyLink(file); } finally { copyBtn.disabled = false; }
+        });
+      }
       const dlBtn = canDownload ? item.querySelector('.download') : null;
       if (dlBtn) {
         dlBtn.addEventListener('click', async () => {

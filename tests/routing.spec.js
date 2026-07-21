@@ -81,9 +81,32 @@ test.describe('URL routing', () => {
     await page.locator('.landing-create-btn').click();
     await page.waitForSelector('#app-screen:not(.hidden)', { timeout: 15_000 });
     await page.goBack();
-    // Should return to landing or the previous page
-    await page.waitForTimeout(1000);
-    const url = page.url();
-    expect(url).toContain('/SyncPad/');
+    // Actually re-routes back to the landing screen, not just a URL-bar
+    // change with the app screen still frozen on-screen underneath it.
+    await page.waitForSelector('#landing-screen:not(.hidden)', { timeout: 5000 });
+    expect(page.url()).toContain('/SyncPad/');
+  });
+
+  test('browser Back/Forward triggers a real re-route via popstate (no Supabase needed)', async ({ page }) => {
+    const navigations = [];
+    page.on('framenavigated', (frame) => { if (frame === page.mainFrame()) navigations.push(frame.url()); });
+
+    await page.goto('/SyncPad/');
+    await page.waitForSelector('#landing-screen:not(.hidden)');
+    await page.evaluate(() => { window.__routingTestMarker = true; });
+    navigations.length = 0;
+
+    // A pushState-only URL change (what joining a room does) followed by
+    // browser Back must produce a real re-route, not a silently-stale screen.
+    await page.evaluate(() => history.pushState(null, '', '/SyncPad/some-fake-room-for-routing-test'));
+    await page.goBack();
+    await page.waitForTimeout(1000); // let the popstate-triggered reload settle
+
+    // A genuine reload creates a fresh JS realm — the marker set before it
+    // must be gone, and the frame must have navigated again after Back
+    // (not just the single same-document transition goBack() itself causes).
+    const markerGone = await page.evaluate(() => typeof window.__routingTestMarker === 'undefined');
+    expect(markerGone).toBe(true);
+    expect(navigations.length).toBeGreaterThanOrEqual(2);
   });
 });

@@ -6,7 +6,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test, expect } from '@playwright/test';
-import { createRoom, openPanel, waitForToast } from './helpers.js';
+import { createRoom, goToLanding, openPanel, waitForToast } from './helpers.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixture = (name) => path.join(__dirname, 'fixtures', name);
@@ -65,5 +65,59 @@ test.describe('File uploads', () => {
     ]);
 
     expect(download.suggestedFilename()).toBe(originalName);
+  });
+
+  test('copying a file link puts a URL on the clipboard', async ({ page, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    await createRoom(page);
+    await openPanel(page, 'files');
+
+    await page.locator('#file-input').setInputFiles([fixture('sample-a.txt')]);
+    await waitForToast(page, /uploaded/i);
+
+    const fileItem = page.locator('.file-item', { hasText: 'sample-a.txt' });
+    await fileItem.locator('.file-action-btn.copy-link').click();
+    await waitForToast(page, /link copied/i);
+
+    const clipboardText = await page.evaluate(() => navigator.clipboard.readText());
+    expect(clipboardText).toMatch(/^https?:\/\//);
+  });
+});
+
+// ── Copy-link rendering (no Supabase dependency) ────────────────────────────────
+
+test.describe('File list copy-link action', () => {
+  test('renders a copy-link button per file that invokes onCopyLink', async ({ page }) => {
+    await goToLanding(page);
+    const result = await page.evaluate(async () => {
+      const ui = await import('/SyncPad/src/ui.js');
+      document.getElementById('files-panel').classList.add('open');
+      let copied = null;
+      ui.renderFilesList(
+        [{ id: 1, filename: 'report.pdf', mime_type: 'application/pdf', file_size: 1024, uploaded_at: new Date().toISOString() }],
+        async () => {}, async () => {},
+        { canDownload: true, canDelete: true, onPreview: async () => {}, onCopyLink: async (f) => { copied = f.filename; } },
+      );
+      document.querySelector('.file-action-btn.copy-link').click();
+      await new Promise((r) => setTimeout(r, 0));
+      return { buttonCount: document.querySelectorAll('.file-action-btn').length, copied };
+    });
+    expect(result.buttonCount).toBe(4); // preview, copy-link, download, delete
+    expect(result.copied).toBe('report.pdf');
+  });
+
+  test('omits the copy-link button when downloads are disabled', async ({ page }) => {
+    await goToLanding(page);
+    const hasCopyLinkBtn = await page.evaluate(async () => {
+      const ui = await import('/SyncPad/src/ui.js');
+      document.getElementById('files-panel').classList.add('open');
+      ui.renderFilesList(
+        [{ id: 1, filename: 'report.pdf', mime_type: 'application/pdf', file_size: 1024, uploaded_at: new Date().toISOString() }],
+        async () => {}, async () => {},
+        { canDownload: false, canDelete: true, onCopyLink: async () => {} },
+      );
+      return !!document.querySelector('.file-action-btn.copy-link');
+    });
+    expect(hasCopyLinkBtn).toBe(false);
   });
 });
