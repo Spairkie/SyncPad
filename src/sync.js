@@ -17,13 +17,18 @@
 //   Read-only / locked clients never trigger saves or typing broadcasts.
 
 import { saveContent }           from './rooms.js';
+import { saveRevision }          from './revisions.js';
 import { broadcastTyping, broadcastLiveContent, LIVE_CONTENT_BROADCAST_MAX_CHARS } from './live-broadcast.js';
 import { saveDraft, clearDraft } from './offline.js';
 import { debounce, getDeviceId } from './utils.js';
 import { canEdit, canBroadcastTyping, canBroadcastLiveContent, canReceiveLiveContent, getPermissionContext } from './permissions.js';
 
-const IDLE_THRESHOLD_MS = 3000;
-const SAVE_DEBOUNCE_MS  = 1000;
+const IDLE_THRESHOLD_MS     = 3000;
+const SAVE_DEBOUNCE_MS      = 1000;
+// Version-history snapshots are throttled independently of the 1 s save
+// debounce — one snapshot per this interval of active editing is plenty to
+// browse history without a revision row on every keystroke pause.
+const SNAPSHOT_THROTTLE_MS  = 2 * 60 * 1000;
 
 // ── Module state ──────────────────────────────────────────────────────────────
 
@@ -41,6 +46,7 @@ let _pendingRemoteContent      = null;
 let _pendingRemoteTimestamp    = null;
 let _applyingRemote            = false;
 let _seqNum                    = 0;
+let _lastSnapshotAt            = 0;
 
 // ── Init / Destroy ────────────────────────────────────────────────────────────
 
@@ -59,6 +65,7 @@ export function initSync(opts) {
   _pendingRemoteTimestamp    = null;
   _applyingRemote            = false;
   _seqNum                    = 0;
+  _lastSnapshotAt            = 0;
 }
 
 export function setEncryption(encryptFn, decryptFn) {
@@ -135,10 +142,37 @@ const _debouncedSave = debounce(async () => {
     await saveContent(_roomId, content);
     clearDraft(_roomId);
     _onStatusChange('saved');
+    _maybeSnapshot(content);
   } catch {
     _onStatusChange('error');
   }
 }, SAVE_DEBOUNCE_MS);
+
+// Version-history snapshot, throttled to SNAPSHOT_THROTTLE_MS. Best-effort —
+// a failed snapshot must never surface as a save error to the user, since the
+// durable room content already saved successfully above.
+function _maybeSnapshot(content) {
+  const now = Date.now();
+  if (now - _lastSnapshotAt < SNAPSHOT_THROTTLE_MS) return;
+  _lastSnapshotAt = now;
+  saveRevision(_roomId, content).catch(() => {});
+}
+
+/**
+ * Explicit, non-throttled snapshot of the editor's current content — call
+ * right before a destructive action (Clear note, Start New / view-once
+ * reset, template replace/append) so the pre-change content is preserved in
+ * history even if the periodic throttle window hasn't elapsed yet.
+ */
+export async function snapshotBeforeDestructiveChange() {
+  if (!_roomId) return;
+  try {
+    let content = _getEditorVal();
+    if (_encryptFn) content = await _encryptFn(content);
+    await saveRevision(_roomId, content);
+    _lastSnapshotAt = Date.now();
+  } catch { /* best-effort */ }
+}
 
 // ── Remote: broadcast typing from another device ──────────────────────────────
 
