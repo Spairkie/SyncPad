@@ -296,9 +296,52 @@ export function initFooterClock() {
 
 // ── Devices list (presence panel) ─────────────────────────────────────────────
 
+// Tracks other devices' state across renders so join/leave/started-typing
+// transitions can be announced to screen readers. null means "not primed for
+// this room yet" — the first render after joining seeds this without
+// announcing anything, since devices already in the room aren't "joining"
+// from this user's perspective. Reset on room navigation via resetPresenceAnnouncer().
+let _prevDeviceStates = null;
+
+/** Must be called on room navigation so a new room's first render doesn't
+ *  announce its already-present devices as having just joined. */
+export function resetPresenceAnnouncer() {
+  _prevDeviceStates = null;
+}
+
+function _announcePresenceChanges(devices, myDeviceId) {
+  const region = document.getElementById('presence-live-region');
+  const others = devices.filter(d => d.device_id && d.device_id !== myDeviceId);
+  const nextStates = new Map();
+
+  if (_prevDeviceStates === null) {
+    others.forEach(d => nextStates.set(d.device_id, { typing: !!d.typing, name: d.device_name || 'A device' }));
+    _prevDeviceStates = nextStates;
+    return;
+  }
+
+  const messages = [];
+  others.forEach((d) => {
+    const name = d.device_name || 'A device';
+    const prev = _prevDeviceStates.get(d.device_id);
+    // Per-keystroke cursor-line movement is deliberately not announced here —
+    // only join/leave/started-typing, or a live region would fire constantly.
+    if (!prev) messages.push(`${name} joined.`);
+    else if (!prev.typing && d.typing) messages.push(`${name} started typing.`);
+    nextStates.set(d.device_id, { typing: !!d.typing, name });
+  });
+  _prevDeviceStates.forEach((prev, id) => {
+    if (!nextStates.has(id)) messages.push(`${prev.name} left.`);
+  });
+
+  _prevDeviceStates = nextStates;
+  if (region && messages.length) region.textContent = messages.join(' ');
+}
+
 export function renderDevicesList(devices, myDeviceId, onNameChange) {
   const list = document.getElementById('devices-list');
   if (!list) return;
+  _announcePresenceChanges(devices, myDeviceId);
   list.setAttribute('role', 'list');
   list.innerHTML = '';
   if (!devices.length) {
@@ -426,16 +469,58 @@ export function setUploadingState(uploading, label = 'Uploading…') {
 // ── Panels ────────────────────────────────────────────────────────────────────
 
 const PANEL_IDS = ['tools-panel', 'files-panel', 'presence-panel', 'settings-panel', 'search-panel'];
+const FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+// Unlike every modal dialog, side panels didn't move focus into themselves
+// or trap Tab within them — a keyboard/screen-reader user opening Files or
+// Settings stayed focused on whatever button they just clicked, with no
+// indication focus had moved anywhere. Tracks the trap's cleanup + the
+// triggering element so closeAllPanels() can tear it down and hand focus back.
+let _panelFocusTrap = null;
+
+function _panelFocusables(panel) {
+  return Array.from(panel.querySelectorAll(FOCUSABLE_SELECTOR))
+    .filter(el => el.offsetParent !== null);
+}
 
 export function openPanel(id) {
+  const trigger = document.activeElement;
   closeAllPanels();
-  document.getElementById(id)?.classList.add('open');
+  const panel = document.getElementById(id);
+  if (!panel) return;
+  panel.classList.add('open');
   document.getElementById('panel-backdrop')?.classList.add('visible');
+
+  const onKey = (e) => {
+    if (e.key !== 'Tab') return;
+    const items = _panelFocusables(panel);
+    if (!items.length) return;
+    const first = items[0];
+    const last  = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault(); last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault(); first.focus();
+    }
+  };
+  document.addEventListener('keydown', onKey);
+  _panelFocusTrap = { trigger, onKey };
+
+  requestAnimationFrame(() => {
+    const items = _panelFocusables(panel);
+    (items[0] || panel).focus();
+  });
 }
 
 export function closeAllPanels() {
   PANEL_IDS.forEach(p => document.getElementById(p)?.classList.remove('open'));
   document.getElementById('panel-backdrop')?.classList.remove('visible');
+  if (_panelFocusTrap) {
+    document.removeEventListener('keydown', _panelFocusTrap.onKey);
+    const { trigger } = _panelFocusTrap;
+    _panelFocusTrap = null;
+    if (trigger?.focus && document.body.contains(trigger)) trigger.focus();
+  }
 }
 
 export function togglePanel(id) {

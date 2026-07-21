@@ -45,6 +45,35 @@ test.describe('Accessibility & keyboard', () => {
     expect(role).toBe('list');
   });
 
+  test('opening a side panel moves focus into it and marks it as a dialog', async ({ page }) => {
+    await createRoom(page);
+    await page.locator('#btn-files').focus();
+    await openPanel(page, 'files');
+    const panel = page.locator('#files-panel');
+    await expect(panel).toHaveAttribute('role', 'dialog');
+    await expect(panel).toHaveAttribute('aria-modal', 'true');
+    const focusedInPanel = await panel.evaluate((el) => el.contains(document.activeElement));
+    expect(focusedInPanel).toBe(true);
+  });
+
+  test('closing a side panel restores focus to the button that opened it', async ({ page }) => {
+    await createRoom(page);
+    const trigger = page.locator('#btn-settings');
+    await trigger.focus();
+    await openPanel(page, 'settings');
+    await page.locator('#settings-panel .panel-close').click();
+    await expect(page.locator('#settings-panel')).not.toHaveClass(/open/);
+    await expect(trigger).toBeFocused();
+  });
+
+  test('presence panel has a screen-reader-only live region for join/leave/typing', async ({ page }) => {
+    await createRoom(page);
+    await openPanel(page, 'presence');
+    const region = page.locator('#presence-live-region');
+    await expect(region).toHaveAttribute('aria-live', 'polite');
+    await expect(region).toHaveClass(/sr-only/);
+  });
+
   test('custom confirm modal accessible: has role=dialog and aria-modal', async ({ page }) => {
     // Confirm modal only needs the SyncPad app loaded — goToLanding avoids
     // the Supabase room-creation call that createRoom() requires.

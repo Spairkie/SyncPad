@@ -485,7 +485,7 @@
 <div class="panel-backdrop" id="panel-backdrop"></div>
 
 <!-- Tools panel -->
-<div class="side-panel" id="tools-panel">
+<div class="side-panel" id="tools-panel" role="dialog" aria-modal="true">
   <div class="panel-header">
     <h3>Tools</h3>
     <button class="panel-close" aria-label="Close">
@@ -570,7 +570,7 @@
 </div>
 
 <!-- Files panel -->
-<div class="side-panel" id="files-panel">
+<div class="side-panel" id="files-panel" role="dialog" aria-modal="true">
   <div class="panel-header">
     <h3>Files</h3>
     <div class="panel-header-actions">
@@ -621,7 +621,7 @@
 </div>
 
 <!-- Presence / Devices panel -->
-<div class="side-panel" id="presence-panel">
+<div class="side-panel" id="presence-panel" role="dialog" aria-modal="true">
   <div class="panel-header">
     <h3>Connected Devices</h3>
     <button class="panel-close" aria-label="Close">
@@ -633,11 +633,15 @@
     <p class="devices-help-text">
       Tap your device name to rename how you appear in this room.
     </p>
+    <!-- Screen-reader-only channel for presence changes (join/leave/typing).
+         Kept separate from #devices-list itself so per-keystroke cursor-line
+         updates don't spam an aria-live region on every render. -->
+    <div id="presence-live-region" class="sr-only" role="status" aria-live="polite"></div>
   </div>
 </div>
 
 <!-- Settings panel -->
-<div class="side-panel" id="settings-panel">
+<div class="side-panel" id="settings-panel" role="dialog" aria-modal="true">
   <div class="panel-header">
     <h3>Settings</h3>
     <button class="panel-close" aria-label="Close">
@@ -896,7 +900,7 @@
 </div>
 
 <!-- Search panel -->
-<div class="side-panel" id="search-panel">
+<div class="side-panel" id="search-panel" role="dialog" aria-modal="true">
   <div class="panel-header">
     <h3>Find &amp; Replace</h3>
     <button class="panel-close" aria-label="Close">
