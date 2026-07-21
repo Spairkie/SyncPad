@@ -475,9 +475,56 @@ export function setUploadingState(uploading, label = 'Uploading…') {
   if (textEl && uploading) textEl.textContent = label;
 }
 
+// ── Version history ──────────────────────────────────────────────────────────
+
+export function setHistoryLoading(loading) {
+  document.getElementById('history-loading')?.classList.toggle('hidden', !loading);
+}
+
+/**
+ * `revisions` items: { id, created_at, device_id, _preview }, where _preview
+ * is the caller's already-decrypted (or plaintext) snippet — null if it
+ * couldn't be decrypted (shown as a locked placeholder) — and the id is
+ * passed back to onRestore untouched so the caller can look up the full
+ * (still-encrypted-if-applicable) content to restore.
+ */
+export function renderHistoryList(revisions, onRestore, opts = {}) {
+  const list  = document.getElementById('history-list');
+  const empty = document.getElementById('history-empty');
+  if (!list) return;
+  list.setAttribute('role', 'list');
+  list.innerHTML = '';
+  if (!revisions?.length) { empty?.classList.remove('hidden'); return; }
+  empty?.classList.add('hidden');
+  const canRestore = opts.canRestore !== false;
+  const thisDeviceId = opts.deviceId || null;
+
+  revisions.forEach((rev) => {
+    const item = document.createElement('div');
+    item.className = 'history-item';
+    item.setAttribute('role', 'listitem');
+    const isThisDevice = thisDeviceId && rev.device_id === thisDeviceId;
+    const preview = rev._preview == null
+      ? '<span class="history-preview-locked">🔒 Encrypted — open with the passphrase to preview</span>'
+      : escapeHtml((rev._preview || '').replace(/\s+/g, ' ').trim().slice(0, 140)) || '<span class="history-preview-empty">(empty note)</span>';
+    item.innerHTML = `
+      <div class="history-info">
+        <div class="history-meta">${formatTimestamp(rev.created_at)}${isThisDevice ? ' · this device' : ''}</div>
+        <div class="history-preview">${preview}</div>
+      </div>
+      <div class="history-actions">
+        ${canRestore ? `<button class="history-restore-btn" title="Restore this version" aria-label="Restore version from ${escapeHtml(formatTimestamp(rev.created_at))}">${getIcon('restore', 15)}<span>Restore</span></button>` : ''}
+      </div>`;
+    if (canRestore) {
+      item.querySelector('.history-restore-btn').addEventListener('click', () => onRestore(rev));
+    }
+    list.appendChild(item);
+  });
+}
+
 // ── Panels ────────────────────────────────────────────────────────────────────
 
-const PANEL_IDS = ['tools-panel', 'files-panel', 'presence-panel', 'settings-panel', 'search-panel'];
+const PANEL_IDS = ['tools-panel', 'files-panel', 'presence-panel', 'settings-panel', 'search-panel', 'history-panel'];
 const FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 // Unlike every modal dialog, side panels didn't move focus into themselves
