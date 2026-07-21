@@ -82,6 +82,33 @@ test.describe('Editor', () => {
     await expect(page.locator('#note-live')).toContainText('typed in the textarea');
   });
 
+  test('live surface hides syntax markers away from the caret and reveals them on entry', async ({ page }) => {
+    await createRoom(page);
+    await page.locator('#note-editor').fill('# Title\n\n**bold** middle\n\ntail line');
+    await setEditorMode(page, 'preview');
+    const content = page.locator('#note-live .cm-content');
+    await expect(content).toBeVisible();
+
+    // Caret in the plain tail — every marker should be folded away.
+    await content.click();
+    await page.keyboard.press('Control+End');
+    await expect(content).not.toContainText('#');
+    await expect(content).not.toContainText('**');
+    await expect(content).toContainText('Title');
+    await expect(content).toContainText('bold');
+
+    // Walk the caret into the bold span — its ** reveal, the heading stays folded.
+    await page.keyboard.press('Control+Home');
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Home');
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('ArrowRight');
+    await expect(content).toContainText('**bold**');
+    await expect(content).not.toContainText('# Title');
+  });
+
   test('export modal opens when export button clicked', async ({ page }) => {
     await createRoom(page);
     await page.locator('#note-editor').fill('export me');

@@ -16,6 +16,7 @@ import {
   defaultKeymap, history, historyKeymap, indentWithTab,
   markdown, markdownLanguage,
   syntaxHighlighting, HighlightStyle, tags,
+  ViewPlugin, Decoration, syntaxTree,
 } from '../vendor/codemirror.js';
 
 let _view      = null;
@@ -45,6 +46,67 @@ const _mdHighlight = HighlightStyle.define([
   { tag: tags.processingInstruction, color: 'var(--text-muted)' }, // #, *, `, > markers
   { tag: tags.contentSeparator, color: 'var(--text-muted)' },      // --- rules
 ]);
+
+// ── Seamless-preview decorations ─────────────────────────────────────────────
+//
+// The Typora behaviour: syntax markers (#, **, *, ~~, `) are hidden wherever
+// the cursor isn't, so the document reads as formatted text — and the moment
+// the selection touches a formatted element, its raw markers reappear for
+// editing. The document itself never changes; these are visual-only
+// Decoration.replace ranges recomputed per viewport/selection/doc update.
+
+// Marker node → the enclosing element whose selection-touch reveals it.
+const _MARK_NODES = new Set(['HeaderMark', 'EmphasisMark', 'CodeMark', 'StrikethroughMark']);
+const _hideDeco   = Decoration.replace({});
+const _codeDeco   = Decoration.mark({ class: 'cm-md-inlinecode' });
+
+function _selectionTouches(state, from, to) {
+  return state.selection.ranges.some((r) => r.from <= to && r.to >= from);
+}
+
+const _seamless = ViewPlugin.fromClass(class {
+  constructor(view) { this.decorations = this.build(view); }
+  update(update) {
+    if (update.docChanged || update.selectionSet || update.viewportChanged) {
+      this.decorations = this.build(update.view);
+    }
+  }
+  build(view) {
+    const { state } = view;
+    const ranges = [];
+    for (const { from, to } of view.visibleRanges) {
+      syntaxTree(state).iterate({
+        from, to,
+        enter: (nodeRef) => {
+          const name = nodeRef.name;
+
+          // Inline-code chip styling rides along with the same tree walk.
+          if (name === 'InlineCode') {
+            ranges.push(_codeDeco.range(nodeRef.from, nodeRef.to));
+            return;
+          }
+          if (!_MARK_NODES.has(name)) return;
+
+          // Reveal raw syntax while the selection touches the enclosing
+          // element (the whole heading / bold span / code span), not just
+          // the marker itself — that's what makes entering an element with
+          // the caret "open it up" the way Typora does.
+          const parent = nodeRef.node.parent;
+          const revealFrom = parent ? parent.from : nodeRef.from;
+          const revealTo   = parent ? parent.to   : nodeRef.to;
+          if (_selectionTouches(state, revealFrom, revealTo)) return;
+
+          // Heading marks also swallow the single space that follows the
+          // #s, so "# Title" renders as just "Title".
+          let hideTo = nodeRef.to;
+          if (name === 'HeaderMark' && state.doc.sliceString(hideTo, hideTo + 1) === ' ') hideTo += 1;
+          ranges.push(_hideDeco.range(nodeRef.from, hideTo));
+        },
+      });
+    }
+    return Decoration.set(ranges, true); // sort — mark/replace ranges interleave
+  }
+}, { decorations: (v) => v.decorations });
 
 const _theme = EditorView.theme({
   '&': { height: '100%', fontSize: 'inherit', color: 'var(--text-primary)', backgroundColor: 'transparent' },
@@ -77,6 +139,7 @@ export function mount(container, initialValue, { onChange, readOnly = false } = 
         keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
         markdown({ base: markdownLanguage }),
         syntaxHighlighting(_mdHighlight),
+        _seamless,
         _theme,
         EditorView.lineWrapping,
         placeholder('Start writing… Your note syncs live across devices.'),
