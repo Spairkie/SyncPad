@@ -402,3 +402,39 @@ test.describe('Presence live announcer', () => {
     expect(text).toBe('Alice left.');
   });
 });
+
+// ── Pasted-image resolution in preview ──────────────────────────────────────────
+
+test.describe('Preview resolves syncpad-file: image references', () => {
+  test('resolves to a real src on success, and clears the data attribute', async ({ page }) => {
+    await goToLanding(page);
+    const result = await page.evaluate(async () => {
+      const ui = await import('/SyncPad/src/ui.js');
+      const md = await import('/SyncPad/src/markdown.js');
+      document.getElementById('note-preview').classList.remove('hidden');
+      ui.setFileImageResolver(async (path) => `https://cdn.example.com/${path}?token=abc`);
+      ui.refreshPreview(() => md.renderMarkdown('![photo](syncpad-file:room1/167_photo.png)'));
+      await new Promise((r) => setTimeout(r, 50));
+      const img = document.querySelector('#note-preview img');
+      return { src: img.src, dataAttrGone: img.dataset.syncpadFile === undefined };
+    });
+    expect(result.src).toBe('https://cdn.example.com/room1/167_photo.png?token=abc');
+    expect(result.dataAttrGone).toBe(true);
+  });
+
+  test('shows a broken-image fallback when resolution fails, without throwing', async ({ page }) => {
+    await goToLanding(page);
+    const result = await page.evaluate(async () => {
+      const ui = await import('/SyncPad/src/ui.js');
+      const md = await import('/SyncPad/src/markdown.js');
+      document.getElementById('note-preview').classList.remove('hidden');
+      ui.setFileImageResolver(async () => { throw new Error('file gone'); });
+      ui.refreshPreview(() => md.renderMarkdown('![photo](syncpad-file:room1/gone.png)'));
+      await new Promise((r) => setTimeout(r, 50));
+      const img = document.querySelector('#note-preview img');
+      return { hasBrokenClass: img.classList.contains('img-broken'), alt: img.alt };
+    });
+    expect(result.hasBrokenClass).toBe(true);
+    expect(result.alt).toContain('unavailable');
+  });
+});

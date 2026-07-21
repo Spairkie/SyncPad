@@ -653,6 +653,10 @@ svg { display: block; flex-shrink: 0; }
 .note-preview li { margin: 0.15em 0; }
 .note-preview a  { color: var(--accent); }
 .note-preview img { max-width: 100%; height: auto; border-radius: var(--radius-sm); margin: 0.4em 0; display: block; }
+.note-preview img.img-broken {
+  min-height: 2.4em; min-width: 4em; background: var(--bg-elevated);
+  border: 1px dashed var(--border); box-sizing: border-box;
+}
 .note-preview li > ul, .note-preview li > ol { margin: 0.2em 0; }
 .note-preview code {
   font-family: var(--font-mono); font-size: 0.9em;

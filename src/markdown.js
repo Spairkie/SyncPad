@@ -373,17 +373,31 @@ function _renderInline(raw) {
   // 2. Escape everything else
   text = escapeHtml(text);
 
-  // 3. Images — http/https only (never data:/javascript:). Rendered into an
-  // opaque placeholder rather than the final <img> markup, so ** or _
-  // characters in the alt text or URL are never touched by the emphasis/
-  // link rules that run afterward (mirrors the code-span and autolink
-  // protection below) — otherwise e.g. a URL containing "a*b*.png" would
-  // have its src corrupted with a literal <em> tag.
+  // 3. Images — http/https, plus the syncpad-file: pseudo-scheme used for
+  // images pasted/dropped straight into the editor (never data:/javascript:).
+  // Rendered into an opaque placeholder rather than the final <img> markup,
+  // so ** or _ characters in the alt text or URL are never touched by the
+  // emphasis/link rules that run afterward (mirrors the code-span and
+  // autolink protection below) — otherwise e.g. a URL containing "a*b*.png"
+  // would have its src corrupted with a literal <em> tag.
+  //
+  // syncpad-file: exists because the files bucket is private — a real signed
+  // URL expires in ~1h, so one can’t just be embedded as a permanent `src`.
+  // ![alt](syncpad-file:<file_path>) instead renders with no `src` at all
+  // (a data-syncpad-file attribute holding the path), left for the caller to
+  // resolve to a live signed URL asynchronously (see ui.js's image resolver).
   const imgSlots = [];
   text = text.replace(/!\[([^\]\n]*)\]\(([^)\s]+)\)/g, (full, alt, url) => {
-    if (!/^https?:/i.test(url)) return full;
-    imgSlots.push(`<img src="${url}" alt="${alt}" loading="lazy">`);
-    return `I${imgSlots.length - 1}`;
+    if (/^https?:/i.test(url)) {
+      imgSlots.push(`<img src="${url}" alt="${alt}" loading="lazy">`);
+      return `I${imgSlots.length - 1}`;
+    }
+    const fileMatch = /^syncpad-file:(.+)$/i.exec(url);
+    if (fileMatch) {
+      imgSlots.push(`<img data-syncpad-file="${fileMatch[1]}" alt="${alt}" loading="lazy">`);
+      return `I${imgSlots.length - 1}`;
+    }
+    return full;
   });
 
   // 4. Bold, italic, strikethrough (non-greedy).
