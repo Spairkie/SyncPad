@@ -830,6 +830,7 @@ export function insertAtCursor(text) {
 export function setMonospace(on) {
   document.getElementById('note-editor')?.classList.toggle('monospace', on);
   document.getElementById('note-preview')?.classList.toggle('monospace', on);
+  document.getElementById('note-live')?.classList.toggle('monospace', on);
 }
 
 // ── Focus mode ───────────────────────────────────────────────────────────────

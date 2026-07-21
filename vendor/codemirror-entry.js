@@ -11,6 +11,7 @@ export {
   keymap, drawSelection, highlightSpecialChars, placeholder,
 } from '@codemirror/view';
 export { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
-export { markdown, markdownLanguage } from '@codemirror/lang-markdown';
+export { markdown, markdownLanguage, markdownKeymap } from '@codemirror/lang-markdown';
+export { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
 export { syntaxTree, syntaxHighlighting, HighlightStyle } from '@codemirror/language';
 export { tags } from '@lezer/highlight';
