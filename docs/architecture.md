@@ -211,7 +211,7 @@ The `/admin` route activates `admin.js` exclusively and is completely isolated f
 | **Reports** | 100 most recent `syncpad_room_reports` rows | Dismiss report, Delete reported room |
 | **Cleanup** | — | Remove known Storage objects in admin deletion paths, then invoke/delete via Supabase |
 
-Backend cleanup paths that run without the admin UI can use the optional `supabase/functions/syncpad-cleanup` Edge Function. It runs with a service-role key, deletes known Storage objects for encrypted expired rooms before DB cleanup, and can remove orphaned bucket objects after a dry run.
+The optional `supabase/functions/syncpad-cleanup` Edge Function runs with a service-role key, deletes known Storage objects for encrypted expired rooms before DB cleanup, and can remove orphaned bucket objects after a dry run. It's callable both as a backend cron/curl job (`SYNCPAD_CLEANUP_SECRET`) and directly from the admin dashboard's Cleanup tab, authenticated with the admin's own Supabase session instead.
 
 ---
 

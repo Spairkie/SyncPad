@@ -170,6 +170,17 @@ curl -X POST "https://YOUR-PROJECT-REF.functions.supabase.co/syncpad-cleanup" \
 
 Set `dryRun` to `false` only after reviewing the dry-run counts.
 
+### Running orphan reconciliation from the admin dashboard
+
+Once deployed, the Cleanup tab's **Storage Orphan Reconciliation** section calls the
+same function (`mode: "orphans"`) directly from the browser, authenticated with the
+signed-in admin's own Supabase session rather than `SYNCPAD_CLEANUP_SECRET` — the
+Edge Function validates that session and checks the user against `syncpad_admins`
+itself, so the secret never needs to reach the client. It previews the orphan count
+first and only deletes after an explicit confirm. Requires the function to actually
+be deployed (`supabase functions deploy syncpad-cleanup`); the button surfaces a
+clear error if it isn't reachable.
+
 ### Manual cleanup steps
 
 1. **List metadata paths** - query `syncpad_files` for all `file_path` values.

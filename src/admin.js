@@ -1556,6 +1556,21 @@ async function _renderCleanupTab(contentEl) {
         <button id="admin-manual-cleanup-btn" class="admin-action-btn admin-action-danger">Delete all expired rooms now</button>
         <div id="admin-manual-cleanup-result" class="admin-cleanup-result hidden"></div>
       </div>
+
+      <hr class="admin-divider" />
+
+      <div class="admin-cleanup-section">
+        <h3>🗑️ Storage Orphan Reconciliation</h3>
+        <p class="admin-cleanup-desc">
+          Calls the <code>syncpad-cleanup</code> Edge Function to find files that exist in
+          Storage but have no matching <code>syncpad_files</code> row — left behind by
+          interrupted uploads or gaps this dashboard doesn't otherwise cover — and remove
+          them. Starts with a dry run; nothing is deleted until you confirm the count.
+          Requires the Edge Function to be deployed (<code>supabase functions deploy syncpad-cleanup</code>).
+        </p>
+        <button id="admin-orphan-preview-btn" class="admin-action-btn admin-action-primary">Preview orphaned files</button>
+        <div id="admin-orphan-result" class="admin-cleanup-result hidden"></div>
+      </div>
     </div>`;
 
   document.getElementById('admin-cleanup-btn').addEventListener('click', async () => {
@@ -1619,6 +1634,62 @@ async function _renderCleanupTab(contentEl) {
     resultEl.textContent = `✓ Deleted ${deleted} expired room${deleted !== 1 ? 's' : ''}.`;
     await _logAdminAction('manual_cleanup_expired', { metadata: { deleted_count: deleted } });
     await _loadStats();
+  });
+
+  _wireOrphanReconciliation();
+}
+
+function _wireOrphanReconciliation() {
+  const previewBtn = document.getElementById('admin-orphan-preview-btn');
+  const resultEl   = document.getElementById('admin-orphan-result');
+
+  const invoke = (dryRun) => _sb.functions.invoke('syncpad-cleanup', { body: { mode: 'orphans', dryRun } });
+
+  const showError = (error) => {
+    resultEl.classList.remove('hidden'); resultEl.className = 'admin-cleanup-result admin-cleanup-result--error';
+    resultEl.textContent = `Error: ${error?.message || 'Edge Function unavailable — is it deployed?'}`;
+  };
+
+  const runRemoval = async (orphanCount) => {
+    const ok = await showConfirm(
+      `Permanently delete ${orphanCount} orphaned file${orphanCount !== 1 ? 's' : ''} from storage?\n\nThis cannot be undone.`,
+      { confirmLabel: 'Delete orphaned files', danger: true },
+    );
+    if (!ok) return;
+    previewBtn.disabled = true;
+    const { data, error } = await invoke(false);
+    previewBtn.disabled = false; previewBtn.textContent = 'Preview orphaned files';
+    if (error) { showError(error); return; }
+    const removed = data?.orphans?.storageObjects?.removed ?? 0;
+    resultEl.classList.remove('hidden'); resultEl.className = 'admin-cleanup-result admin-cleanup-result--success';
+    resultEl.textContent = `✓ Removed ${removed} orphaned file${removed !== 1 ? 's' : ''} from storage.`;
+    await _logAdminAction('reconcile_storage_orphans', { metadata: { removed } });
+  };
+
+  previewBtn.addEventListener('click', async () => {
+    previewBtn.disabled = true; previewBtn.textContent = 'Scanning…';
+    resultEl.classList.add('hidden'); resultEl.className = 'admin-cleanup-result';
+    const { data, error } = await invoke(true);
+    previewBtn.disabled = false; previewBtn.textContent = 'Preview orphaned files';
+    if (error) { showError(error); return; }
+
+    const orphanCount = data?.orphans?.orphanObjects ?? 0;
+    const storedCount = data?.orphans?.storedObjects ?? 0;
+    const trackedCount = data?.orphans?.trackedObjects ?? 0;
+    resultEl.classList.remove('hidden'); resultEl.className = 'admin-cleanup-result';
+    if (!orphanCount) {
+      resultEl.classList.add('admin-cleanup-result--success');
+      resultEl.textContent = `✓ No orphans found (${storedCount} stored, ${trackedCount} tracked).`;
+      return;
+    }
+    resultEl.innerHTML = `Found <strong>${orphanCount}</strong> orphaned file${orphanCount !== 1 ? 's' : ''} out of ${storedCount} stored (${trackedCount} tracked). `;
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'admin-action-btn admin-action-danger';
+    removeBtn.textContent = `Remove ${orphanCount} orphaned file${orphanCount !== 1 ? 's' : ''}`;
+    removeBtn.style.marginTop = '0.5rem';
+    removeBtn.addEventListener('click', () => runRemoval(orphanCount));
+    resultEl.appendChild(document.createElement('br'));
+    resultEl.appendChild(removeBtn);
   });
 }
 
