@@ -98,6 +98,8 @@ let _stripPaste = localStorage.getItem(_STRIP_PASTE_KEY) === 'true';
 // need literal straight quotes/hyphens preserved.
 const _SMART_PUNCT_KEY = 'syncpad_smart_punct';
 let _smartPunct = localStorage.getItem(_SMART_PUNCT_KEY) === 'true';
+const _FOCUS_MODE_KEY = 'syncpad_focus_mode';
+let _focusMode = localStorage.getItem(_FOCUS_MODE_KEY) === 'true';
 
 // ── Files state ───────────────────────────────────────────────────────────────
 let _filesSelectMode = false;
@@ -721,6 +723,7 @@ async function startApp() {
   UI.renderSettingsPanel(_room);
   UI.setStatus('connected');
   UI.setMonospace(_monospace);
+  UI.setFocusMode(_focusMode);
   UI.setReadOnlyMode(_isReadOnly);
   // Ensure the editor always starts in write mode when entering a new room,
   // since _markdownMode was reset to 'write' in teardownRealtimeSession().
@@ -1426,6 +1429,7 @@ function wireEvents() {
     onLocalInput(); // returns a Promise — intentional fire-and-forget
     setTyping(true);
     UI.updateWordCount(UI.getEditorValue());
+    UI.refreshFocusMode(); // no-op unless focus mode is on
     // Debounced so large documents don't re-render markdown on every keystroke.
     _debouncedRefreshPreview();
   });
@@ -1647,10 +1651,17 @@ function wireEvents() {
     const before = editor.value.substring(0, pos);
     const line   = (before.match(/\n/g) || []).length + 1;
     setCursorLine(line);
+    UI.refreshFocusMode(); // no-op unless focus mode is on
   };
   editor?.addEventListener('keyup',    _broadcastCursor);
   editor?.addEventListener('mouseup',  _broadcastCursor);
   editor?.addEventListener('touchend', _broadcastCursor);
+
+  // Focus mode's dimmed band tracks the caret's pixel position, which shifts
+  // under scrolling (same line, different viewport offset) and under
+  // resizing (text re-wraps at a different width, changing the caret's line).
+  editor?.addEventListener('scroll', () => UI.refreshFocusMode());
+  window.addEventListener('resize', () => UI.refreshFocusMode());
 
   // Block paste keystrokes when the editor is locked. The textarea readonly
   // attribute does the heavy lifting; this is belt-and-suspenders.
@@ -2614,6 +2625,23 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
       _smartPunct ? 'Smart punctuation: On' : 'Smart punctuation: Off',
       'info', 2000
     );
+  });
+
+  // ── Focus-mode setting button ───────────────────────────────────────────────
+  const _updateFocusModeUI = () => {
+    const btn = document.getElementById('setting-focus-mode-btn');
+    if (!btn) return;
+    btn.textContent = _focusMode ? 'On' : 'Off';
+    btn.setAttribute('aria-pressed', String(_focusMode));
+  };
+  _updateFocusModeUI();
+
+  document.getElementById('setting-focus-mode-btn')?.addEventListener('click', () => {
+    _focusMode = !_focusMode;
+    try { localStorage.setItem(_FOCUS_MODE_KEY, String(_focusMode)); } catch {}
+    UI.setFocusMode(_focusMode);
+    _updateFocusModeUI();
+    UI.showToast(_focusMode ? 'Focus mode: On' : 'Focus mode: Off', 'info', 2000);
   });
 }
 

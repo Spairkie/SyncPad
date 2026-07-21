@@ -218,3 +218,60 @@ test.describe('Smart punctuation (opt-in)', () => {
     await expect(page.locator('#setting-smart-punct-btn')).toHaveAttribute('aria-pressed', 'true');
   });
 });
+
+test.describe('Focus mode (opt-in)', () => {
+  test('is off by default and the editor has no mask applied', async ({ page }) => {
+    await createRoom(page);
+    const editor = page.locator('#note-editor');
+    await expect(editor).not.toHaveClass(/focus-mode/);
+  });
+
+  test('toggling the setting applies and removes the focus-mode class', async ({ page }) => {
+    await createRoom(page);
+    await openPanel(page, 'settings');
+    const btn = page.locator('#setting-focus-mode-btn');
+    const editor = page.locator('#note-editor');
+
+    await btn.click();
+    await expect(btn).toHaveAttribute('aria-pressed', 'true');
+    await expect(editor).toHaveClass(/focus-mode/);
+
+    await btn.click();
+    await expect(btn).toHaveAttribute('aria-pressed', 'false');
+    await expect(editor).not.toHaveClass(/focus-mode/);
+  });
+
+  test('the dimmed band follows the caret as it moves through the document', async ({ page }) => {
+    await createRoom(page);
+    const editor = page.locator('#note-editor');
+    const lines = Array.from({ length: 15 }, (_, i) => `Line number ${i}`);
+    await editor.fill(lines.join('\n'));
+
+    await openPanel(page, 'settings');
+    await page.locator('#setting-focus-mode-btn').click();
+    await page.locator('.panel-close').first().click(); // close settings, back to the editor
+
+    await editor.focus();
+    await page.keyboard.press('Control+Home'); // caret at the very start
+    await page.waitForTimeout(50);
+    const yAtStart = await editor.evaluate((el) => el.style.getPropertyValue('--focus-y'));
+
+    await page.keyboard.press('Control+End'); // caret at the very end
+    await page.waitForTimeout(50);
+    const yAtEnd = await editor.evaluate((el) => el.style.getPropertyValue('--focus-y'));
+
+    expect(yAtStart).not.toBe('');
+    expect(yAtEnd).not.toBe('');
+    expect(parseFloat(yAtEnd)).toBeGreaterThan(parseFloat(yAtStart));
+  });
+
+  test('the preference persists across a page reload', async ({ page }) => {
+    await createRoom(page);
+    await openPanel(page, 'settings');
+    await page.locator('#setting-focus-mode-btn').click();
+    await page.reload();
+    await openPanel(page, 'settings');
+    await expect(page.locator('#setting-focus-mode-btn')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('#note-editor')).toHaveClass(/focus-mode/);
+  });
+});
