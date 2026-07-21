@@ -7,10 +7,11 @@ import {
   copyToClipboard, insertTimestamp,
   isMobile, isOnline, onOnlineChange,
   buildRoomUrl, buildReadOnlyUrl, getUrlMode, parseDuration,
-  escapeHtml, debounce,
+  escapeHtml, debounce, formatTimestamp,
 } from './utils.js';
 
 import { loadRoom, createRoom, clearRoomContent, subscribeToRoom, getOrCreateReadOnlyShareLink, resolveReadOnlyShareLink, updateRoomDisplayName, normalizeRoomDisplayName, submitRoomReport, REPORT_REASONS } from './rooms.js';
+import { listRevisions } from './revisions.js';
 
 import {
   initBroadcast, destroyBroadcast,
@@ -2001,6 +2002,11 @@ function wireEvents() {
     document.getElementById(id)?.addEventListener('click', () => { fn(); UI.closeAllPanels(); });
   });
 
+  // Wired outside toolActions: it opens a side panel (like tool-find should),
+  // and toolActions' blanket closeAllPanels() after every action would close
+  // that panel again immediately.
+  document.getElementById('tool-history')?.addEventListener('click', () => { _openHistoryPanel(); });
+
   // ── Files ──────────────────────────────────────────────────────────────────
   UI.setFileHandlers(async (files) => {
     if (!canUploadFiles()) { UI.showToast(editBlockedReason() || 'File upload is disabled. Text-encrypted rooms do not allow new file uploads in v1.', 'warning'); return; }
@@ -2911,6 +2917,63 @@ async function _onTemplateChosen(key, mode) {
   _refreshPreviewIfActive();
   UI.closeModal('templates-modal');
   UI.showToast(mode === 'append' ? 'Template appended.' : 'Template applied.', 'success');
+}
+
+
+// ── Version history ───────────────────────────────────────────────────────────
+
+async function _openHistoryPanel() {
+  UI.openPanel('history-panel');
+  UI.setHistoryLoading(true);
+  try {
+    const revisions = await listRevisions(_roomId);
+    const withPreviews = await Promise.all(revisions.map(async (rev) => {
+      let preview = rev.content || '';
+      if (looksEncrypted(preview)) {
+        if (!_encKey) { preview = null; }
+        else {
+          try { preview = await decryptContent(preview, _encKey); }
+          catch { preview = null; }
+        }
+      }
+      return { ...rev, _preview: preview };
+    }));
+    UI.renderHistoryList(withPreviews, _restoreRevision, {
+      canRestore: canEdit(),
+      deviceId:   getDeviceId(),
+    });
+  } catch {
+    UI.showToast('Could not load version history.', 'error');
+  } finally {
+    UI.setHistoryLoading(false);
+  }
+}
+
+async function _restoreRevision(rev) {
+  if (!canEdit()) { UI.showToast(editBlockedReason() || 'Editing is disabled.', 'warning'); return; }
+
+  const ok = await UI.showConfirm(
+    `Restore the version from ${formatTimestamp(rev.created_at)}? Your current content will be saved to history first.`,
+    { confirmLabel: 'Restore', danger: true }
+  );
+  if (!ok) return;
+
+  let plaintext = rev.content || '';
+  if (looksEncrypted(plaintext)) {
+    if (!_encKey) { UI.showToast('Cannot restore an encrypted version without the passphrase.', 'error'); return; }
+    try { plaintext = await decryptContent(plaintext, _encKey); }
+    catch { UI.showToast('Could not decrypt this version.', 'error'); return; }
+  }
+
+  await snapshotBeforeDestructiveChange();
+
+  UI.setEditorValue(plaintext);
+  const editor = document.getElementById('note-editor');
+  editor?.dispatchEvent(new Event('input', { bubbles: true }));
+  UI.updateWordCount(UI.getEditorValue());
+  _refreshPreviewIfActive();
+  UI.closeAllPanels();
+  UI.showToast('Version restored.', 'success');
 }
 
 
