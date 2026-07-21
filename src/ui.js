@@ -785,6 +785,66 @@ export function setMonospace(on) {
   document.getElementById('note-preview')?.classList.toggle('monospace', on);
 }
 
+// ── Focus mode ───────────────────────────────────────────────────────────────
+//
+// A plain <textarea> has no per-paragraph DOM nodes to dim individually, so
+// "dim everything but the current paragraph" is done with a CSS mask
+// gradient on the textarea itself, anchored to the caret's actual pixel
+// position (a fixed vertical band around it stays fully opaque, everything
+// above/below fades). The caret's Y offset is measured with the standard
+// "mirror div" technique — an offscreen div cloning the textarea's exact
+// font/padding/wrapping, holding the text up to the caret, whose trailing
+// marker's offsetTop gives the same line-wrapped position the browser
+// itself would use, then adjusted by the textarea's own scroll position.
+
+let _focusModeOn = false;
+
+export function setFocusMode(on) {
+  _focusModeOn = on;
+  const editor = document.getElementById('note-editor');
+  editor?.classList.toggle('focus-mode', on);
+  if (on) refreshFocusMode();
+}
+
+/** Recompute the dimmed band's position — call on cursor move, scroll, input, or resize. */
+export function refreshFocusMode() {
+  if (!_focusModeOn) return;
+  const editor = document.getElementById('note-editor');
+  if (!editor) return;
+  const caretY    = _measureCaretPixelY(editor);
+  const visibleY  = caretY - editor.scrollTop;
+  const lineHeight = parseFloat(getComputedStyle(editor).lineHeight) || 24;
+  editor.style.setProperty('--focus-y', `${visibleY + lineHeight / 2}px`);
+  editor.style.setProperty('--focus-band', `${lineHeight}px`);
+}
+
+const _CARET_MIRROR_PROPS = [
+  'boxSizing', 'width', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
+  'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth',
+  'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'lineHeight', 'letterSpacing',
+  'textIndent', 'wordSpacing',
+];
+
+function _measureCaretPixelY(editor) {
+  const mirror = document.createElement('div');
+  const cs = getComputedStyle(editor);
+  _CARET_MIRROR_PROPS.forEach((prop) => { mirror.style[prop] = cs[prop]; });
+  mirror.style.position   = 'absolute';
+  mirror.style.visibility = 'hidden';
+  mirror.style.whiteSpace = 'pre-wrap';
+  mirror.style.wordWrap   = 'break-word';
+  mirror.style.top  = '0';
+  mirror.style.left = '-9999px';
+  mirror.textContent = editor.value.slice(0, editor.selectionStart);
+  const marker = document.createElement('span');
+  marker.textContent = '.';
+  mirror.appendChild(marker);
+  document.body.appendChild(mirror);
+  const y = marker.offsetTop;
+  document.body.removeChild(mirror);
+  return y;
+}
+
 /**
  * Toggle the textarea between editable and readonly. Keeps the textarea
  * selectable (so the user can copy text in read-only mode), but blocks
