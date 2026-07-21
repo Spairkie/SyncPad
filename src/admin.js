@@ -15,6 +15,12 @@ const ROOMS_PAGE_SIZE          = 25;
 const FILES_PAGE_SIZE          = 50;
 const AUDIT_PAGE_SIZE          = 50;
 const REPORTS_PAGE_SIZE        = 50;
+// PostgREST caps unpaginated selects at its own default page size — any
+// "fetch every matching row" query (as opposed to the paginated tab UIs
+// above, which intentionally fetch one page at a time) must page through
+// with .range() or it silently drops rows past the first page. Mirrors the
+// selectAll() helper in supabase/functions/syncpad-cleanup/index.ts.
+const SELECT_ALL_PAGE_SIZE     = 1000;
 
 // ── Module-level dashboard state (reset on every dashboard init) ──────────────
 
@@ -463,11 +469,19 @@ async function _fetchRooms(selectCols, offset) {
 
   // Apply search
   if (_roomsSearch) {
-    const s = `%${_roomsSearch}%`;
-    q = q.or(`room_id.ilike.${s},room_name.ilike.${s}`);
+    // PostgREST's .or() filter string treats comma/parenthesis/period as
+    // syntax (condition separators, grouping), so a search term containing
+    // one would otherwise break the query — wrap the value in double quotes
+    // (escaping any backslash/quote within it) so it's taken literally.
+    const s = `%${_escapePostgrestFilterValue(_roomsSearch)}%`;
+    q = q.or(`room_id.ilike."${s}",room_name.ilike."${s}"`);
   }
 
   return q;
+}
+
+function _escapePostgrestFilterValue(value) {
+  return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
 function _wireRoomsTab(contentEl, selectCols) {
@@ -1629,9 +1643,11 @@ async function _logAdminAction(actionType, details = {}) {
 // ── Storage helpers ───────────────────────────────────────────────────────────
 
 async function _listRoomFilePaths(roomId) {
-  const { data, error } = await _sb.from('syncpad_files').select('file_path').eq('room_id', roomId);
+  const { rows, error } = await _selectAllPages((from, to) =>
+    _sb.from('syncpad_files').select('file_path').eq('room_id', roomId).range(from, to)
+  );
   if (error) return { paths: [], error };
-  return { paths: (data || []).map(r => r.file_path).filter(Boolean), error: null };
+  return { paths: rows.map(r => r.file_path).filter(Boolean), error: null };
 }
 
 async function _removeStorageObjects(paths) {
@@ -1647,6 +1663,25 @@ function _chunks(items, size) {
   const out = [];
   for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
   return out;
+}
+
+/**
+ * Page through every row matching a query via .range(), rather than relying
+ * on a single unpaginated select — which PostgREST silently truncates at its
+ * own default page size. `queryFactory(from, to)` must apply `.range(from, to)`
+ * to the same query each call.
+ */
+async function _selectAllPages(queryFactory) {
+  const rows = [];
+  for (let from = 0; ; from += SELECT_ALL_PAGE_SIZE) {
+    const to = from + SELECT_ALL_PAGE_SIZE - 1;
+    const { data, error } = await queryFactory(from, to);
+    if (error) return { rows, error };
+    const page = data || [];
+    rows.push(...page);
+    if (page.length < SELECT_ALL_PAGE_SIZE) break;
+  }
+  return { rows, error: null };
 }
 
 async function _deleteRoomAndStorage(roomId) {
@@ -1672,35 +1707,42 @@ async function _deleteRoomAndStorage(roomId) {
 
 async function _listExpiredEncryptedRoomFilePaths() {
   const nowIso = new Date().toISOString();
-  const { data: rooms, error: roomsErr } = await _sb
-    .from('syncpad_rooms').select('room_id')
-    .lt('expires_at', nowIso).not('expires_at', 'is', null).eq('encryption_enabled', true);
+  const { rows: rooms, error: roomsErr } = await _selectAllPages((from, to) =>
+    _sb.from('syncpad_rooms').select('room_id')
+      .lt('expires_at', nowIso).not('expires_at', 'is', null).eq('encryption_enabled', true)
+      .range(from, to)
+  );
   if (roomsErr) return { storagePaths: [], error: roomsErr };
-  const roomIds = (rooms || []).map(r => r.room_id).filter(Boolean);
+  const roomIds = rooms.map(r => r.room_id).filter(Boolean);
   if (!roomIds.length) return { storagePaths: [], error: null };
 
   const paths = [];
   for (const batch of _chunks(roomIds, ADMIN_QUERY_BATCH_SIZE)) {
-    const { data, error } = await _sb.from('syncpad_files').select('file_path').in('room_id', batch);
+    const { rows, error } = await _selectAllPages((from, to) =>
+      _sb.from('syncpad_files').select('file_path').in('room_id', batch).range(from, to)
+    );
     if (error) return { storagePaths: [], error };
-    paths.push(...(data || []).map(r => r.file_path).filter(Boolean));
+    paths.push(...rows.map(r => r.file_path).filter(Boolean));
   }
   return { storagePaths: paths, error: null };
 }
 
 async function _deleteExpiredRoomsAndStorage() {
   const nowIso = new Date().toISOString();
-  const { data: rooms, error: roomsErr } = await _sb
-    .from('syncpad_rooms').select('room_id').lt('expires_at', nowIso).not('expires_at', 'is', null);
+  const { rows: rooms, error: roomsErr } = await _selectAllPages((from, to) =>
+    _sb.from('syncpad_rooms').select('room_id').lt('expires_at', nowIso).not('expires_at', 'is', null).range(from, to)
+  );
   if (roomsErr) return { error: roomsErr, count: null };
-  const roomIds = (rooms || []).map(r => r.room_id).filter(Boolean);
+  const roomIds = rooms.map(r => r.room_id).filter(Boolean);
   if (!roomIds.length) return { error: null, count: 0 };
 
   const files = [];
   for (const batch of _chunks(roomIds, ADMIN_QUERY_BATCH_SIZE)) {
-    const { data, error } = await _sb.from('syncpad_files').select('file_path').in('room_id', batch);
+    const { rows, error } = await _selectAllPages((from, to) =>
+      _sb.from('syncpad_files').select('file_path').in('room_id', batch).range(from, to)
+    );
     if (error) return { error, count: null };
-    files.push(...(data || []));
+    files.push(...rows);
   }
   const { error: storageErr } = await _removeStorageObjects(files.map(r => r.file_path));
   if (storageErr) return { error: storageErr, count: null };

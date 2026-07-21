@@ -1111,7 +1111,11 @@ body.lock-mode .md-toolbar { opacity: 0.4; pointer-events: none; }
    MODALS
 ══════════════════════════════════════════════════════════════ */
 .modal-backdrop {
-  position: fixed; inset: 0; z-index: 200;
+  /* Must outrank every full-screen overlay it can be triggered from — the
+     admin dashboard (900) and loading screen (1000) in particular, since
+     admin.js now shows these dialogs too — as well as the toast stack
+     (1100), matching the 9999 the old admin-only dialog implementation used. */
+  position: fixed; inset: 0; z-index: 1200;
   background: rgba(0,0,0,0.6); backdrop-filter: blur(2px);
   display: flex; align-items: center; justify-content: center; padding: 24px;
   opacity: 0; pointer-events: none; transition: opacity 0.18s ease;
