@@ -328,3 +328,77 @@ test.describe('More-dropdown keyboard navigation (A-4)', () => {
     await expect(page.locator('#btn-more')).toBeFocused();
   });
 });
+
+// ── Presence live-region announcer ──────────────────────────────────────────────
+
+test.describe('Presence live announcer', () => {
+  test('does not announce already-present devices as joining on first render', async ({ page }) => {
+    await goToLanding(page);
+    const text = await page.evaluate(async () => {
+      const ui = await import('/SyncPad/src/ui.js');
+      ui.resetPresenceAnnouncer();
+      ui.renderDevicesList([
+        { device_id: 'me', device_name: 'Me' },
+        { device_id: 'a', device_name: 'Alice', typing: false },
+      ], 'me', () => {});
+      return document.getElementById('presence-live-region').textContent;
+    });
+    expect(text).toBe('');
+  });
+
+  test('announces a device joining after the first render', async ({ page }) => {
+    await goToLanding(page);
+    const text = await page.evaluate(async () => {
+      const ui = await import('/SyncPad/src/ui.js');
+      ui.resetPresenceAnnouncer();
+      ui.renderDevicesList([{ device_id: 'me', device_name: 'Me' }], 'me', () => {});
+      ui.renderDevicesList([
+        { device_id: 'me', device_name: 'Me' },
+        { device_id: 'a', device_name: 'Alice', typing: false },
+      ], 'me', () => {});
+      return document.getElementById('presence-live-region').textContent;
+    });
+    expect(text).toBe('Alice joined.');
+  });
+
+  test('announces a device starting to type, but not per-keystroke cursor movement', async ({ page }) => {
+    await goToLanding(page);
+    const result = await page.evaluate(async () => {
+      const ui = await import('/SyncPad/src/ui.js');
+      const region = () => document.getElementById('presence-live-region').textContent;
+      ui.resetPresenceAnnouncer();
+      ui.renderDevicesList([
+        { device_id: 'me', device_name: 'Me' },
+        { device_id: 'a', device_name: 'Alice', typing: false },
+      ], 'me', () => {});
+      ui.renderDevicesList([
+        { device_id: 'me', device_name: 'Me' },
+        { device_id: 'a', device_name: 'Alice', typing: true },
+      ], 'me', () => {});
+      const afterTyping = region();
+      // Cursor-line-only change on an already-typing device must not re-fire the region.
+      ui.renderDevicesList([
+        { device_id: 'me', device_name: 'Me' },
+        { device_id: 'a', device_name: 'Alice', typing: true, cursor_line: 12 },
+      ], 'me', () => {});
+      return { afterTyping, afterCursorMove: region() };
+    });
+    expect(result.afterTyping).toBe('Alice started typing.');
+    expect(result.afterCursorMove).toBe('Alice started typing.'); // unchanged
+  });
+
+  test('announces a device leaving', async ({ page }) => {
+    await goToLanding(page);
+    const text = await page.evaluate(async () => {
+      const ui = await import('/SyncPad/src/ui.js');
+      ui.resetPresenceAnnouncer();
+      ui.renderDevicesList([
+        { device_id: 'me', device_name: 'Me' },
+        { device_id: 'a', device_name: 'Alice', typing: false },
+      ], 'me', () => {});
+      ui.renderDevicesList([{ device_id: 'me', device_name: 'Me' }], 'me', () => {});
+      return document.getElementById('presence-live-region').textContent;
+    });
+    expect(text).toBe('Alice left.');
+  });
+});

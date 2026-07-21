@@ -2511,6 +2511,9 @@ function teardownRealtimeSession() {
   _shareToken = null;
   // Reset the scroll-sync guard so it can re-wire on the next split-mode entry.
   UI.resetScrollSync();
+  // Reset the presence announcer so the next room's already-connected devices
+  // aren't announced to screen readers as having just joined.
+  UI.resetPresenceAnnouncer();
 }
 
 // ── Templates handler ─────────────────────────────────────────────────────────
