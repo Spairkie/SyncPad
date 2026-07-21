@@ -159,7 +159,41 @@ document.addEventListener('click', (e) => {
 // already-tested boot sequence against the URL the browser just navigated
 // to — the same trade-off the app already makes for "join a different room
 // by editing the URL bar and pressing Enter".
-window.addEventListener('popstate', () => location.reload());
+//
+// Following a same-page anchor link (e.g. a Markdown table-of-contents
+// entry, href="#some-heading") and then pressing Back also fires popstate,
+// even though the route itself hasn't changed — only the hash has. Reloading
+// there would be actively harmful, not just an unnecessary flicker: a
+// view-once note's only remaining copy after the server clears its content
+// lives in memory (_viewOnceConsumedByThisSession), so a reload at the wrong
+// moment permanently loses it. Only reload when the path or query actually
+// changed; a hash-only difference is left to the browser's own default
+// same-page scroll-to-anchor behavior.
+//
+// _lastRoutePathAndSearch has to stay in sync with every history mutation,
+// not just popstate — the app's own pushState/replaceState calls (room
+// joins, the admin route, etc.) change the URL too, and if left unsynced
+// the tracker goes stale the moment the app itself navigates, making the
+// very next Back incorrectly look like a no-op hash change and silently
+// skip the reload it actually needs. Wrapping both methods once here keeps
+// it accurate regardless of which existing or future call site navigates.
+let _lastRoutePathAndSearch = location.pathname + location.search;
+const _origPushState    = history.pushState.bind(history);
+const _origReplaceState = history.replaceState.bind(history);
+history.pushState = (...args) => {
+  _origPushState(...args);
+  _lastRoutePathAndSearch = location.pathname + location.search;
+};
+history.replaceState = (...args) => {
+  _origReplaceState(...args);
+  _lastRoutePathAndSearch = location.pathname + location.search;
+};
+window.addEventListener('popstate', () => {
+  const current = location.pathname + location.search;
+  if (current === _lastRoutePathAndSearch) return;
+  _lastRoutePathAndSearch = current;
+  location.reload();
+});
 
 function _normalizeBasePath(basePath) {
   const raw = String(basePath || '').trim();
@@ -1166,7 +1200,11 @@ async function refreshFiles() {
       },
       onCopyLink: async (file) => {
         try {
-          const url = await getForceDownloadUrl(file.file_path, file.filename);
+          // Always mint a fresh URL rather than reusing a cached one — a
+          // cached entry can already be up to 55 minutes old, and this link
+          // is meant to be shared and possibly opened later, not used
+          // immediately like the Download button.
+          const url = await getForceDownloadUrl(file.file_path, file.filename, { fresh: true });
           const ok  = await copyToClipboard(url);
           UI.showToast(
             ok ? `Link copied — valid ~55 min.` : 'Could not copy link.',

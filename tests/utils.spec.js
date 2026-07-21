@@ -165,4 +165,33 @@ test.describe('Markdown renderer', () => {
     expect(result).toContain('[x] Item one');
     expect(result).toContain('[ ] Item two');
   });
+
+  test('a checkbox after a blockquoted checklist toggles the right source line', async ({ page }) => {
+    // Regression for the ctx.cbCounter-sharing bug: the render-time index
+    // assigned to "normal" must match a real index toggleChecklistItem()'s
+    // source scan recognizes (it never counts blockquoted checklist lines),
+    // or clicking the checkbox silently does nothing.
+    await goToLanding(page);
+    const result = await inBrowser(page, '/SyncPad/src/markdown.js', (mod) => {
+      const src = '> - [ ] quoted\n\n- [ ] normal';
+      const html = mod.renderMarkdown(src);
+      const indices = [...html.matchAll(/data-cb-index="(\d+)"/g)].map((m) => Number(m[1]));
+      const normalIndex = indices[1]; // second rendered checkbox is "normal"
+      return mod.toggleChecklistItem(src, normalIndex, true);
+    });
+    expect(result).toContain('- [x] normal');
+    expect(result).toContain('> - [ ] quoted'); // unaffected
+  });
+
+  test('renderMarkdownWithToc derives labels from rendered text, not raw markdown syntax', async ({ page }) => {
+    await goToLanding(page);
+    const headings = await inBrowser(page, '/SyncPad/src/markdown.js', (mod) => {
+      const src = '# Intro\n\n## [API guide](https://example.com)\n\n### **Bold** and `code`';
+      return mod.renderMarkdownWithToc(src).headings;
+    });
+    expect(headings.map((h) => h.text)).toEqual(['Intro', 'API guide', 'Bold and code']);
+    // Never the raw markdown link syntax leaking through.
+    expect(headings[1].text).not.toContain('[');
+    expect(headings[1].text).not.toContain('(https://');
+  });
 });

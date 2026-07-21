@@ -195,11 +195,27 @@ test.describe('Markdown preview', () => {
     expect(ids).toEqual(['setup', 'setup-1']);
   });
 
-  test('checkbox indices stay unique across a blockquote boundary', async ({ page }) => {
-    const preview = await withPreview(page, '- [ ] outer\n\n> - [ ] inner');
-    const indices = await preview.locator('input[type="checkbox"]')
-      .evaluateAll((els) => els.map((e) => e.dataset.cbIndex));
-    expect(indices).toEqual(['0', '1']);
+  test('a checkbox after a blockquoted checklist keeps its own toggleable index', async ({ page }) => {
+    // Blockquoted checklist items are rendered but toggleChecklistItem()'s
+    // source-line scan never counts them (its regex requires the list
+    // marker at the very start of the line, not after a `>`). Sharing the
+    // render-time checkbox counter across the blockquote boundary used to
+    // give every checkbox after a blockquoted one an index the scanner
+    // didn't recognize — clicking it silently did nothing and the checkbox
+    // reverted on the next render. The counter is deliberately independent
+    // per blockquote now, so the *rendered* index can duplicate a quoted
+    // item's, but a normal top-level checkbox always matches a real,
+    // toggleable source line.
+    const preview = await withPreview(page, '> - [ ] quoted\n\n- [ ] normal');
+    const checkboxes = preview.locator('input[type="checkbox"]');
+    await expect(checkboxes).toHaveCount(2);
+    await checkboxes.nth(1).check(); // the second rendered checkbox is "normal"
+    // Toggling the real ("normal") checkbox must actually update the source,
+    // not silently no-op — verified by round-tripping through the editor.
+    await page.locator('.md-seg-btn[data-mode="write"]').click();
+    const content = await page.locator('#note-editor').inputValue();
+    expect(content).toContain('- [x] normal');
+    expect(content).toContain('> - [ ] quoted');
   });
 });
 

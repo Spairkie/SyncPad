@@ -109,4 +109,38 @@ test.describe('URL routing', () => {
     expect(markerGone).toBe(true);
     expect(navigations.length).toBeGreaterThanOrEqual(2);
   });
+
+  test('Back after a hash-only navigation does not reload (would lose in-memory state, e.g. a consumed view-once note)', async ({ page }) => {
+    await page.goto('/SyncPad/');
+    await page.waitForSelector('#landing-screen:not(.hidden)');
+    await page.evaluate(() => { window.__routingTestMarker = true; });
+
+    // Following a same-page anchor link (e.g. a Markdown TOC entry) only
+    // changes the hash — the path and query stay identical.
+    await page.evaluate(() => history.pushState(null, '', location.pathname + '#some-heading'));
+    await page.goBack();
+    await page.waitForTimeout(700);
+
+    const markerStillPresent = await page.evaluate(() => window.__routingTestMarker === true);
+    expect(markerStillPresent).toBe(true);
+  });
+
+  test('Back still reloads after a real navigation, even once a prior hash-only Back has fired', async ({ page }) => {
+    await page.goto('/SyncPad/');
+    await page.waitForSelector('#landing-screen:not(.hidden)');
+
+    // Exercise the hash-only path first so its no-op doesn't leave the
+    // path/search tracker stale for the real navigation that follows.
+    await page.evaluate(() => history.pushState(null, '', location.pathname + '#some-heading'));
+    await page.goBack();
+    await page.waitForTimeout(500);
+
+    await page.evaluate(() => { window.__routingTestMarker = true; });
+    await page.evaluate(() => history.pushState(null, '', '/SyncPad/another-fake-room'));
+    await page.goBack();
+    await page.waitForTimeout(1000);
+
+    const markerGone = await page.evaluate(() => typeof window.__routingTestMarker === 'undefined');
+    expect(markerGone).toBe(true);
+  });
 });
