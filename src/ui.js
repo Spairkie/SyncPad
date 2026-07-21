@@ -1009,14 +1009,42 @@ export function setMarkdownMode(mode, renderFn) {
     editor.classList.add('hidden');
     preview.classList.remove('hidden');
     wrap?.classList.add('mode-preview');
-    if (renderFn) { preview.innerHTML = renderFn(); _prismHighlight(preview); }
+    if (renderFn) { preview.innerHTML = renderFn(); _prismHighlight(preview); _injectTocNav(preview); }
   } else if (mode === 'split') {
     editor.classList.remove('hidden');
     preview.classList.remove('hidden');
     wrap?.classList.add('mode-split');
-    if (renderFn) { preview.innerHTML = renderFn(); _prismHighlight(preview); }
+    if (renderFn) { preview.innerHTML = renderFn(); _prismHighlight(preview); _injectTocNav(preview); }
     _wireScrollSync(editor, preview);
   }
+}
+
+// ── Table of contents (preview mode) ──────────────────────────────────────────
+
+// Preview re-renders on every debounced keystroke (split mode) and would
+// otherwise reset an open <details> back to closed each time; remember the
+// user's choice across renders instead.
+let _tocOpen = false;
+
+function _injectTocNav(preview) {
+  const headings = Array.from(preview.querySelectorAll('h1[id], h2[id], h3[id], h4[id], h5[id], h6[id]'));
+  if (headings.length < 2) return;
+
+  const items = headings.map((h) => {
+    const level = Number(h.tagName[1]);
+    return `<li class="note-toc-item note-toc-h${level}"><a href="#${h.id}">${escapeHtml(h.textContent)}</a></li>`;
+  }).join('');
+
+  const nav = document.createElement('nav');
+  nav.className = 'note-toc';
+  nav.setAttribute('aria-label', 'Table of contents');
+  nav.innerHTML = `
+    <details${_tocOpen ? ' open' : ''}>
+      <summary>Contents</summary>
+      <ul>${items}</ul>
+    </details>`;
+  nav.querySelector('details').addEventListener('toggle', (e) => { _tocOpen = e.target.open; });
+  preview.insertBefore(nav, preview.firstChild);
 }
 
 // ── Scroll synchronisation (split mode) ──────────────────────────────────────
@@ -1052,7 +1080,7 @@ export function refreshPreview(renderFn) {
   const preview = document.getElementById('note-preview');
   if (!preview || preview.classList.contains('hidden')) return;
   preview.innerHTML = renderFn ? renderFn() : '';
-  if (renderFn) _prismHighlight(preview);
+  if (renderFn) { _prismHighlight(preview); _injectTocNav(preview); }
 }
 
 /** Call Prism.js syntax highlighting if it is loaded. */

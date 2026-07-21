@@ -39,7 +39,7 @@ const HR_RE = /^(?:-[ \t]*){3,}$|^(?:\*[ \t]*){3,}$|^(?:_[ \t]*){3,}$/;
  */
 export function renderMarkdown(src) {
   if (!src) return '';
-  const ctx = { cbCounter: 0 };
+  const ctx = { cbCounter: 0, headingSlugs: new Map() };
   const blocks = _splitBlocks(String(src));
   return blocks.map((b) => _renderBlock(b, ctx)).join('\n');
 }
@@ -172,12 +172,35 @@ function _splitBlocks(src) {
   return blocks;
 }
 
+// ── Heading anchors ──────────────────────────────────────────────────────────
+
+/**
+ * Derive a stable, URL-safe id for a heading so it can be jumped to (e.g. by
+ * a table-of-contents link). Strips inline markup markers first so
+ * "**Setup**" and "Setup" produce the same slug. Duplicate headings within
+ * the same document get -2, -3, … suffixes via the shared `seen` map.
+ */
+function _slugifyHeading(text, seen) {
+  const base = String(text)
+    .replace(/[*_`~]/g, '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-') || 'section';
+  const count = seen.get(base) || 0;
+  seen.set(base, count + 1);
+  return count === 0 ? base : `${base}-${count}`;
+}
+
 // ── Block renderers ──────────────────────────────────────────────────────────
 
 function _renderBlock(block, ctx) {
   switch (block.type) {
-    case 'heading':
-      return `<h${block.level}>${_renderInline(block.text)}</h${block.level}>`;
+    case 'heading': {
+      const id = _slugifyHeading(block.text, ctx.headingSlugs);
+      return `<h${block.level} id="${id}">${_renderInline(block.text)}</h${block.level}>`;
+    }
 
     case 'code':
       return `<pre><code${block.lang ? ` class="language-${escapeHtml(block.lang)}" data-lang="${escapeHtml(block.lang)}"` : ''}>${escapeHtml(block.body)}</code></pre>`;
