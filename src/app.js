@@ -93,6 +93,11 @@ let _caseSensitive    = false; // toggled by Aa button in F&R panel; reset on na
 // ── Editor preferences (user-global, persisted to localStorage) ───────────────
 const _STRIP_PASTE_KEY = 'syncpad_strip_paste';
 let _stripPaste = localStorage.getItem(_STRIP_PASTE_KEY) === 'true';
+// Off by default — it rewrites what you actually typed, which is a bigger
+// surprise than a purely visual preference, and some notes (code, URLs)
+// need literal straight quotes/hyphens preserved.
+const _SMART_PUNCT_KEY = 'syncpad_smart_punct';
+let _smartPunct = localStorage.getItem(_SMART_PUNCT_KEY) === 'true';
 
 // ── Files state ───────────────────────────────────────────────────────────────
 let _filesSelectMode = false;
@@ -1501,6 +1506,65 @@ function wireEvents() {
       return;
     }
 
+    // Smart punctuation (opt-in, off by default) — curly quotes, en/em
+    // dashes, and an ellipsis character, converted as you type. Checked
+    // before plain auto-pair below so a "smart" double quote wins over the
+    // straight-quote pairing when the preference is on.
+    if (_smartPunct) {
+      const start = editor.selectionStart;
+      const end   = editor.selectionEnd;
+      const OPENING_CONTEXT = /[\s([{‘“]/; // whitespace, start of doc, or another opening bracket/quote
+
+      if (e.key === '"' && start === end) {
+        e.preventDefault();
+        // Close/skip over a quote (either style) already sitting at the cursor.
+        if (editor.value[start] === '”' || editor.value[start] === '"') {
+          editor.selectionStart = editor.selectionEnd = start + 1;
+          return;
+        }
+        const before = editor.value[start - 1];
+        const opening = before === undefined || OPENING_CONTEXT.test(before);
+        const insert = opening ? '“”' : '”';
+        editor.value = editor.value.slice(0, start) + insert + editor.value.slice(start);
+        editor.selectionStart = editor.selectionEnd = start + 1; // right after the opening quote either way
+        editor.dispatchEvent(new Event('input', { bubbles: true }));
+        return;
+      }
+
+      if (e.key === "'" && start === end) {
+        // No pairing for the single quote — it's an apostrophe far more
+        // often than it's a quotation mark (don't, it's, '90s), so only its
+        // direction (opening ' vs. closing/apostrophe ') is decided here.
+        e.preventDefault();
+        const before = editor.value[start - 1];
+        const opening = before === undefined || OPENING_CONTEXT.test(before);
+        editor.value = editor.value.slice(0, start) + (opening ? '‘' : '’') + editor.value.slice(start);
+        editor.selectionStart = editor.selectionEnd = start + 1;
+        editor.dispatchEvent(new Event('input', { bubbles: true }));
+        return;
+      }
+
+      if (e.key === '-' && start === end) {
+        const prev = editor.value[start - 1];
+        if (prev === '–' || prev === '-') {
+          e.preventDefault();
+          editor.value = editor.value.slice(0, start - 1) + (prev === '-' ? '–' : '—') + editor.value.slice(start);
+          editor.selectionStart = editor.selectionEnd = start;
+          editor.dispatchEvent(new Event('input', { bubbles: true }));
+          return;
+        }
+        // A single hyphen with nothing to combine with — let it type normally.
+      }
+
+      if (e.key === '.' && start === end && editor.value.slice(start - 2, start) === '..') {
+        e.preventDefault();
+        editor.value = editor.value.slice(0, start - 2) + '…' + editor.value.slice(start);
+        editor.selectionStart = editor.selectionEnd = start - 1;
+        editor.dispatchEvent(new Event('input', { bubbles: true }));
+        return;
+      }
+    }
+
     // Auto-pair ( [ ` " — the unambiguous set only. Markdown's *, _ are
     // deliberately excluded: they're used both singly (italic) and doubled
     // (bold), so "does typing * open or close a pair" has no single correct
@@ -2529,6 +2593,25 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
     _updateStripPasteUI();
     UI.showToast(
       _stripPaste ? 'Paste formatting strip: On' : 'Paste formatting strip: Off',
+      'info', 2000
+    );
+  });
+
+  // ── Smart-punctuation setting button ───────────────────────────────────────
+  const _updateSmartPunctUI = () => {
+    const btn = document.getElementById('setting-smart-punct-btn');
+    if (!btn) return;
+    btn.textContent = _smartPunct ? 'On' : 'Off';
+    btn.setAttribute('aria-pressed', String(_smartPunct));
+  };
+  _updateSmartPunctUI();
+
+  document.getElementById('setting-smart-punct-btn')?.addEventListener('click', () => {
+    _smartPunct = !_smartPunct;
+    try { localStorage.setItem(_SMART_PUNCT_KEY, String(_smartPunct)); } catch {}
+    _updateSmartPunctUI();
+    UI.showToast(
+      _smartPunct ? 'Smart punctuation: On' : 'Smart punctuation: Off',
       'info', 2000
     );
   });
