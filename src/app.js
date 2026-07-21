@@ -44,6 +44,7 @@ import {
 
 import { encryptContent, decryptContent, looksEncrypted } from './encryption.js';
 import { loadDraft, clearDraft, isDraftNewer }              from './offline.js';
+import * as LiveEditor from './live-editor.js';
 
 import {
   setPermissionContext, canEdit, canChangeSettings, canToggleLock, canUploadFiles,
@@ -740,7 +741,7 @@ async function startApp() {
     encryptFn:        _encKey ? (pt) => encryptContent(pt, _encKey) : null,
     decryptFn:        _encKey ? (ct) => decryptContent(ct, _encKey) : null,
     getEditorVal:     UI.getEditorValue,
-    setEditorVal:     (text) => { UI.setEditorValue(text); UI.updateWordCount(text); _refreshPreviewIfActive(); },
+    setEditorVal:     (text) => { UI.setEditorValue(text); LiveEditor.syncFromText(text); UI.updateWordCount(text); _refreshPreviewIfActive(); },
     onStatusChange:   UI.setStatus,
     onPendingRemote:  (remoteText) => UI.showRemoteNotice({
       onApply:   () => { applyPendingRemote();   UI.hideRemoteNotice(); },
@@ -1051,6 +1052,7 @@ function _updatePermissionContext() {
     isViewOnceConsumed: (_room?.cleared_reason === 'view_once' && !!_room?.viewed && !_viewOnceConsumedByThisSession),
   });
   UI.setEditorEditable(canEdit());
+  LiveEditor.setReadOnly(!canEdit()); // keep the live surface's gate in lockstep
   UI.setEditBlockedReason(editBlockedReason());
   _updateViewOnceConsumedUI();
 }
@@ -1411,16 +1413,10 @@ const _resolveFileImageRefsForExport = async (html) => {
 function _wireShortcuts() {
   initShortcuts({
     onTogglePreview:    () => {
-      const next = _markdownMode === 'preview' ? 'write' : 'preview';
-      _markdownMode = next; _showPreview = next !== 'write';
-      UI.setMarkdownMode(next, () => renderMarkdown(UI.getEditorValue()));
-      if (_showPreview) _wirePreviewClickOnce();
+      _applyMarkdownMode(_markdownMode === 'preview' ? 'write' : 'preview');
     },
     onToggleSplit: () => {
-      const next = _markdownMode === 'split' ? 'write' : 'split';
-      _markdownMode = next; _showPreview = next !== 'write';
-      UI.setMarkdownMode(next, () => renderMarkdown(UI.getEditorValue()));
-      if (_showPreview) _wirePreviewClickOnce();
+      _applyMarkdownMode(_markdownMode === 'split' ? 'write' : 'split');
     },
     onToggleMonospace: () => {
       _monospace = !_monospace;
@@ -1468,6 +1464,9 @@ function _wireEditorCore() {
     UI.updateWordCount(UI.getEditorValue());
     UI.refreshFocusMode(); // no-op unless focus mode is on
     UI.refreshTypewriterMode(); // no-op unless typewriter mode is on
+    // Mirror into the live-preview surface (no-op when unmounted, and when
+    // the change originated there the text is identical so nothing happens).
+    LiveEditor.syncFromText(UI.getEditorValue());
     // Debounced so large documents don't re-render markdown on every keystroke.
     _debouncedRefreshPreview();
   });
@@ -1865,10 +1864,7 @@ function _wireSegmentedMarkdownControl() {
     btn.addEventListener('click', () => {
       const mode = btn.dataset.mode;
       if (!mode) return;
-      _markdownMode = mode;
-      _showPreview  = _markdownMode !== 'write';
-      UI.setMarkdownMode(_markdownMode, () => renderMarkdown(UI.getEditorValue()));
-      if (_showPreview) _wirePreviewClickOnce();
+      _applyMarkdownMode(mode);
     });
   });
 
@@ -2515,8 +2511,7 @@ function _wireFindReplacePanel() {
     if (!m) return;
     // Switch to write mode if in preview
     if (_markdownMode !== 'write' && _markdownMode !== 'split') {
-      _markdownMode = 'write'; _showPreview = false;
-      UI.setMarkdownMode('write');
+      _applyMarkdownMode('write');
     }
     // Only steal focus from the editor when the search/replace inputs don't
     // own it — otherwise typing in the search panel scrolls away mid-query.
@@ -2929,6 +2924,9 @@ function teardownRealtimeSession() {
   _markdownMode = 'write';
   _showPreview  = false;
   UI.setMarkdownMode('write', null);
+  // Tear down the live-preview surface so the next room mounts fresh rather
+  // than briefly showing this room's content.
+  LiveEditor.destroy();
   // Reset expiration preset — both the variable AND the settings-panel DOM
   // (preset button highlighting, custom-row visibility) — so a room where
   // "Custom" was selected doesn't leave the panel visually showing Custom
@@ -3065,6 +3063,48 @@ async function _restoreRevision(rev) {
 
 
 // ── Preview helpers ───────────────────────────────────────────────────────────
+
+/**
+ * Single entry point for every Write/Preview/Split mode change. Preview and
+ * Split's right pane use the Typora-style editable CM6 surface; if it fails
+ * to mount for any reason the old rendered-HTML preview is the fallback.
+ */
+function _applyMarkdownMode(mode) {
+  _markdownMode = mode;
+  _showPreview  = mode !== 'write';
+
+  let live = false;
+  if (mode === 'preview' || mode === 'split') {
+    const container = document.getElementById('note-live');
+    if (container) {
+      try {
+        if (!LiveEditor.isMounted()) {
+          LiveEditor.mount(container, UI.getEditorValue(), {
+            onChange: _onLiveEditorChange,
+            readOnly: !canEdit(),
+          });
+        } else {
+          LiveEditor.syncFromText(UI.getEditorValue());
+          LiveEditor.setReadOnly(!canEdit());
+        }
+        live = LiveEditor.isMounted();
+      } catch { live = false; }
+    }
+  }
+
+  UI.setMarkdownMode(mode, () => renderMarkdown(UI.getEditorValue()), { live });
+  if (_showPreview && !live) _wirePreviewClickOnce();
+}
+
+// User edits in the live surface flow back through the textarea's normal
+// input pipeline (save/broadcast/word count/snapshot) — the textarea stays
+// the single source every other module reads.
+function _onLiveEditorChange(text) {
+  const editor = document.getElementById('note-editor');
+  if (!editor || !canEdit()) return;
+  editor.value = text;
+  editor.dispatchEvent(new Event('input', { bubbles: true }));
+}
 
 function _refreshPreviewIfActive() {
   if (_markdownMode !== 'write') UI.refreshPreview(() => renderMarkdown(UI.getEditorValue()));

@@ -6,12 +6,24 @@ import { test, expect } from '@playwright/test';
 import { createRoom } from './helpers.js';
 
 /**
- * Switch to preview mode and return the preview pane locator.
+ * Render `markdown` through the real renderMarkdown() module into the
+ * #note-preview pane and return its locator.
+ *
+ * Preview mode itself now shows the editable CM6 live surface (#note-live),
+ * not this pane — but renderMarkdown() still powers every export path and
+ * the live-surface fallback, so its output is still worth asserting on
+ * directly. Rendering via the module keeps these tests honest without
+ * coupling them to a UI mode that no longer displays this HTML.
  */
 async function withPreview(page, markdown) {
   await createRoom(page);
   await page.locator('#note-editor').fill(markdown);
-  await page.locator('.md-seg-btn[data-mode="preview"]').click();
+  await page.evaluate(async (md) => {
+    const { renderMarkdown } = await import('/SyncPad/src/markdown.js');
+    const pane = document.getElementById('note-preview');
+    pane.innerHTML = renderMarkdown(md);
+    pane.classList.remove('hidden');
+  }, markdown);
   return page.locator('#note-preview');
 }
 

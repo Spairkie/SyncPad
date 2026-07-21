@@ -5,7 +5,7 @@
 // ES module so the no-build-step app can `import` CM6 locally (no CDN at
 // runtime, works offline like the rest of the PWA).
 
-export { EditorState, StateField, StateEffect, RangeSet, RangeSetBuilder, Compartment } from '@codemirror/state';
+export { EditorState, StateField, StateEffect, RangeSet, RangeSetBuilder, Compartment, Annotation } from '@codemirror/state';
 export {
   EditorView, ViewPlugin, ViewUpdate, Decoration, WidgetType,
   keymap, drawSelection, highlightSpecialChars, placeholder,
