@@ -1,7 +1,7 @@
 {
   "name": "syncpad",
   "version": "1.0.0",
-  "description": "> **A temporary shared notepad for fast handoff between devices.**   > Create a room, share an editable or read-only link, and sync notes and files in real time — no account needed.",
+  "description": "> **A temporary shared notepad for fast handoff between devices.**   > Create a room, share an editable or read-only link, and sync notes and files in real time \u2014 no account needed.",
   "main": "service-worker.js",
   "scripts": {
     "test": "playwright test",
@@ -9,7 +9,8 @@
     "test:headed": "playwright test --headed",
     "test:report": "playwright show-report",
     "test:chrome": "playwright test --project=chromium",
-    "serve": "npx serve . -l 5555 --no-clipboard"
+    "serve": "npx serve . -l 5555 --no-clipboard",
+    "build:vendor": "esbuild vendor/codemirror-entry.js --bundle --format=esm --outfile=vendor/codemirror.js --minify"
   },
   "repository": {
     "type": "git",
@@ -19,6 +20,13 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "@playwright/test": "^1.56.0"
+    "@codemirror/commands": "^6.10.4",
+    "@codemirror/lang-markdown": "^6.5.1",
+    "@codemirror/language": "^6.12.4",
+    "@codemirror/state": "^6.7.1",
+    "@codemirror/view": "^6.43.6",
+    "@lezer/highlight": "^1.2.3",
+    "@playwright/test": "^1.56.0",
+    "esbuild": "^0.28.1"
   }
 }
