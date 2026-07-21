@@ -16,7 +16,7 @@ import {
   defaultKeymap, history, historyKeymap, indentWithTab,
   markdown, markdownLanguage,
   syntaxHighlighting, HighlightStyle, tags,
-  ViewPlugin, Decoration, syntaxTree,
+  ViewPlugin, Decoration, WidgetType, syntaxTree,
 } from '../vendor/codemirror.js';
 
 let _view      = null;
@@ -59,9 +59,63 @@ const _mdHighlight = HighlightStyle.define([
 const _MARK_NODES = new Set(['HeaderMark', 'EmphasisMark', 'CodeMark', 'StrikethroughMark']);
 const _hideDeco   = Decoration.replace({});
 const _codeDeco   = Decoration.mark({ class: 'cm-md-inlinecode' });
+const _quoteLine  = Decoration.line({ class: 'cm-md-blockquote' });
 
 function _selectionTouches(state, from, to) {
   return state.selection.ranges.some((r) => r.from <= to && r.to >= from);
+}
+
+// Clickable checkbox replacing a task marker ([ ] / [x]). Toggling rewrites
+// the marker text through a normal user transaction, so the edit flows out
+// through onChange → textarea → the whole save/broadcast pipeline.
+class _CheckboxWidget extends WidgetType {
+  constructor(checked, from, to) { super(); this.checked = checked; this.from = from; this.to = to; }
+  eq(other) { return other.checked === this.checked && other.from === this.from && other.to === this.to; }
+  toDOM(view) {
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.className = 'cm-md-checkbox';
+    box.checked = this.checked;
+    box.addEventListener('change', () => {
+      if (view.state.readOnly) { box.checked = this.checked; return; }
+      view.dispatch({ changes: { from: this.from, to: this.to, insert: box.checked ? '[x]' : '[ ]' } });
+    });
+    return box;
+  }
+}
+
+class _BulletWidget extends WidgetType {
+  eq() { return true; }
+  toDOM() {
+    const s = document.createElement('span');
+    s.className = 'cm-md-bullet';
+    s.textContent = '•';
+    return s;
+  }
+}
+
+class _HrWidget extends WidgetType {
+  eq() { return true; }
+  toDOM() {
+    const hr = document.createElement('span');
+    hr.className = 'cm-md-hr';
+    return hr;
+  }
+}
+
+const _bulletWidget = new _BulletWidget();
+const _hrWidget     = new _HrWidget();
+
+// Extract a Link node's destination for ctrl/cmd+click opening. Only http(s)
+// destinations open — same policy as the markdown renderer.
+function _linkUrlAt(state, pos) {
+  let node = syntaxTree(state).resolveInner(pos, 1);
+  while (node && node.name !== 'Link') node = node.parent;
+  if (!node) return null;
+  const urlNode = node.getChild('URL');
+  if (!urlNode) return null;
+  const url = state.doc.sliceString(urlNode.from, urlNode.to);
+  return /^https?:\/\//i.test(url) ? url : null;
 }
 
 const _seamless = ViewPlugin.fromClass(class {
@@ -85,6 +139,75 @@ const _seamless = ViewPlugin.fromClass(class {
             ranges.push(_codeDeco.range(nodeRef.from, nodeRef.to));
             return;
           }
+
+          // Blockquote: styled left border on each line; the > marks are
+          // hidden below via QuoteMark when the quote isn't being edited.
+          if (name === 'Blockquote') {
+            for (let line = state.doc.lineAt(nodeRef.from); line.from <= nodeRef.to;) {
+              ranges.push(_quoteLine.range(line.from));
+              if (line.to + 1 > state.doc.length) break;
+              line = state.doc.lineAt(line.to + 1);
+            }
+            return;
+          }
+
+          // Horizontal rule → rendered line (revealed while touched).
+          if (name === 'HorizontalRule') {
+            if (!_selectionTouches(state, nodeRef.from, nodeRef.to)) {
+              ranges.push(Decoration.replace({ widget: _hrWidget }).range(nodeRef.from, nodeRef.to));
+            }
+            return;
+          }
+
+          // Task marker ([ ] / [x]) → real clickable checkbox.
+          if (name === 'TaskMarker') {
+            const parent = nodeRef.node.parent; // Task (the list item content)
+            if (parent && _selectionTouches(state, parent.from, parent.to)) return;
+            const checked = state.doc.sliceString(nodeRef.from, nodeRef.to).toLowerCase().includes('x');
+            let to = nodeRef.to;
+            if (state.doc.sliceString(to, to + 1) === ' ') to += 1;
+            ranges.push(Decoration.replace({ widget: new _CheckboxWidget(checked, nodeRef.from, nodeRef.to) }).range(nodeRef.from, to));
+            return;
+          }
+
+          // Bullet list marks → •  (ordered-list numbers read fine as-is;
+          // task items get their mark hidden since the checkbox stands in).
+          if (name === 'ListMark') {
+            const mark = state.doc.sliceString(nodeRef.from, nodeRef.to);
+            if (!/^[-*+]$/.test(mark)) return;
+            const item = nodeRef.node.parent; // ListItem
+            if (item && _selectionTouches(state, item.from, item.to)) return;
+            const isTask = !!item?.getChild?.('Task');
+            let to = nodeRef.to;
+            if (isTask) {
+              if (state.doc.sliceString(to, to + 1) === ' ') to += 1;
+              ranges.push(_hideDeco.range(nodeRef.from, to));
+            } else {
+              ranges.push(Decoration.replace({ widget: _bulletWidget }).range(nodeRef.from, nodeRef.to));
+            }
+            return;
+          }
+
+          // Quote marks and link syntax fold like wave-1 markers do.
+          if (name === 'QuoteMark') {
+            const parent = nodeRef.node.parent;
+            if (parent && _selectionTouches(state, parent.from, parent.to)) return;
+            let to = nodeRef.to;
+            if (state.doc.sliceString(to, to + 1) === ' ') to += 1;
+            ranges.push(_hideDeco.range(nodeRef.from, to));
+            return;
+          }
+          if (name === 'LinkMark' || name === 'URL') {
+            let link = nodeRef.node.parent;
+            while (link && link.name !== 'Link' && link.name !== 'Image') link = link.parent;
+            if (!link) return;
+            if (_selectionTouches(state, link.from, link.to)) return;
+            // Hide [ ] ( ) marks and the URL — leaving just the link text.
+            // For URL also swallow nothing extra; marks bracket it already.
+            ranges.push(_hideDeco.range(nodeRef.from, nodeRef.to));
+            return;
+          }
+
           if (!_MARK_NODES.has(name)) return;
 
           // Reveal raw syntax while the selection touches the enclosing
@@ -140,6 +263,20 @@ export function mount(container, initialValue, { onChange, readOnly = false } = 
         markdown({ base: markdownLanguage }),
         syntaxHighlighting(_mdHighlight),
         _seamless,
+        // Ctrl/Cmd+click a folded link to open it (http(s) only — same
+        // destination policy as the markdown renderer).
+        EditorView.domEventHandlers({
+          mousedown: (e, view) => {
+            if (!(e.ctrlKey || e.metaKey)) return false;
+            const pos = view.posAtCoords({ x: e.clientX, y: e.clientY });
+            if (pos == null) return false;
+            const url = _linkUrlAt(view.state, pos);
+            if (!url) return false;
+            e.preventDefault();
+            window.open(url, '_blank', 'noopener');
+            return true;
+          },
+        }),
         _theme,
         EditorView.lineWrapping,
         placeholder('Start writing… Your note syncs live across devices.'),
