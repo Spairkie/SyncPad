@@ -1372,9 +1372,43 @@ function _openTemplatesModalFresh() {
   );
 }
 
-function wireEvents() {
-  // Shortcuts are always re-wired: they were destroyed in teardownRealtimeSession()
-  // and their callbacks reference module-level state, not captured room locals.
+function closeMoreDropdown() {
+  document.getElementById('more-dropdown')?.classList.remove('open');
+  document.getElementById('btn-more')?.setAttribute('aria-expanded', 'false');
+}
+
+const _downloadBlob = (content, filename, mime) => {
+  const blob = new Blob([content], { type: mime });
+  const a    = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: filename });
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(a.href);
+};
+
+// Shared guard: all export actions are meaningless on an empty note.
+const _requireContent = () => {
+  if (UI.getEditorValue().trim()) return true;
+  UI.showToast('Nothing to export — the note is empty.', 'warning');
+  return false;
+};
+
+// Exported HTML/PDF are standalone documents with no live JS to resolve
+// syncpad-file: image references (see markdown.js/ui.js) the way the
+// preview pane does — resolve each to an actual signed URL once, up front,
+// and bake it in. An image whose file was since deleted (or fails to
+// resolve for any reason) is left as-is: no `src`, alt text still shows.
+const _resolveFileImageRefsForExport = async (html) => {
+  const paths = [...new Set(Array.from(html.matchAll(/data-syncpad-file="([^"]+)"/g), (m) => m[1]))];
+  if (!paths.length) return html;
+  const urlByPath = new Map();
+  await Promise.all(paths.map(async (path) => {
+    try { urlByPath.set(path, await getDownloadUrl(path)); } catch { /* left unresolved */ }
+  }));
+  return html.replace(/<img data-syncpad-file="([^"]+)"([^>]*)>/g, (full, path, rest) => {
+    const url = urlByPath.get(path);
+    return url ? `<img src="${escapeHtml(url)}"${rest}>` : full;
+  });
+};
+
+function _wireShortcuts() {
   initShortcuts({
     onTogglePreview:    () => {
       const next = _markdownMode === 'preview' ? 'write' : 'preview';
@@ -1422,11 +1456,9 @@ function wireEvents() {
     },
   });
 
-  // All DOM element listeners below are one-time-only. On multi-room navigation
-  // shortcuts are re-wired above, but these must not accumulate.
-  if (_eventsWired) return;
-  _eventsWired = true;
+}
 
+function _wireEditorCore() {
   const editor = document.getElementById('note-editor');
 
   editor?.addEventListener('input', () => {
@@ -1639,6 +1671,11 @@ function wireEvents() {
     }
   });
 
+}
+
+function _wireEditorToolbarAndLifecycle() {
+  const editor = document.getElementById('note-editor');
+
   // ── Markdown toolbar ────────────────────────────────────────────────────────
   document.getElementById('md-toolbar')?.addEventListener('mousedown', (e) => {
     // mousedown (not click) so we can preventDefault before the editor loses focus
@@ -1719,6 +1756,9 @@ function wireEvents() {
     }
   });
 
+}
+
+function _wireHeader() {
   // ── Header ─────────────────────────────────────────────────────────────────
   document.getElementById('btn-tools')?.addEventListener('click', () => { closeMoreDropdown(); UI.togglePanel('tools-panel'); });
   document.getElementById('btn-files')?.addEventListener('click', () => { closeMoreDropdown(); UI.togglePanel('files-panel'); });
@@ -1735,10 +1775,6 @@ function wireEvents() {
   // More dropdown toggle
   const moreBtn      = document.getElementById('btn-more');
   const moreDropdown = document.getElementById('more-dropdown');
-  function closeMoreDropdown() {
-    moreDropdown?.classList.remove('open');
-    moreBtn?.setAttribute('aria-expanded', 'false');
-  }
   moreBtn?.addEventListener('click', (e) => {
     e.stopPropagation();
     const open = moreDropdown?.classList.toggle('open');
@@ -1821,6 +1857,9 @@ function wireEvents() {
     if (e.key === 'Escape') { e.preventDefault(); UI.setRoomTitleEditMode(false); }
   });
 
+}
+
+function _wireSegmentedMarkdownControl() {
   // ── Segmented markdown control ─────────────────────────────────────────────
   document.querySelectorAll('.md-seg-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -1833,6 +1872,9 @@ function wireEvents() {
     });
   });
 
+}
+
+function _wireMobileActionBar() {
   // ── Mobile action bar ──────────────────────────────────────────────────────
   document.getElementById('mob-btn-share')?.addEventListener('click', () => {
     _openShareModal();
@@ -1842,6 +1884,9 @@ function wireEvents() {
   document.getElementById('mob-btn-presence')?.addEventListener('click', () => UI.togglePanel('presence-panel'));
   document.getElementById('mob-btn-settings')?.addEventListener('click', () => UI.togglePanel('settings-panel'));
 
+}
+
+function _wireFooterQuickButtons() {
   // ── Footer quick buttons ───────────────────────────────────────────────────
   document.getElementById('btn-copy-footer')?.addEventListener('click', () => {
     copyToClipboard(UI.getEditorValue())
@@ -1855,6 +1900,9 @@ function wireEvents() {
   });
   UI.initFooterClock();
 
+}
+
+function _wirePanelsAndModals() {
   // ── Panels / modals ────────────────────────────────────────────────────────
   document.querySelectorAll('.panel-close').forEach(btn =>
     btn.addEventListener('click', () => UI.closeAllPanels())
@@ -1926,6 +1974,11 @@ function wireEvents() {
     }
   });
 
+
+}
+
+function _wireTools() {
+  const editor = document.getElementById('note-editor');
 
   // ── Tools ──────────────────────────────────────────────────────────────────
   const toolActions = {
@@ -2007,6 +2060,9 @@ function wireEvents() {
   // that panel again immediately.
   document.getElementById('tool-history')?.addEventListener('click', () => { _openHistoryPanel(); });
 
+}
+
+function _wireFiles() {
   // ── Files ──────────────────────────────────────────────────────────────────
   UI.setFileHandlers(async (files) => {
     if (!canUploadFiles()) { UI.showToast(editBlockedReason() || 'File upload is disabled. Text-encrypted rooms do not allow new file uploads in v1.', 'warning'); return; }
@@ -2048,12 +2104,18 @@ function wireEvents() {
     }
   });
 
+}
+
+function _wireFilesSortOrder() {
   // ── Files — sort order ────────────────────────────────────────────────────
   document.getElementById('files-sort')?.addEventListener('change', (e) => {
     _filesSort = e.target.value;
     refreshFiles();
   });
 
+}
+
+function _wireFilesBulkSelect() {
   // ── Files — bulk select ────────────────────────────────────────────────────
   document.getElementById('files-select-toggle')?.addEventListener('click', () => {
     _filesSelectMode = !_filesSelectMode;
@@ -2100,6 +2162,9 @@ function wireEvents() {
     _updateBulkBar();
   });
 
+}
+
+function _wireSettings() {
   // ── Settings ───────────────────────────────────────────────────────────────
   document.getElementById('setting-passcode-btn')?.addEventListener('click', async () => {
     if (!canChangeSettings()) { UI.showToast(editBlockedReason() || 'Settings are disabled.', 'warning'); return; }
@@ -2275,43 +2340,15 @@ function wireEvents() {
     } catch { UI.showToast('Could not update editing lock.', 'error'); }
   });
 
+}
+
+function _wireExportModal() {
   // ── Export modal ───────────────────────────────────────────────────────────
   document.getElementById('btn-export')?.addEventListener('click', () => {
     closeMoreDropdown();
     UI.openModal('export-modal');
   });
   document.getElementById('export-modal-close')?.addEventListener('click', () => UI.closeModal('export-modal'));
-
-  const _downloadBlob = (content, filename, mime) => {
-    const blob = new Blob([content], { type: mime });
-    const a    = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: filename });
-    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(a.href);
-  };
-
-  // Shared guard: all export actions are meaningless on an empty note.
-  const _requireContent = () => {
-    if (UI.getEditorValue().trim()) return true;
-    UI.showToast('Nothing to export — the note is empty.', 'warning');
-    return false;
-  };
-
-  // Exported HTML/PDF are standalone documents with no live JS to resolve
-  // syncpad-file: image references (see markdown.js/ui.js) the way the
-  // preview pane does — resolve each to an actual signed URL once, up front,
-  // and bake it in. An image whose file was since deleted (or fails to
-  // resolve for any reason) is left as-is: no `src`, alt text still shows.
-  const _resolveFileImageRefsForExport = async (html) => {
-    const paths = [...new Set(Array.from(html.matchAll(/data-syncpad-file="([^"]+)"/g), (m) => m[1]))];
-    if (!paths.length) return html;
-    const urlByPath = new Map();
-    await Promise.all(paths.map(async (path) => {
-      try { urlByPath.set(path, await getDownloadUrl(path)); } catch { /* left unresolved */ }
-    }));
-    return html.replace(/<img data-syncpad-file="([^"]+)"([^>]*)>/g, (full, path, rest) => {
-      const url = urlByPath.get(path);
-      return url ? `<img src="${escapeHtml(url)}"${rest}>` : full;
-    });
-  };
 
   document.getElementById('export-txt')?.addEventListener('click', () => {
     if (!_requireContent()) return;
@@ -2386,6 +2423,9 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
     win.print();
   });
 
+}
+
+function _wireKeyboardShortcutsModal() {
   // ── Keyboard shortcuts modal ───────────────────────────────────────────────
   document.getElementById('btn-shortcuts')?.addEventListener('click', () => {
     closeMoreDropdown();
@@ -2393,6 +2433,9 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
   });
   document.getElementById('shortcuts-modal-close')?.addEventListener('click', () => UI.closeModal('shortcuts-modal'));
 
+}
+
+function _wireSaveAsTemplate() {
   // ── Save as template ───────────────────────────────────────────────────────
   document.getElementById('btn-save-as-template')?.addEventListener('click', async () => {
     const body = UI.getEditorValue().trim();
@@ -2416,6 +2459,11 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
       UI.showToast('Could not save template.', 'error');
     }
   });
+
+}
+
+function _wireFindReplacePanel() {
+  const editor = document.getElementById('note-editor');
 
   // ── Find & Replace panel ───────────────────────────────────────────────────
   const searchInput  = document.getElementById('search-input');
@@ -2572,6 +2620,11 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
     searchInput?.focus();
   });
 
+}
+
+function _wirePasteSanitization() {
+  const editor = document.getElementById('note-editor');
+
   // ── Paste sanitization ─────────────────────────────────────────────────────
   // Strip HTML/RTF formatting on paste when the user preference is enabled.
   // We intercept the paste event on the editor and substitute plain-text only.
@@ -2592,6 +2645,9 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
     editor.dispatchEvent(new Event('input', { bubbles: true }));
   });
 
+}
+
+function _wireEditorPreferenceToggles() {
   // ── Monospace setting button (Settings panel) ──────────────────────────────
   const _updateMonospaceSettingUI = () => {
     const btn = document.getElementById('setting-monospace-btn');
@@ -2677,6 +2733,37 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
     _updateTypewriterModeUI();
     UI.showToast(_typewriterMode ? 'Typewriter mode: On' : 'Typewriter mode: Off', 'info', 2000);
   });
+
+}
+
+function wireEvents() {
+  // Shortcuts are always re-wired: they were destroyed in teardownRealtimeSession()
+  // and their callbacks reference module-level state, not captured room locals.
+  _wireShortcuts();
+
+  // All DOM element listeners below are one-time-only. On multi-room navigation
+  // shortcuts are re-wired above, but these must not accumulate.
+  if (_eventsWired) return;
+  _eventsWired = true;
+
+  _wireEditorCore();
+  _wireEditorToolbarAndLifecycle();
+  _wireHeader();
+  _wireSegmentedMarkdownControl();
+  _wireMobileActionBar();
+  _wireFooterQuickButtons();
+  _wirePanelsAndModals();
+  _wireTools();
+  _wireFiles();
+  _wireFilesSortOrder();
+  _wireFilesBulkSelect();
+  _wireSettings();
+  _wireExportModal();
+  _wireKeyboardShortcutsModal();
+  _wireSaveAsTemplate();
+  _wireFindReplacePanel();
+  _wirePasteSanitization();
+  _wireEditorPreferenceToggles();
 }
 
 // ── Editor preference helpers ─────────────────────────────────────────────────
