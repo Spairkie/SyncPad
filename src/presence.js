@@ -58,6 +58,7 @@ export function initPresence(roomId, onPresenceChange, { readOnly = false } = {}
           typing:      false,
           read_only:   _readOnly,
           cursor_line: null,
+          cursor_pos:  null,
           joined_at:   Date.now(),
           tab_id:      tabId,
         });
@@ -80,6 +81,7 @@ async function _track(updates) {
     typing:      false,
     read_only:   _readOnly,
     cursor_line: null,
+    cursor_pos:  null,
     ..._lastTracked,
     ...updates,
   };
@@ -100,12 +102,14 @@ export function setTyping(isTyping) {
 }
 
 /**
- * Broadcast this device's approximate cursor line (throttled).
+ * Broadcast this device's cursor location (throttled).
  * Read-only devices broadcast their scroll position but NOT as "typing".
- * @param {number|null} lineNumber  – 1-based line number, or null to clear
+ * @param {number|null} lineNumber – 1-based line number, or null to clear
+ * @param {number|null} [pos]      – precise character offset into the note,
+ *                                   used to render in-text remote carets
  */
-export const setCursorLine = throttle(function(lineNumber) {
-  _track({ cursor_line: lineNumber ?? null });
+export const setCursorLine = throttle(function(lineNumber, pos = null) {
+  _track({ cursor_line: lineNumber ?? null, cursor_pos: pos ?? null });
 }, 800);
 
 /** Update the displayed device name in the presence channel. */
@@ -120,7 +124,7 @@ export function getPresenceState() {
 
 /**
  * Returns a normalised array of connected devices, sorted: self first, then alpha.
- * @returns {{ device_id, device_name, typing, read_only, cursor_line, isMe }[]}
+ * @returns {{ device_id, device_name, typing, read_only, cursor_line, cursor_pos, isMe }[]}
  */
 export function getConnectedDevices() {
   const state   = getPresenceState();
@@ -142,6 +146,7 @@ export function getConnectedDevices() {
         typing:      Boolean(prev?.typing || e.typing),
         read_only:   useCurrent ? !!e.read_only : !!prev.read_only,
         cursor_line: useCurrent ? (e.cursor_line ?? null) : (prev.cursor_line ?? null),
+        cursor_pos:  useCurrent ? (e.cursor_pos  ?? null) : (prev.cursor_pos  ?? null),
         joined_at:   useCurrent ? joined : prevJoined,
         isMe:        id === myId,
       });

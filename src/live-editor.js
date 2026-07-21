@@ -17,10 +17,12 @@ import {
   markdown, markdownLanguage,
   syntaxHighlighting, HighlightStyle, tags,
   ViewPlugin, Decoration, WidgetType, syntaxTree,
+  StateField, StateEffect,
 } from '../vendor/codemirror.js';
 
-let _view      = null;
-let _onChange  = null;
+let _view             = null;
+let _onChange         = null;
+let _onCursorActivity = null;
 const _readOnly = new Compartment();
 
 // Marks transactions applied from outside (textarea → CM6) so the update
@@ -105,6 +107,73 @@ class _HrWidget extends WidgetType {
 
 const _bulletWidget = new _BulletWidget();
 const _hrWidget     = new _HrWidget();
+
+// ── Live remote cursors ──────────────────────────────────────────────────────
+//
+// Colored in-text carets with name labels for each remote collaborator,
+// Google-Docs style. Positions arrive from the presence channel (app.js
+// calls setRemoteCursors) and live in a StateField whose decorations are
+// mapped through local doc changes, so carets stay visually anchored while
+// this device types between presence updates.
+
+class _RemoteCaretWidget extends WidgetType {
+  constructor(name, color) { super(); this.name = name; this.color = color; }
+  eq(other) { return other.name === this.name && other.color === this.color; }
+  toDOM() {
+    const caret = document.createElement('span');
+    caret.className = 'cm-remote-caret';
+    caret.style.borderLeftColor = this.color;
+    const label = document.createElement('span');
+    label.className = 'cm-remote-caret-label';
+    label.style.background = this.color;
+    label.textContent = this.name;
+    caret.appendChild(label);
+    return caret;
+  }
+  ignoreEvent() { return true; }
+}
+
+const _setRemoteCursorsEffect = StateEffect.define();
+
+const _remoteCursorField = StateField.define({
+  create: () => Decoration.none,
+  update(value, tr) {
+    value = value.map(tr.changes);
+    for (const e of tr.effects) if (e.is(_setRemoteCursorsEffect)) value = e.value;
+    return value;
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
+
+/** Stable per-device caret colour derived from its id. */
+export function colorForDevice(deviceId) {
+  let hash = 0;
+  const s = String(deviceId || '');
+  for (let i = 0; i < s.length; i++) hash = ((hash << 5) - hash + s.charCodeAt(i)) | 0;
+  return `hsl(${((hash % 360) + 360) % 360}, 65%, 48%)`;
+}
+
+/**
+ * Render carets for remote collaborators.
+ * @param {{ id: string, name: string, pos: number }[]} cursors
+ */
+export function setRemoteCursors(cursors) {
+  if (!_view) return;
+  const docLen = _view.state.doc.length;
+  const ranges = (cursors || [])
+    .filter((c) => typeof c.pos === 'number' && c.pos >= 0)
+    .map((c) => {
+      const pos = Math.min(c.pos, docLen);
+      return Decoration.widget({
+        widget: new _RemoteCaretWidget(c.name || 'Someone', colorForDevice(c.id)),
+        side: -1,
+      }).range(pos);
+    });
+  _view.dispatch({
+    effects: _setRemoteCursorsEffect.of(Decoration.set(ranges, true)),
+    annotations: External.of(true),
+  });
+}
 
 // Extract a Link node's destination for ctrl/cmd+click opening. Only http(s)
 // destinations open — same policy as the markdown renderer.
@@ -250,9 +319,10 @@ export function isMounted() { return !!_view; }
  * already mounted). `onChange(text)` fires only for edits made in this
  * surface, never for syncFromText() applications.
  */
-export function mount(container, initialValue, { onChange, readOnly = false } = {}) {
+export function mount(container, initialValue, { onChange, onCursorActivity, readOnly = false } = {}) {
   destroy();
   _onChange = onChange || null;
+  _onCursorActivity = onCursorActivity || null;
   _view = new EditorView({
     state: EditorState.create({
       doc: initialValue || '',
@@ -281,9 +351,13 @@ export function mount(container, initialValue, { onChange, readOnly = false } = 
         EditorView.lineWrapping,
         placeholder('Start writing… Your note syncs live across devices.'),
         _readOnly.of(EditorState.readOnly.of(!!readOnly)),
+        _remoteCursorField,
         EditorView.updateListener.of((update) => {
-          if (!update.docChanged) return;
-          if (update.transactions.some((tr) => tr.annotation(External))) return;
+          const external = update.transactions.some((tr) => tr.annotation(External));
+          if (update.selectionSet && !external) {
+            _onCursorActivity?.(update.state.selection.main.head);
+          }
+          if (!update.docChanged || external) return;
           _onChange?.(update.state.doc.toString());
         }),
       ],
@@ -296,6 +370,7 @@ export function destroy() {
   _view?.destroy();
   _view = null;
   _onChange = null;
+  _onCursorActivity = null;
 }
 
 /** Replace the doc from the textarea's value. No-op when already identical. */
