@@ -195,6 +195,13 @@ window.addEventListener('popstate', () => {
   location.reload();
 });
 
+// Pasted/dropped images reference a private-bucket file path (markdown.js's
+// syncpad-file: scheme) rather than a baked-in URL, since a real signed URL
+// expires in ~1h and can't just be stored in the note text. This resolver is
+// stateless with respect to the current room, so it's wired once here rather
+// than re-wired on every room join.
+UI.setFileImageResolver(getDownloadUrl);
+
 function _normalizeBasePath(basePath) {
   const raw = String(basePath || '').trim();
   if (!raw || raw === '/') return '';
@@ -1134,6 +1141,50 @@ function _sortFiles(files) {
   }
 }
 
+/**
+ * Upload one or more images pasted/dropped straight into the editor and
+ * insert a syncpad-file: markdown reference for each at the cursor —
+ * mirrors the Files panel's own multi-upload flow (sequential, one progress
+ * indicator, one summary toast) rather than duplicating a second UX for it.
+ */
+async function _uploadAndInsertImages(files) {
+  if (!canUploadFiles()) {
+    UI.showToast(editBlockedReason() || 'File upload is disabled. Text-encrypted rooms do not allow new file uploads in v1.', 'warning');
+    return;
+  }
+  const tooLarge = files.filter(f => f.size > 10 * 1024 * 1024);
+  const toUpload = files.filter(f => f.size <= 10 * 1024 * 1024);
+  if (tooLarge.length) {
+    UI.showToast(
+      tooLarge.length === files.length ? 'Image too large (max 10 MB).' : `${tooLarge.length} image${tooLarge.length !== 1 ? 's' : ''} skipped (max 10 MB).`,
+      'error',
+    );
+  }
+  if (!toUpload.length) return;
+
+  UI.setUploadingState(true, toUpload.length > 1 ? `Uploading image 1 of ${toUpload.length}…` : 'Uploading image…');
+  let succeeded = 0, failed = 0;
+  for (let i = 0; i < toUpload.length; i++) {
+    if (toUpload.length > 1) UI.setUploadingState(true, `Uploading image ${i + 1} of ${toUpload.length}…`);
+    try {
+      const record = await uploadFile(_roomId, toUpload[i]);
+      UI.insertAtCursor(`![${record.filename}](syncpad-file:${record.file_path})\n`);
+      succeeded++;
+    } catch { failed++; }
+  }
+  UI.setUploadingState(false);
+
+  if (succeeded) { broadcastFilesChange(); await refreshFiles(); }
+
+  if (!failed) {
+    UI.showToast(succeeded === 1 ? 'Image uploaded.' : `${succeeded} images uploaded.`, 'success');
+  } else if (succeeded) {
+    UI.showToast(`${succeeded} uploaded, ${failed} failed.`, 'error');
+  } else {
+    UI.showToast(failed === 1 ? 'Could not upload image.' : 'Could not upload images.', 'error');
+  }
+}
+
 async function refreshFiles() {
   let files;
   try {
@@ -1476,10 +1527,29 @@ function wireEvents() {
   // Block paste keystrokes when the editor is locked. The textarea readonly
   // attribute does the heavy lifting; this is belt-and-suspenders.
   editor?.addEventListener('paste', (e) => {
-    if (!canPaste()) { e.preventDefault(); }
+    if (!canPaste()) { e.preventDefault(); return; }
+    const items = Array.from(e.clipboardData?.items || []);
+    const imageFiles = items
+      .filter((it) => it.kind === 'file' && it.type.startsWith('image/'))
+      .map((it) => it.getAsFile())
+      .filter(Boolean);
+    if (!imageFiles.length) return;
+    e.preventDefault();
+    // Stop the paste-sanitization listener below from also handling this
+    // event — clipboard image paste carries no meaningful text/plain to strip.
+    e.stopImmediatePropagation();
+    _uploadAndInsertImages(imageFiles);
+  });
+  editor?.addEventListener('dragover', (e) => {
+    if (!canEdit()) return;
+    if (Array.from(e.dataTransfer?.items || []).some((it) => it.kind === 'file')) e.preventDefault();
   });
   editor?.addEventListener('drop', (e) => {
-    if (!canEdit()) { e.preventDefault(); }
+    if (!canEdit()) { e.preventDefault(); return; }
+    const imageFiles = Array.from(e.dataTransfer?.files || []).filter((f) => f.type.startsWith('image/'));
+    if (!imageFiles.length) return;
+    e.preventDefault();
+    _uploadAndInsertImages(imageFiles);
   });
 
   window.addEventListener('beforeunload', () => {
@@ -2069,6 +2139,24 @@ function wireEvents() {
     return false;
   };
 
+  // Exported HTML/PDF are standalone documents with no live JS to resolve
+  // syncpad-file: image references (see markdown.js/ui.js) the way the
+  // preview pane does — resolve each to an actual signed URL once, up front,
+  // and bake it in. An image whose file was since deleted (or fails to
+  // resolve for any reason) is left as-is: no `src`, alt text still shows.
+  const _resolveFileImageRefsForExport = async (html) => {
+    const paths = [...new Set(Array.from(html.matchAll(/data-syncpad-file="([^"]+)"/g), (m) => m[1]))];
+    if (!paths.length) return html;
+    const urlByPath = new Map();
+    await Promise.all(paths.map(async (path) => {
+      try { urlByPath.set(path, await getDownloadUrl(path)); } catch { /* left unresolved */ }
+    }));
+    return html.replace(/<img data-syncpad-file="([^"]+)"([^>]*)>/g, (full, path, rest) => {
+      const url = urlByPath.get(path);
+      return url ? `<img src="${escapeHtml(url)}"${rest}>` : full;
+    });
+  };
+
   document.getElementById('export-txt')?.addEventListener('click', () => {
     if (!_requireContent()) return;
     _downloadBlob(UI.getEditorValue(), `${_roomId}.txt`, 'text/plain');
@@ -2079,9 +2167,10 @@ function wireEvents() {
     _downloadBlob(UI.getEditorValue(), `${_roomId}.md`, 'text/markdown');
     UI.showToast('Downloaded .md', 'success');
   });
-  document.getElementById('export-html')?.addEventListener('click', () => {
+  document.getElementById('export-html')?.addEventListener('click', async () => {
     if (!_requireContent()) return;
     const { html: bodyHtml, headings } = renderMarkdownWithToc(UI.getEditorValue());
+    const resolvedBody = await _resolveFileImageRefsForExport(bodyHtml);
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -2089,7 +2178,7 @@ function wireEvents() {
 <style>body{font-family:system-ui,sans-serif;max-width:800px;margin:40px auto;padding:0 20px;color:#1a1a1a;line-height:1.7}
 pre{background:#f5f5f5;padding:1em;border-radius:4px;overflow:auto}code{background:#f5f5f5;padding:2px 4px;border-radius:2px}
 blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table{border-collapse:collapse}td,th{border:1px solid #ddd;padding:6px 10px}</style>
-</head><body>${renderTocHtml(headings)}${bodyHtml}</body></html>`;
+</head><body>${renderTocHtml(headings)}${resolvedBody}</body></html>`;
     _downloadBlob(html, `${_roomId}.html`, 'text/html');
     UI.showToast('Downloaded .html', 'success');
   });
@@ -2102,17 +2191,22 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
   document.getElementById('export-copy-md')?.addEventListener('click', async () => {
     if (!_requireContent()) return;
     // Copy rendered HTML so users can paste into rich-text editors, email, docs, etc.
-    const ok = await copyToClipboard(renderMarkdown(UI.getEditorValue()));
+    const resolvedHtml = await _resolveFileImageRefsForExport(renderMarkdown(UI.getEditorValue()));
+    const ok = await copyToClipboard(resolvedHtml);
     if (ok) UI.showToast('Copied as HTML.', 'success');
     else    UI.showToast('Could not copy.', 'error');
   });
-  document.getElementById('export-pdf')?.addEventListener('click', () => {
+  document.getElementById('export-pdf')?.addEventListener('click', async () => {
     if (!_requireContent()) return;
-    const content = UI.getEditorValue();
-    const { html: renderedHtml, headings } = renderMarkdownWithToc(content);
-    const title = escapeHtml(_room?.room_name?.trim() || _roomId);
+    // window.open() must happen synchronously within the click handler, before
+    // any await — browsers only allow it without a popup-blocker prompt when
+    // it's the direct, unbroken result of a user gesture.
     const win = window.open('', '_blank');
     if (!win) { UI.showToast('Pop-up blocked — allow pop-ups and try again.', 'warning'); return; }
+    const content = UI.getEditorValue();
+    const { html: renderedHtml, headings } = renderMarkdownWithToc(content);
+    const resolvedHtml = await _resolveFileImageRefsForExport(renderedHtml);
+    const title = escapeHtml(_room?.room_name?.trim() || _roomId);
     win.document.write(`<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -2131,7 +2225,7 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
   img { max-width: 100%; }
   a { color: #0066cc; }
 </style>
-</head><body>${renderTocHtml(headings)}${renderedHtml}</body></html>`);
+</head><body>${renderTocHtml(headings)}${resolvedHtml}</body></html>`);
     win.document.close();
     win.print();
   });

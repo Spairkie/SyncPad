@@ -194,4 +194,22 @@ test.describe('Markdown renderer', () => {
     expect(headings[1].text).not.toContain('[');
     expect(headings[1].text).not.toContain('(https://');
   });
+
+  test('syncpad-file: image references render with no src, awaiting async resolution', async ({ page }) => {
+    await goToLanding(page);
+    const html = await inBrowser(page, '/SyncPad/src/markdown.js', (mod) =>
+      mod.renderMarkdown('![a photo](syncpad-file:room1/167_photo.png)')
+    );
+    expect(html).toContain('data-syncpad-file="room1/167_photo.png"');
+    expect(html).toContain('alt="a photo"');
+    expect(html).not.toMatch(/<img[^>]*\bsrc=/);
+  });
+
+  test('unrecognized image schemes (javascript:, data:) are still rejected', async ({ page }) => {
+    await goToLanding(page);
+    const html = await inBrowser(page, '/SyncPad/src/markdown.js', (mod) =>
+      mod.renderMarkdown('![bad](javascript:alert(1))![bad2](data:text/html,x)')
+    );
+    expect(html).not.toContain('<img');
+  });
 });

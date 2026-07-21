@@ -1103,14 +1103,41 @@ export function setMarkdownMode(mode, renderFn) {
     editor.classList.add('hidden');
     preview.classList.remove('hidden');
     wrap?.classList.add('mode-preview');
-    if (renderFn) { preview.innerHTML = renderFn(); _prismHighlight(preview); _injectTocNav(preview); }
+    if (renderFn) { preview.innerHTML = renderFn(); _prismHighlight(preview); _injectTocNav(preview); _resolveFileImages(preview); }
   } else if (mode === 'split') {
     editor.classList.remove('hidden');
     preview.classList.remove('hidden');
     wrap?.classList.add('mode-split');
-    if (renderFn) { preview.innerHTML = renderFn(); _prismHighlight(preview); _injectTocNav(preview); }
+    if (renderFn) { preview.innerHTML = renderFn(); _prismHighlight(preview); _injectTocNav(preview); _resolveFileImages(preview); }
     _wireScrollSync(editor, preview);
   }
+}
+
+// ── Pasted/dropped image resolution (preview mode) ─────────────────────────────
+
+// Images pasted straight into the editor reference a private-bucket file path
+// (see markdown.js's syncpad-file: scheme) rather than a baked-in URL, since a
+// real signed URL expires in ~1h and can't just be stored in the note. Set
+// once via setFileImageResolver() so every render path (preview/split modes,
+// which re-render on nearly every keystroke) doesn't need its own plumbing.
+let _fileImageResolver = null;
+
+/** @param {(filePath: string) => Promise<string>} resolver */
+export function setFileImageResolver(resolver) { _fileImageResolver = resolver; }
+
+function _resolveFileImages(container) {
+  if (!_fileImageResolver) return;
+  container.querySelectorAll('img[data-syncpad-file]').forEach((img) => {
+    const filePath = img.dataset.syncpadFile;
+    if (!filePath) return;
+    _fileImageResolver(filePath).then((url) => {
+      img.src = url;
+      img.removeAttribute('data-syncpad-file');
+    }).catch(() => {
+      img.classList.add('img-broken');
+      img.alt = img.alt ? `${img.alt} (image unavailable)` : 'Image unavailable';
+    });
+  });
 }
 
 // ── Table of contents (preview mode) ──────────────────────────────────────────
@@ -1174,7 +1201,7 @@ export function refreshPreview(renderFn) {
   const preview = document.getElementById('note-preview');
   if (!preview || preview.classList.contains('hidden')) return;
   preview.innerHTML = renderFn ? renderFn() : '';
-  if (renderFn) { _prismHighlight(preview); _injectTocNav(preview); }
+  if (renderFn) { _prismHighlight(preview); _injectTocNav(preview); _resolveFileImages(preview); }
 }
 
 /** Call Prism.js syntax highlighting if it is loaded. */
