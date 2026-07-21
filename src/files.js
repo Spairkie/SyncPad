@@ -103,9 +103,16 @@ export async function getDownloadUrl(filePath) {
  * "Download" actions; use getDownloadUrl() for inline preview.
  * @param {string} filePath
  * @param {string} filename  – original filename to save as
+ * @param {object} [opts]
+ * @param {boolean} [opts.fresh=false]  – bypass the cache and mint a new URL.
+ *   A cached entry can be up to 55 minutes old when returned, leaving as
+ *   little as ~5 minutes of the underlying 60-minute signed URL's real
+ *   lifetime — fine for an immediate download, but not for "copy a link to
+ *   share with someone who might not open it right away," where the whole
+ *   point is a link that's actually good for close to the full ~55 minutes.
  */
-export async function getForceDownloadUrl(filePath, filename) {
-  const cached = _downloadUrlCache.get(filePath);
+export async function getForceDownloadUrl(filePath, filename, { fresh = false } = {}) {
+  const cached = fresh ? null : _downloadUrlCache.get(filePath);
   if (cached && Date.now() < cached.expiresAt) return cached.url;
 
   const { data, error } = await getSupabaseClient()

@@ -234,14 +234,38 @@ function _slugifyHeading(text, usedIds) {
   return id;
 }
 
+/**
+ * Reduce already-rendered, self-controlled inline HTML to plain text —
+ * the same result a browser's `element.textContent` would give the live
+ * preview's DOM-based table of contents, for export paths that have no DOM
+ * to read from. Only ever called on this renderer's own output, so a plain
+ * tag-strip is safe (no untrusted HTML reaches this function).
+ */
+function _stripHtmlTags(html) {
+  return String(html)
+    .replace(/<[^>]*>/g, '')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
+
 // ── Block renderers ──────────────────────────────────────────────────────────
 
 function _renderBlock(block, ctx) {
   switch (block.type) {
     case 'heading': {
       const id = _slugifyHeading(block.text, ctx.headingIds);
-      ctx.headings?.push({ level: block.level, id, text: block.text.replace(/[*_`~]/g, '') });
-      return `<h${block.level} id="${id}">${_renderInline(block.text)}</h${block.level}>`;
+      const inlineHtml = _renderInline(block.text);
+      // The live preview's TOC reads the rendered heading's textContent, so
+      // a heading like "## [API guide](url)" shows just "API guide" there.
+      // The export path (renderMarkdownWithToc) has no DOM to read from, so
+      // derive the same plain text by stripping tags from the same rendered
+      // HTML instead of lightly stripping the raw markdown source — which
+      // would otherwise leave link/image syntax showing literally.
+      ctx.headings?.push({ level: block.level, id, text: _stripHtmlTags(inlineHtml) });
+      return `<h${block.level} id="${id}">${inlineHtml}</h${block.level}>`;
     }
 
     case 'code':
@@ -251,10 +275,19 @@ function _renderBlock(block, ctx) {
       return _renderListTree(block.items, ctx);
 
     case 'blockquote':
-      // Recursively render the quoted content so nested headings/lists work,
-      // sharing this document's ctx so checkbox indices and heading ids stay
-      // unique across the whole document instead of restarting inside the quote.
-      return `<blockquote>${renderMarkdown(block.text, ctx)}</blockquote>`;
+      // Recursively render the quoted content so nested headings/lists work.
+      // Shares the heading-id registry (and the headings accumulator used
+      // for the table-of-contents feature) — reusing the same Set/Array
+      // reference — so heading anchors stay unique across the whole
+      // document. Deliberately gives a *fresh* cbCounter instead of sharing
+      // it: this renderer assigns every checkbox a sequential index, but
+      // toggleChecklistItem()'s source-line scan only recognizes a checklist
+      // marker at the very start of the line, so it never counts a
+      // blockquoted item. Sharing the counter would silently misalign the
+      // index of every checkbox rendered after the first blockquoted
+      // checklist in the document — breaking far more checkboxes than just
+      // the blockquoted ones.
+      return `<blockquote>${renderMarkdown(block.text, { cbCounter: 0, headingIds: ctx.headingIds, headings: ctx.headings })}</blockquote>`;
 
     case 'hr':
       return `<hr>`;

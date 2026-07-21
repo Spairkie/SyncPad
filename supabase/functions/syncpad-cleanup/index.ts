@@ -9,10 +9,23 @@ type CleanupMode = 'expired' | 'orphans' | 'all';
 type JsonRecord = Record<string, unknown>;
 type SupabaseAdminClient = SupabaseClient<any, 'public', 'public', any, any>;
 
+// The admin dashboard calls this function directly from the browser (a
+// different origin than the Supabase project's functions.supabase.co host),
+// so both the preflight OPTIONS request and every actual response need
+// CORS headers, or the browser blocks the call before authorize() ever
+// runs. '*' is safe here — the function is authorized by a bearer token the
+// browser never attaches automatically, not by cookies, so there's no CSRF
+// surface an origin allowlist would be protecting against.
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-syncpad-cleanup-secret, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+
 function json(body: JsonRecord, status = 200): Response {
   return new Response(JSON.stringify(body, null, 2), {
     status,
-    headers: { 'content-type': 'application/json; charset=utf-8' },
+    headers: { 'content-type': 'application/json; charset=utf-8', ...CORS_HEADERS },
   });
 }
 
@@ -185,6 +198,10 @@ async function cleanupOrphans(sb: SupabaseAdminClient, dryRun: boolean) {
 }
 
 Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: CORS_HEADERS });
+  }
+
   if (req.method !== 'POST') {
     return json({ error: 'POST required' }, 405);
   }
