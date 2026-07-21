@@ -689,6 +689,10 @@ svg { display: block; flex-shrink: 0; }
 }
 .note-live.hidden { display: none; }
 .note-live .cm-editor { height: 100%; }
+.note-live .cm-md-inlinecode {
+  font-family: var(--font-mono); font-size: 0.9em;
+  background: var(--bg-elevated); border-radius: 4px; padding: 1px 3px;
+}
 @media (min-width: 768px) {
   .note-live { padding: 2rem max(5%, calc((100% - 800px) / 2)); font-size: 16px; }
 }
