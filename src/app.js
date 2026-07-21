@@ -28,7 +28,7 @@ import {
   onLocalInput, onEditorBlur, flushSave, cancelPendingSave,
   handleRemoteTyping, handleRemoteLiveContent, handleRemoteDatabaseChange,
   setContentNoSave, applyPendingRemote, dismissPendingRemote, getPendingRemote, getPendingRemoteTs,
-  setEncryption,
+  setEncryption, snapshotBeforeDestructiveChange,
 } from './sync.js';
 
 import { uploadFile, listFiles, deleteFile, getDownloadUrl, getForceDownloadUrl, subscribeToFiles } from './files.js';
@@ -1063,6 +1063,7 @@ function _updateViewOnceConsumedUI() {
     onStartNew: async () => {
       if (_isReadOnly) return;
       try {
+        await snapshotBeforeDestructiveChange();
         await resetViewOnceNote(_roomId, await _emptyContentForCurrentEncryption(), true);
         clearDraft(_roomId);
         _room = await loadRoom(_roomId);
@@ -2876,7 +2877,7 @@ function teardownRealtimeSession() {
 
 // ── Templates handler ─────────────────────────────────────────────────────────
 
-function _onTemplateChosen(key, mode) {
+async function _onTemplateChosen(key, mode) {
   const body = getTemplate(key);
   if (body == null) return;
   if (!canUseTemplates()) { UI.showToast(editBlockedReason() || 'Templates are disabled.', 'warning'); return; }
@@ -2901,6 +2902,9 @@ function _onTemplateChosen(key, mode) {
     next = body;
   }
 
+  // 'replace' overwrites the whole note and 'append' can meaningfully change
+  // it — preserve the pre-template content in history before either happens.
+  await snapshotBeforeDestructiveChange();
   UI.setEditorValue(next);
   editor?.dispatchEvent(new Event('input', { bubbles: true }));
   UI.updateWordCount(UI.getEditorValue());
@@ -2946,6 +2950,7 @@ function _wirePreviewClickOnce() {
 
 async function doClearNote() {
   try {
+    await snapshotBeforeDestructiveChange();
     await clearRoomContent(_roomId, 'manual', await _emptyContentForCurrentEncryption());
     setContentNoSave('');
     UI.updateWordCount('');
