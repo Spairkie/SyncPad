@@ -29,31 +29,57 @@ test.describe('Editor', () => {
     await expect(wc).toContainText('0 word');
   });
 
-  test('preview mode hides editor and shows preview pane', async ({ page }) => {
+  test('preview mode hides the textarea and shows the editable live surface', async ({ page }) => {
     await createRoom(page);
     await page.locator('#note-editor').fill('# Preview heading');
     await setEditorMode(page, 'preview');
     await expect(page.locator('#note-editor')).toBeHidden();
-    await expect(page.locator('#note-preview')).toBeVisible();
-    await expect(page.locator('#note-preview')).toContainText('Preview heading');
+    await expect(page.locator('#note-live')).toBeVisible();
+    await expect(page.locator('#note-live')).toContainText('Preview heading');
+    // The old rendered-HTML pane stays hidden — the live surface replaced it.
+    await expect(page.locator('#note-preview')).toBeHidden();
   });
 
-  test('split mode shows both editor and preview', async ({ page }) => {
+  test('split mode shows both the textarea and the live surface', async ({ page }) => {
     await createRoom(page);
     await page.locator('#note-editor').fill('**bold** text');
     await setEditorMode(page, 'split');
     await expect(page.locator('#note-editor')).toBeVisible();
-    await expect(page.locator('#note-preview')).toBeVisible();
-    await expect(page.locator('#note-preview')).toContainText('bold');
+    await expect(page.locator('#note-live')).toBeVisible();
+    await expect(page.locator('#note-live')).toContainText('bold');
   });
 
-  test('returning to write mode hides preview', async ({ page }) => {
+  test('returning to write mode hides the live surface', async ({ page }) => {
     await createRoom(page);
     await setEditorMode(page, 'preview');
-    await expect(page.locator('#note-preview')).toBeVisible();
+    await expect(page.locator('#note-live')).toBeVisible();
     await setEditorMode(page, 'write');
-    await expect(page.locator('#note-preview')).toBeHidden();
+    await expect(page.locator('#note-live')).toBeHidden();
     await expect(page.locator('#note-editor')).toBeVisible();
+  });
+
+  test('edits made in the live surface flow back to the textarea', async ({ page }) => {
+    await createRoom(page);
+    await page.locator('#note-editor').fill('start');
+    await setEditorMode(page, 'preview');
+    const cm = page.locator('#note-live .cm-content');
+    await expect(cm).toBeVisible();
+    await cm.click();
+    await page.keyboard.press('Control+End');
+    await page.keyboard.type(' plus live edit');
+    // The textarea (hidden but still the source of truth) must have the edit.
+    await expect
+      .poll(async () => page.locator('#note-editor').inputValue())
+      .toContain('start plus live edit');
+  });
+
+  test('edits made in the textarea appear in the live surface (split mode)', async ({ page }) => {
+    await createRoom(page);
+    await setEditorMode(page, 'split');
+    const editor = page.locator('#note-editor');
+    await editor.click();
+    await editor.fill('typed in the textarea');
+    await expect(page.locator('#note-live')).toContainText('typed in the textarea');
   });
 
   test('export modal opens when export button clicked', async ({ page }) => {

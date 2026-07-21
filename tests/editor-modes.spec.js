@@ -44,26 +44,26 @@ test.describe('Editor mode classes', () => {
 
   test('editor is visible in write mode, hidden in preview mode', async ({ page }) => {
     await createRoom(page);
-    const editor  = page.locator('#note-editor');
-    const preview = page.locator('#note-preview');
+    const editor = page.locator('#note-editor');
+    const live   = page.locator('#note-live');
 
-    // Write mode: editor visible, preview hidden
+    // Write mode: editor visible, live surface hidden
     await expect(editor).toBeVisible();
-    const previewHidden = await preview.evaluate(el => el.classList.contains('hidden'));
-    expect(previewHidden).toBe(true);
+    const liveHidden = await live.evaluate(el => el.classList.contains('hidden'));
+    expect(liveHidden).toBe(true);
 
-    // Preview mode: editor hidden, preview visible
+    // Preview mode: editor hidden, editable live surface visible
     await setEditorMode(page, 'preview');
     const editorHidden = await editor.evaluate(el => el.classList.contains('hidden'));
     expect(editorHidden).toBe(true);
-    await expect(preview).toBeVisible();
+    await expect(live).toBeVisible();
   });
 
-  test('both editor and preview visible in split mode', async ({ page }) => {
+  test('both editor and live surface visible in split mode', async ({ page }) => {
     await createRoom(page);
     await setEditorMode(page, 'split');
     await expect(page.locator('#note-editor')).toBeVisible();
-    await expect(page.locator('#note-preview')).toBeVisible();
+    await expect(page.locator('#note-live')).toBeVisible();
   });
 
   test('mode button has aria-pressed=true only for active mode', async ({ page }) => {
@@ -80,15 +80,14 @@ test.describe('Editor mode classes', () => {
     await expect(writeBtn).toHaveAttribute('aria-pressed', 'false');
   });
 
-  test('preview renders markdown content', async ({ page }) => {
+  test('preview shows the note content in the editable live surface', async ({ page }) => {
     await createRoom(page);
     await typeInEditor(page, '# Hello World\n\nThis is **bold**.');
     await setEditorMode(page, 'preview');
 
-    const preview = page.locator('#note-preview');
-    await expect(preview).toBeVisible();
-    const html = await preview.innerHTML();
-    // Should contain h1 and strong tags from markdown
-    expect(html).toMatch(/h1|<h1/i);
+    const live = page.locator('#note-live');
+    await expect(live).toBeVisible();
+    await expect(live).toContainText('Hello World');
+    await expect(live).toContainText('bold');
   });
 });

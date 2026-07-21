@@ -1226,10 +1226,11 @@ function _ensureDropOverlay(container, label) {
  * @param {'write'|'preview'|'split'} mode
  * @param {Function|null} [renderFn]  – called to produce preview HTML
  */
-export function setMarkdownMode(mode, renderFn) {
-  const editor  = document.getElementById('note-editor');
-  const preview = document.getElementById('note-preview');
-  const wrap    = document.querySelector('.editor-wrap');
+export function setMarkdownMode(mode, renderFn, { live = false } = {}) {
+  const editor   = document.getElementById('note-editor');
+  const preview  = document.getElementById('note-preview');
+  const livePane = document.getElementById('note-live');
+  const wrap     = document.querySelector('.editor-wrap');
   if (!editor || !preview) return;
 
   // Clear all stale mode classes so no previous mode leaks into the next.
@@ -1243,21 +1244,31 @@ export function setMarkdownMode(mode, renderFn) {
     btn.setAttribute('aria-pressed', String(active));
   });
 
+  // In live mode the Typora-style editable surface (#note-live) takes the
+  // place #note-preview held; the rendered-HTML pane stays for the non-live
+  // fallback (live editor failed to load) and for export paths.
+  const showPane = (pane) => {
+    preview.classList.toggle('hidden',  pane !== 'preview');
+    livePane?.classList.toggle('hidden', pane !== 'live');
+  };
+
   if (mode === 'write') {
     editor.classList.remove('hidden');
-    preview.classList.add('hidden');
+    showPane(null);
     wrap?.classList.add('mode-write');
   } else if (mode === 'preview') {
     editor.classList.add('hidden');
-    preview.classList.remove('hidden');
+    showPane(live && livePane ? 'live' : 'preview');
     wrap?.classList.add('mode-preview');
-    if (renderFn) { preview.innerHTML = renderFn(); _prismHighlight(preview); _injectTocNav(preview); _resolveFileImages(preview); }
+    if (!(live && livePane) && renderFn) { preview.innerHTML = renderFn(); _prismHighlight(preview); _injectTocNav(preview); _resolveFileImages(preview); }
   } else if (mode === 'split') {
     editor.classList.remove('hidden');
-    preview.classList.remove('hidden');
+    showPane(live && livePane ? 'live' : 'preview');
     wrap?.classList.add('mode-split');
-    if (renderFn) { preview.innerHTML = renderFn(); _prismHighlight(preview); _injectTocNav(preview); _resolveFileImages(preview); }
-    _wireScrollSync(editor, preview);
+    if (!(live && livePane) && renderFn) {
+      preview.innerHTML = renderFn(); _prismHighlight(preview); _injectTocNav(preview); _resolveFileImages(preview);
+      _wireScrollSync(editor, preview);
+    }
   }
 }
 
