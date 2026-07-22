@@ -1116,6 +1116,7 @@ export function renderSettingsPanel(room) {
   const expStatus = document.getElementById('setting-exp-status');
   const voStatus  = document.getElementById('setting-vo-status');
   const lockStatus = document.getElementById('setting-lock-status');
+  const dlStatus  = document.getElementById('setting-dl-status');
 
   if (pcStatus)  pcStatus.textContent  = room.passcode_hash      ? 'Protected'  : 'None';
   if (encStatus) encStatus.textContent = room.encryption_enabled ? 'Enabled for note text' : 'Off';
@@ -1128,6 +1129,11 @@ export function renderSettingsPanel(room) {
       : 'Armed';
   }
   if (lockStatus) lockStatus.textContent = room.editing_locked ? 'Locked' : 'Unlocked';
+  if (dlStatus) {
+    dlStatus.textContent = room.cleared_reason === 'device_limit' ? 'Used (cleared)'
+      : room.device_limit ? `Armed — clears after ${room.device_limit} device${room.device_limit === 1 ? '' : 's'}`
+      : 'Off — clear the note after N different devices have joined';
+  }
 
   // Action button labels
   const pcBtn   = document.getElementById('setting-passcode-btn');
@@ -1135,6 +1141,8 @@ export function renderSettingsPanel(room) {
   const expBtn  = document.getElementById('setting-exp-btn');
   const voBtn   = document.getElementById('setting-vo-btn');
   const lockBtn = document.getElementById('setting-lock-btn');
+  const dlBtn   = document.getElementById('setting-dl-btn');
+  const dlInput = document.getElementById('setting-dl-input');
 
   if (pcBtn)   pcBtn.textContent   = room.passcode_hash      ? 'Remove'  : 'Set';
   if (encBtn)  encBtn.textContent  = room.encryption_enabled ? 'Disable' : 'Enable';
@@ -1143,6 +1151,8 @@ export function renderSettingsPanel(room) {
   if (expBtn)  expBtn.textContent  = room.expires_at         ? 'Modify'  : 'Set expiry';
   if (voBtn)   voBtn.textContent   = room.view_once          ? 'Disable' : 'Enable';
   if (lockBtn) lockBtn.textContent = room.editing_locked     ? 'Unlock'  : 'Lock';
+  if (dlBtn)   dlBtn.textContent   = room.device_limit       ? 'Disable' : 'Enable';
+  if (dlInput) dlInput.disabled    = !!room.device_limit;
 }
 
 // ── Offline banner ────────────────────────────────────────────────────────────

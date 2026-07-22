@@ -745,6 +745,17 @@
 
       <div class="setting-row">
         <div>
+          <div class="setting-label">Device limit</div>
+          <div class="setting-sub" id="setting-dl-status">Off — clear the note after N different devices have joined</div>
+        </div>
+        <div class="device-limit-controls">
+          <input class="settings-input device-limit-input" id="setting-dl-input" type="number" min="1" max="50" step="1" value="3" aria-label="Number of devices allowed before the room clears" />
+          <button class="setting-btn" id="setting-dl-btn">Enable</button>
+        </div>
+      </div>
+
+      <div class="setting-row">
+        <div>
           <div class="setting-label">Auto-expire</div>
           <div class="setting-sub" id="setting-exp-status">Never</div>
         </div>

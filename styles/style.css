@@ -1300,6 +1300,8 @@ body.lock-mode .md-toolbar { opacity: 0.4; pointer-events: none; }
   transition: border-color var(--transition);
 }
 .settings-input:focus { border-color: var(--accent); }
+.device-limit-controls { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.device-limit-input { width: 46px; margin-top: 0; padding: 6px 8px; text-align: center; flex-shrink: 0; }
 
 /* ══════════════════════════════════════════════════════════════
    MODALS

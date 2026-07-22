@@ -169,6 +169,43 @@ test.describe('View-once mode', () => {
   });
 });
 
+test.describe('Device limit', () => {
+  test('device limit toggle button and input are visible in settings panel', async ({ page }) => {
+    await createRoom(page);
+    await openSettingsPanel(page);
+    await expect(page.locator('#setting-dl-btn')).toBeVisible();
+    await expect(page.locator('#setting-dl-input')).toBeVisible();
+  });
+
+  test('rejects an out-of-range device count without enabling', async ({ page }) => {
+    await createRoom(page);
+    await openSettingsPanel(page);
+    await page.fill('#setting-dl-input', '0');
+    await page.click('#setting-dl-btn');
+    await expect(page.locator('#setting-dl-status')).toContainText('Off', { timeout: 5000 });
+    await expect(page.locator('#setting-dl-btn')).toHaveText('Enable');
+  });
+
+  test('clicking the button toggles the status text and disables the input while armed', async ({ page }) => {
+    await createRoom(page);
+    await openSettingsPanel(page);
+    const btn    = page.locator('#setting-dl-btn');
+    const status = page.locator('#setting-dl-status');
+    const input  = page.locator('#setting-dl-input');
+
+    await input.fill('3');
+    await btn.click();
+    await expect(status).toContainText('Armed', { timeout: 5000 });
+    await expect(btn).toHaveText('Disable');
+    await expect(input).toBeDisabled();
+
+    await btn.click();
+    await expect(status).toContainText('Off', { timeout: 5000 });
+    await expect(btn).toHaveText('Enable');
+    await expect(input).toBeEnabled();
+  });
+});
+
 test.describe('Lock editing', () => {
   test('lock editing button is visible in settings panel for owner', async ({ page }) => {
     await createRoom(page);

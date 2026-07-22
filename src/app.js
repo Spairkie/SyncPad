@@ -10,7 +10,7 @@ import {
   escapeHtml, debounce, formatTimestamp,
 } from './utils.js';
 
-import { loadRoom, createRoom, clearRoomContent, subscribeToRoom, getOrCreateReadOnlyShareLink, resolveReadOnlyShareLink, getOrCreateRoomCode, resolveRoomCode, updateRoomDisplayName, normalizeRoomDisplayName, submitRoomReport, REPORT_REASONS } from './rooms.js';
+import { loadRoom, createRoom, clearRoomContent, subscribeToRoom, getOrCreateReadOnlyShareLink, resolveReadOnlyShareLink, getOrCreateRoomCode, resolveRoomCode, recordRoomDeviceView, setDeviceLimit, clearDeviceLimit, updateRoomDisplayName, normalizeRoomDisplayName, submitRoomReport, REPORT_REASONS } from './rooms.js';
 import { listRevisions } from './revisions.js';
 
 import {
@@ -749,6 +749,20 @@ async function startApp() {
   // creator presumably wants real readers to consume it.
   const deviceId  = getDeviceId();
   const isCreator = _room.created_by_device === deviceId;
+
+  // ── Device limit: record this device's join, clearing the room once the
+  // configured number of distinct devices has been reached ─────────────────
+  // The creator's own devices don't consume a slot — same reasoning as
+  // View-once's isCreator exclusion above. Best-effort: a Supabase project
+  // that hasn't run docs/migrations/device-limit.sql yet just has
+  // device_limit stay null forever, so this never fires for it.
+  if (_room.device_limit && !isCreator) {
+    try {
+      const result = await recordRoomDeviceView(_roomId, deviceId);
+      if (result.expired) _room = await loadRoom(_roomId);
+    } catch { /* non-fatal — see comment above */ }
+  }
+
   const shouldConsumeViewOnce = (
     _room.view_once &&
     !isCreator &&
@@ -1117,6 +1131,24 @@ async function _handleRoomStateTransition(prev, newRoom) {
       UI.updateWordCount('');
       _refreshPreviewIfActive();
       UI.showToast('This note was view-once and has been cleared from the server.', 'warning', 6000);
+    }
+  }
+
+  if (newRoom.cleared_reason === 'device_limit' && prev?.cleared_reason !== 'device_limit') {
+    clearDraft(_roomId);
+    if (isOwnWrite) {
+      // This device's own join was the one that hit the limit — it already
+      // has the content in hand from startApp() (captured before the
+      // clearing write), so don't wipe what it just earned the right to see.
+      _updatePermissionContext();
+    } else {
+      cancelPendingSave();
+      cancelPendingTypingBroadcast();
+      cancelPendingLiveContentBroadcast();
+      setContentNoSave('');
+      UI.updateWordCount('');
+      _refreshPreviewIfActive();
+      UI.showToast('This room reached its device limit and has been cleared from the server.', 'warning', 6000);
     }
   }
 
@@ -2417,6 +2449,29 @@ function _wireSettings() {
       UI.renderSettingsPanel(_room);
       broadcastSettingsChange();
     } catch { UI.showToast('Could not update view-once setting.', 'error'); }
+  });
+
+  document.getElementById('setting-dl-btn')?.addEventListener('click', async () => {
+    if (!canChangeSettings()) { UI.showToast(editBlockedReason() || 'Settings are disabled.', 'warning'); return; }
+    try {
+      if (_room.device_limit) {
+        await clearDeviceLimit(_roomId);
+        UI.showToast('Device limit removed.', 'success');
+      } else {
+        const input = document.getElementById('setting-dl-input');
+        const n = Math.round(Number(input?.value));
+        if (!Number.isFinite(n) || n < 1 || n > 50) {
+          UI.showToast('Enter a device limit between 1 and 50.', 'warning');
+          return;
+        }
+        await setDeviceLimit(_roomId, n);
+        UI.showToast(`Device limit set. The note clears once ${n} device${n === 1 ? '' : 's'} have joined.`, 'success', 5000);
+      }
+      _room = await loadRoom(_roomId);
+      _renderRoomHeader();
+      UI.renderSettingsPanel(_room);
+      broadcastSettingsChange();
+    } catch { UI.showToast('Could not update device limit. Has docs/migrations/device-limit.sql been run?', 'error', 5000); }
   });
 
   // Lock-editing toggle
