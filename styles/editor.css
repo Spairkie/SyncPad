@@ -327,6 +327,30 @@ body.lock-mode .note-preview li.md-task input[type="checkbox"] { cursor: not-all
   background: color-mix(in srgb, var(--yellow) 35%, transparent);
   color: var(--text-primary); border-radius: 3px; padding: 0.05em 0.15em;
 }
+/* GitHub-style alerts — > [!NOTE]/[!TIP]/[!IMPORTANT]/[!WARNING]/[!CAUTION] */
+.note-preview .md-alert {
+  border-left: 3px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg-elevated); padding: 0.7em 1em; margin: 0.8em 0;
+}
+.note-preview .md-alert-title { font-weight: 600; margin: 0 0 0.4em; }
+.note-preview .md-alert > p:last-child { margin-bottom: 0; }
+.note-preview .md-alert-note        { border-left-color: var(--blue); }
+.note-preview .md-alert-note        .md-alert-title { color: var(--blue); }
+.note-preview .md-alert-tip         { border-left-color: var(--green); }
+.note-preview .md-alert-tip         .md-alert-title { color: var(--green); }
+.note-preview .md-alert-important   { border-left-color: var(--accent); }
+.note-preview .md-alert-important   .md-alert-title { color: var(--accent); }
+.note-preview .md-alert-warning     { border-left-color: var(--yellow); }
+.note-preview .md-alert-warning     .md-alert-title { color: var(--yellow); }
+.note-preview .md-alert-caution     { border-left-color: var(--red); }
+.note-preview .md-alert-caution     .md-alert-title { color: var(--red); }
+/* Footnotes section */
+.note-preview .footnotes { margin-top: 2em; padding-top: 0.2em; font-size: 0.9em; color: var(--text-secondary); }
+.note-preview .footnotes hr { margin: 0 0 1em; }
+.note-preview .footnotes ol { padding-left: 1.4em; }
+.note-preview .footnotes li { margin: 0.3em 0; }
+.note-preview .footnote-backref { margin-left: 0.3em; text-decoration: none; }
+.note-preview sup a { text-decoration: none; }
 
 /* ── Markdown formatting toolbar ────────────────────────────────────────────── */
 /* Toolbar lives in row 1 of .editor-wrap's grid; spans all columns in split mode */
