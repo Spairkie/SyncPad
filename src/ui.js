@@ -682,9 +682,91 @@ export function renderHistoryScrubber(entries, onRestore) {
   };
 }
 
+// ── Comments ─────────────────────────────────────────────────────────────────
+
+export function setCommentLoading(loading) {
+  document.getElementById('comment-loading')?.classList.toggle('hidden', !loading);
+}
+
+/**
+ * `pendingAnchor` is the range the next comment will be attached to (or
+ * null when there's no usable selection/caret to anchor to — e.g. the
+ * panel was opened before the editor ever had focus). `anchorPreviewText`
+ * is a short snippet of the anchored text for the composer's own label.
+ */
+export function setCommentComposer({ pendingAnchor, anchorPreviewText, onSubmit } = {}) {
+  const composer = document.getElementById('comment-composer');
+  const hint     = document.getElementById('comment-composer-hint');
+  const anchorEl = document.getElementById('comment-composer-anchor');
+  const input    = document.getElementById('comment-composer-input');
+  const btn      = document.getElementById('comment-composer-btn');
+  if (!composer || !hint || !anchorEl || !input || !btn) return;
+
+  if (!pendingAnchor) {
+    composer.classList.add('hidden');
+    hint.classList.remove('hidden');
+    return;
+  }
+  hint.classList.add('hidden');
+  composer.classList.remove('hidden');
+  anchorEl.textContent = pendingAnchor.from === pendingAnchor.to
+    ? 'On: cursor position (no text selected)'
+    : `On: “${(anchorPreviewText || '').replace(/\s+/g, ' ').trim().slice(0, 80)}”`;
+  input.value = '';
+
+  btn.onclick = () => {
+    const text = input.value.trim();
+    if (!text) { input.focus(); return; }
+    onSubmit?.(text, pendingAnchor);
+    input.value = '';
+  };
+}
+
+/**
+ * `comments` items: { id, created_at, device_id, device_name, anchor_from,
+ * anchor_to, _preview, _anchorPreview }, where _preview is the caller's
+ * already-decrypted (or plaintext) text — null if it couldn't be decrypted
+ * (shown as a locked placeholder) — and _anchorPreview is a short snippet
+ * of the anchored note text, if the caller could resolve one.
+ */
+export function renderCommentsList(comments, { onDelete, onJump, canDelete = true } = {}) {
+  const list  = document.getElementById('comments-list');
+  const empty = document.getElementById('comments-empty');
+  if (!list) return;
+  list.setAttribute('role', 'list');
+  list.innerHTML = '';
+  if (!comments?.length) { empty?.classList.remove('hidden'); return; }
+  empty?.classList.add('hidden');
+
+  comments.forEach((c) => {
+    const item = document.createElement('div');
+    item.className = 'comment-item';
+    item.setAttribute('role', 'listitem');
+    const bodyHtml = c._preview == null
+      ? '<span class="comment-text-locked">🔒 Encrypted — open with the passphrase to view</span>'
+      : escapeHtml(c._preview);
+    const anchorHtml = c._anchorPreview
+      ? `<div class="comment-anchor-preview">On: "${escapeHtml(c._anchorPreview)}"</div>`
+      : '';
+    item.innerHTML = `
+      <div class="comment-info">
+        <div class="comment-meta">${escapeHtml(c.device_name || 'Someone')} · ${formatTimestamp(c.created_at)}</div>
+        ${anchorHtml}
+        <div class="comment-text">${bodyHtml}</div>
+      </div>
+      <div class="comment-actions">
+        <button class="comment-jump-btn" title="Jump to this comment" aria-label="Jump to comment location"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg></button>
+        ${canDelete ? '<button class="comment-delete-btn" title="Delete comment" aria-label="Delete comment"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>' : ''}
+      </div>`;
+    item.querySelector('.comment-jump-btn')?.addEventListener('click', () => onJump?.(c));
+    item.querySelector('.comment-delete-btn')?.addEventListener('click', () => onDelete?.(c));
+    list.appendChild(item);
+  });
+}
+
 // ── Panels ────────────────────────────────────────────────────────────────────
 
-const PANEL_IDS = ['tools-panel', 'files-panel', 'presence-panel', 'settings-panel', 'search-panel', 'history-panel'];
+const PANEL_IDS = ['tools-panel', 'files-panel', 'presence-panel', 'settings-panel', 'search-panel', 'history-panel', 'comments-panel'];
 const FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 // Unlike every modal dialog, side panels didn't move focus into themselves

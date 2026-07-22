@@ -12,6 +12,7 @@ import {
 
 import { loadRoom, createRoom, clearRoomContent, subscribeToRoom, getOrCreateReadOnlyShareLink, resolveReadOnlyShareLink, getOrCreateRoomCode, resolveRoomCode, recordRoomDeviceView, setDeviceLimit, clearDeviceLimit, updateRoomDisplayName, normalizeRoomDisplayName, submitRoomReport, REPORT_REASONS } from './rooms.js';
 import { listRevisions } from './revisions.js';
+import { listComments, addComment, deleteComment, subscribeToComments } from './comments.js';
 
 import {
   initBroadcast, destroyBroadcast,
@@ -73,6 +74,7 @@ let _encKey        = null;   // CryptoKey | null
 let _encSalt       = null;
 let _unsubRoom     = null;
 let _unsubFiles    = null;
+let _unsubComments = null;
 let _expTimer      = null;
 let _onlineCleanup = null;   // v1: teardown fn returned by onOnlineChange()
 let _monospace     = false;
@@ -88,6 +90,11 @@ let _expPreset = '10m';
 // Room-scoped: which remote device_id (if any) the local view auto-scrolls
 // to follow. Reset on room navigation like the other room-scoped state below.
 let _followedDeviceId = null;
+// Raw (not-yet-decrypted-for-display) comments from the last _refreshComments()
+// call — re-applied to the live surface whenever it (re)mounts, since
+// setCommentAnchors() silently no-ops while unmounted (e.g. the room loaded
+// straight into Write mode, where nothing is mounted yet to receive them).
+let _lastComments = [];
 
 // ── Search state ──────────────────────────────────────────────────────────────
 let _searchMatches    = []; // [{start,end}]
@@ -938,6 +945,13 @@ async function startApp() {
 
   _unsubFiles = subscribeToFiles(_roomId, () => refreshFiles());
   await refreshFiles();
+
+  // Best-effort: a Supabase project that hasn't run
+  // docs/migrations/room-comments.sql yet just never shows any comments —
+  // _refreshComments() swallows the failure rather than surfacing an error
+  // toast for what is an entirely optional feature.
+  _unsubComments = subscribeToComments(_roomId, () => _refreshComments());
+  await _refreshComments();
 
   if (_room.expires_at) setupExpirationTimer();
 
@@ -2187,6 +2201,7 @@ function _wireTools() {
   // and toolActions' blanket closeAllPanels() after every action would close
   // that panel again immediately.
   document.getElementById('tool-history')?.addEventListener('click', () => { _openHistoryPanel(); });
+  document.getElementById('tool-comments')?.addEventListener('click', () => { _openCommentsPanel(); });
 
 }
 
@@ -3060,13 +3075,16 @@ function _applyMarkdownFormat(action, editor) {
 function teardownRealtimeSession() {
   try { _unsubRoom?.(); } catch {}
   try { _unsubFiles?.(); } catch {}
+  try { _unsubComments?.(); } catch {}
   _unsubRoom = null;
   _unsubFiles = null;
+  _unsubComments = null;
   destroyPresence();
   destroyBroadcast();
   destroySync();
   UI.clearCursorChat();
   _followedDeviceId = null;
+  _lastComments = [];
   // Remove the keydown handler so wireEvents() can install fresh callbacks
   // on the next room join. DOM element listeners (editor, buttons, etc.) are
   // protected by the _eventsWired guard and must NOT be reset here — resetting
@@ -3260,6 +3278,95 @@ async function _restoreRevision(rev) {
   UI.showToast('Version restored.', 'success');
 }
 
+// ── Comments ───────────────────────────────────────────────────────────────────
+
+/** The selection range a new comment would attach to, in whichever surface
+ *  (plain textarea or CM6 live surface) is currently active. */
+function _currentSelectionRange() {
+  if (_markdownMode !== 'write' && LiveEditor.isMounted()) {
+    return LiveEditor.getSelection();
+  }
+  const editor = document.getElementById('note-editor');
+  if (!editor) return null;
+  return { from: editor.selectionStart, to: editor.selectionEnd };
+}
+
+function _openCommentsPanel() {
+  UI.openPanel('comments-panel');
+  const range = canEdit() ? _currentSelectionRange() : null;
+  const pendingAnchor = range && Number.isFinite(range.from) && Number.isFinite(range.to) ? range : null;
+  const anchorPreviewText = pendingAnchor ? UI.getEditorValue().slice(pendingAnchor.from, pendingAnchor.to) : '';
+  UI.setCommentComposer({
+    pendingAnchor,
+    anchorPreviewText,
+    onSubmit: (text, anchor) => _submitComment(text, anchor),
+  });
+  _refreshComments();
+}
+
+async function _submitComment(text, anchor) {
+  if (!canEdit()) { UI.showToast(editBlockedReason() || 'Editing is disabled.', 'warning'); return; }
+  try {
+    const payloadText = _encKey ? await encryptContent(text, _encKey) : text;
+    await addComment(_roomId, { anchorFrom: anchor.from, anchorTo: anchor.to, text: payloadText });
+    await _refreshComments();
+    UI.showToast('Comment added.', 'success');
+  } catch {
+    UI.showToast('Could not add comment. Has docs/migrations/room-comments.sql been run?', 'error', 5000);
+  }
+}
+
+async function _deleteCommentClick(c) {
+  const ok = await UI.showConfirm('Delete this comment?', { confirmLabel: 'Delete', danger: true });
+  if (!ok) return;
+  try {
+    await deleteComment(c.id);
+    await _refreshComments();
+  } catch {
+    UI.showToast('Could not delete comment.', 'error');
+  }
+}
+
+function _jumpToComment(c) {
+  if (_markdownMode !== 'write' && LiveEditor.isMounted()) {
+    LiveEditor.scrollToPos(c.anchor_from);
+  } else {
+    const editor = document.getElementById('note-editor');
+    if (editor) { editor.focus(); editor.setSelectionRange(c.anchor_from, c.anchor_to); }
+  }
+  UI.closeAllPanels();
+}
+
+async function _refreshComments() {
+  try {
+    const comments = await listComments(_roomId);
+    const currentText = UI.getEditorValue();
+    const withPreviews = await Promise.all(comments.map(async (c) => {
+      let preview = c.text || '';
+      if (looksEncrypted(preview)) {
+        if (!_encKey) { preview = null; }
+        else {
+          try { preview = await decryptContent(preview, _encKey); }
+          catch { preview = null; }
+        }
+      }
+      const anchorPreview = Number.isFinite(c.anchor_from) && Number.isFinite(c.anchor_to) && c.anchor_to > c.anchor_from
+        ? currentText.slice(c.anchor_from, c.anchor_to)
+        : null;
+      return { ...c, _preview: preview, _anchorPreview: anchorPreview };
+    }));
+    UI.renderCommentsList(withPreviews, {
+      onDelete: _deleteCommentClick,
+      onJump:   _jumpToComment,
+      canDelete: canEdit(),
+    });
+    _lastComments = comments;
+    LiveEditor.setCommentAnchors(comments.map((c) => ({ id: c.id, from: c.anchor_from, to: c.anchor_to })));
+  } catch {
+    // Best-effort — a project that hasn't run docs/migrations/room-comments.sql
+    // yet just never shows any comments. See the subscribeToComments() call site.
+  }
+}
 
 // ── Preview helpers ───────────────────────────────────────────────────────────
 
@@ -3292,6 +3399,14 @@ function _applyMarkdownMode(mode) {
           LiveEditor.setReadOnly(!canEdit());
         }
         live = LiveEditor.isMounted();
+        // setCommentAnchors() silently no-ops while unmounted, so the very
+        // first mount (or a remount after room navigation) needs today's
+        // comments re-applied now that there's a view to receive them —
+        // _refreshComments() itself only runs on room load/realtime events,
+        // neither of which necessarily follows a later mode switch.
+        if (live) {
+          LiveEditor.setCommentAnchors(_lastComments.map((c) => ({ id: c.id, from: c.anchor_from, to: c.anchor_to })));
+        }
       } catch { live = false; }
     }
   }

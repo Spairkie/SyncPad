@@ -381,6 +381,44 @@ export function scrollToPos(pos) {
   _view.dispatch({ effects: EditorView.scrollIntoView(pos, { y: 'center' }) });
 }
 
+// ── Comment anchors ───────────────────────────────────────────────────────────
+// A dotted underline marking the text range a comment is attached to —
+// display only, no popover; clicking one is handled by the Comments panel's
+// own list rather than in-editor, keeping this to the same "decoration
+// pushed in from outside" pattern setRemoteCursors() already uses.
+
+const _setCommentAnchorsEffect = StateEffect.define();
+
+const _commentAnchorsField = StateField.define({
+  create: () => Decoration.none,
+  update(value, tr) {
+    value = value.map(tr.changes);
+    for (const e of tr.effects) if (e.is(_setCommentAnchorsEffect)) value = e.value;
+    return value;
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
+
+/**
+ * @param {{ id: string, from: number, to: number }[]} comments
+ */
+export function setCommentAnchors(comments) {
+  if (!_view) return;
+  const docLen = _view.state.doc.length;
+  const ranges = [];
+  for (const c of (comments || [])) {
+    if (typeof c.from !== 'number' || typeof c.to !== 'number') continue;
+    const from = Math.max(0, Math.min(c.from, docLen));
+    const to   = Math.max(from, Math.min(c.to, docLen));
+    if (to <= from) continue; // point comments (no selected range) have nothing to underline
+    ranges.push(Decoration.mark({ class: 'cm-comment-anchor' }).range(from, to));
+  }
+  _view.dispatch({
+    effects: _setCommentAnchorsEffect.of(Decoration.set(ranges, true)),
+    annotations: External.of(true),
+  });
+}
+
 // Extract a Link node's destination for ctrl/cmd+click opening. Only http(s)
 // destinations open — same policy as the markdown renderer.
 function _linkUrlAt(state, pos) {
@@ -606,6 +644,7 @@ export function mount(container, initialValue, { onChange, onCursorActivity, rea
         _remoteCursorField,
         _checklistProgressField,
         _tocField,
+        _commentAnchorsField,
         EditorView.updateListener.of((update) => {
           const external = update.transactions.some((tr) => tr.annotation(External));
           if (update.selectionSet && !external) {

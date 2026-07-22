@@ -1155,6 +1155,62 @@ body.lock-mode .md-toolbar { opacity: 0.4; pointer-events: none; }
 .history-scrubber-restore-btn { width: 100%; text-align: center; }
 .history-scrubber-restore-btn:disabled { opacity: 0.5; cursor: default; pointer-events: none; }
 
+/* Comments panel */
+.comment-loading {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; color: var(--text-secondary); padding: 8px 0;
+}
+.comment-loading .mini-spinner {
+  width: 14px; height: 14px;
+  border: 2px solid var(--border); border-top-color: var(--accent);
+  border-radius: 50%; animation: spin 0.7s linear infinite;
+}
+.comment-composer {
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--bg-elevated); padding: 10px 12px; margin-bottom: 14px;
+}
+.comment-composer-anchor {
+  font-size: 11px; color: var(--text-muted); font-style: italic;
+  margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.comment-composer-input {
+  width: 100%; min-height: 60px; resize: vertical;
+  background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  color: var(--text-primary); font: inherit; font-size: 13px; padding: 8px 10px;
+  outline: none; margin-bottom: 8px;
+}
+.comment-composer-input:focus { border-color: var(--accent); }
+.comment-composer-btn { width: 100%; text-align: center; }
+.comment-composer-hint {
+  font-size: 12px; color: var(--text-muted); padding: 8px 2px 14px; line-height: 1.5;
+}
+.comment-item {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 12px; border-radius: var(--radius-md);
+  background: var(--bg-elevated); border: 1px solid var(--border); margin-bottom: 8px;
+}
+.comment-info { flex: 1; min-width: 0; }
+.comment-meta { font-size: 11px; font-weight: 500; color: var(--text-secondary); }
+.comment-anchor-preview {
+  font-size: 11px; color: var(--text-muted); font-style: italic; margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.comment-text {
+  font-size: 13px; color: var(--text-primary); margin-top: 4px;
+  white-space: pre-wrap; word-break: break-word;
+}
+.comment-text-locked { color: var(--text-muted); font-style: italic; }
+.comment-actions { flex-shrink: 0; display: flex; gap: 4px; }
+.comment-jump-btn, .comment-delete-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 50%;
+  color: var(--text-muted); border: 1px solid transparent;
+}
+.comment-jump-btn:hover { color: var(--accent); background: var(--bg-base); }
+.comment-delete-btn:hover { color: var(--red); background: var(--bg-base); }
+.comments-empty { font-size: 13px; color: var(--text-muted); text-align: center; padding: 24px 0; }
+.note-live .cm-comment-anchor { border-bottom: 2px dotted var(--accent); }
+
 /* Files panel — select mode */
 .panel-header-actions { display: flex; align-items: center; gap: 6px; }
 
