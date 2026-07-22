@@ -69,7 +69,18 @@ function _roomUrl(id) { return `${_basePath() || ''}/${encodeURIComponent(id)}`;
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
+/** Lazy-load the admin-only stylesheet — regular room pages never fetch it. */
+function _loadAdminStylesheet() {
+  if (document.getElementById('admin-stylesheet')) return;
+  const link = document.createElement('link');
+  link.id = 'admin-stylesheet';
+  link.rel = 'stylesheet';
+  link.href = '/SyncPad/styles/admin.css';
+  document.head.appendChild(link);
+}
+
 export async function initAdmin() {
+  _loadAdminStylesheet();
   let sb;
   try { sb = getSupabaseClient(); }
   catch { _renderUnavailable(); return; }
