@@ -18,9 +18,7 @@ test.describe('Accessibility & keyboard', () => {
 
   test('modal closes on Escape', async ({ page }) => {
     await createRoom(page);
-    // Open share modal via keyboard shortcut if possible, else button
-    const shareBtn = page.locator('#btn-share, #tool-share').first();
-    await shareBtn.click();
+    await page.locator('#btn-share').click();
     await page.waitForSelector('#share-modal.visible', { timeout: 5000 });
     await page.keyboard.press('Escape');
     await expect(page.locator('#share-modal')).not.toHaveClass(/visible/);

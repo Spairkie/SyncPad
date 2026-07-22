@@ -2121,12 +2121,6 @@ function _wireTools() {
 
   // ── Tools ──────────────────────────────────────────────────────────────────
   const toolActions = {
-    'tool-copy': () =>
-      copyToClipboard(UI.getEditorValue())
-        .then(ok => ok
-          ? UI.showToast('Note copied.', 'success')
-          : UI.showToast('Could not copy.', 'error')),
-
     'tool-copy-link': () =>
       copyToClipboard(buildRoomUrl(BASE, _roomId))
         .then(ok => ok
@@ -2138,8 +2132,6 @@ function _wireTools() {
       try { UI.insertAtCursor(await navigator.clipboard.readText()); }
       catch { UI.showToast('Clipboard access denied.', 'error'); }
     },
-
-    'tool-share': () => { _openShareModal(); },
 
     'tool-clear': async () => {
       if (!canClearNote()) { UI.showToast(editBlockedReason() || 'Clear is disabled.', 'warning'); return; }
@@ -2178,11 +2170,6 @@ function _wireTools() {
       inp.click();
     },
 
-    'tool-timestamp':  () => {
-      if (!canEdit()) { UI.showToast(editBlockedReason() || 'Editing is disabled.', 'warning'); return; }
-      UI.insertAtCursor(insertTimestamp());
-    },
-    'tool-select-all': () => { editor?.focus(); editor?.setSelectionRange(0, editor.value.length); },
     'tool-find':       () => { UI.openPanel('search-panel'); document.getElementById('search-input')?.focus(); },
     'tool-templates': () => {
       if (!canUseTemplates()) { UI.showToast(editBlockedReason() || 'Templates are disabled.', 'warning'); return; }
