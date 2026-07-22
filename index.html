@@ -76,8 +76,8 @@
     <div class="landing-join">
       <input id="landing-join-input" class="landing-join-input"
              type="text" name="syncpad-room-lookup"
-             placeholder="Paste room link or ID…"
-             aria-label="Room link or ID to join"
+             placeholder="Paste room link, ID, or short code…"
+             aria-label="Room link, ID, or short code to join"
              autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
              data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-form-type="other" />
       <button id="landing-join-btn" class="landing-join-btn">Join</button>
@@ -907,6 +907,23 @@
         <div class="share-qr" id="share-readonly-qr"></div>
         <button class="share-qr-download" id="share-readonly-qr-download" aria-label="Download read-only link QR">Download QR</button>
       </div>
+    </div>
+
+    <div class="share-section" id="share-code-section">
+      <div class="share-section-header">
+        <h4 class="share-section-title">
+          <svg class="share-section-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+          </svg>
+          Short code
+        </h4>
+      </div>
+      <p class="share-section-desc">Same access as the editable link above, in a short form for reading aloud or typing on another device.</p>
+      <div class="share-url-row">
+        <input class="share-url-field share-code-field" id="share-code-text" type="text" readonly aria-label="Short room code" />
+        <button class="share-copy-inline" id="share-code-copy" aria-label="Copy short room code"><svg class="share-copy-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg><span>Copy</span></button>
+      </div>
+      <div class="share-inline-error hidden" id="share-code-error" role="status" aria-live="polite"></div>
     </div>
 
     <div class="modal-actions share-modal-footer">

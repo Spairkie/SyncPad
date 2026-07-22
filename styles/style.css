@@ -2333,6 +2333,7 @@ kbd {
 #share-modal .share-url-row { display:flex; align-items:center; background:var(--bg-input); border:1px solid var(--border); border-radius:8px; padding:4px 4px 4px 12px; gap:10px; }
 #share-modal .share-url-field { flex:1; min-width: 0; margin:0; border:0; background:transparent; padding:0; font-size:.875rem; font-family:var(--font-mono); color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 #share-modal .share-url-field:focus { outline: none; }
+#share-modal .share-code-field { font-size: 1.05rem; font-weight: 700; letter-spacing: 0.15em; }
 #share-modal .share-copy-inline { flex-shrink:0; display:inline-flex; align-items:center; gap:6px; min-height:32px; padding:6px 12px; border-radius:6px; border:none; background:var(--accent); color:var(--text-inverse); font-size:.82rem; font-weight:600; }
 #share-modal .share-copy-inline .share-copy-icon { width:14px; height:14px; flex-shrink:0; }
 #share-modal .share-copy-inline:hover { opacity: .92; }

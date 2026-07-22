@@ -701,7 +701,7 @@ export function closeAllModals() {
 export function populateShareModal({
   editableUrl, readOnlyUrl, readOnlyError = false, hasPasscode, hasEncryption,
   roomPath = '', roomDisplayTitle = '', hasReadOnlyLink = false, isEditingLocked = false,
-  hasViewOnce = false, expiresAt = null,
+  hasViewOnce = false, expiresAt = null, roomCode = '', roomCodeError = false, showRoomCode = true,
 } = {}) {
   const roomPathEl = document.getElementById('share-room-path');
   const titleEl = document.getElementById('share-modal-title');
@@ -730,6 +730,16 @@ export function populateShareModal({
   _wireQrToggle('share-readonly-qr-toggle', 'share-readonly-qr-wrap', !!readOnlyUrl);
   _wireQrDownload('share-editable-qr-download', 'share-editable-qr', 'syncpad-editable-qr.png');
   _wireQrDownload('share-readonly-qr-download', 'share-readonly-qr', 'syncpad-readonly-qr.png', !readOnlyUrl);
+
+  // A read-only viewer session has no room-owning identity to generate a
+  // code from (same reason it gets an empty editableUrl above) — the
+  // section is hidden entirely rather than shown disabled.
+  const codeSection = document.getElementById('share-code-section');
+  if (codeSection) codeSection.classList.toggle('hidden', !showRoomCode);
+  if (showRoomCode) {
+    const codeDisplay = roomCode || (roomCodeError ? 'Could not create a short code. Check Supabase setup.' : 'Generating short code…');
+    _wireShareRow({ fieldId: 'share-code-text', copyBtnId: 'share-code-copy', openId: null, nativeBtnId: null, errorId: 'share-code-error', url: roomCode, displayValue: codeDisplay });
+  }
 }
 
 function _wireShareRow({ fieldId, copyBtnId, openId, nativeBtnId, errorId, url, displayValue = url }) {

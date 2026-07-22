@@ -10,7 +10,7 @@ import {
   escapeHtml, debounce, formatTimestamp,
 } from './utils.js';
 
-import { loadRoom, createRoom, clearRoomContent, subscribeToRoom, getOrCreateReadOnlyShareLink, resolveReadOnlyShareLink, updateRoomDisplayName, normalizeRoomDisplayName, submitRoomReport, REPORT_REASONS } from './rooms.js';
+import { loadRoom, createRoom, clearRoomContent, subscribeToRoom, getOrCreateReadOnlyShareLink, resolveReadOnlyShareLink, getOrCreateRoomCode, resolveRoomCode, updateRoomDisplayName, normalizeRoomDisplayName, submitRoomReport, REPORT_REASONS } from './rooms.js';
 import { listRevisions } from './revisions.js';
 
 import {
@@ -386,6 +386,7 @@ async function _openShareModal() {
       isEditingLocked: !!_room?.editing_locked,
       hasViewOnce: !!_room?.view_once,
       expiresAt: _room?.expires_at || null,
+      showRoomCode: false, // no room-owning identity in a read-only session to generate one from
     });
     UI.openModal('share-modal');
     return;
@@ -401,6 +402,14 @@ async function _openShareModal() {
     readOnlyError = true;
     UI.showToast('Could not create read-only link.', 'error');
   }
+  let roomCode = '';
+  let roomCodeError = false;
+  try {
+    roomCode = await getOrCreateRoomCode(_roomId) || '';
+    if (!roomCode) roomCodeError = true;
+  } catch {
+    roomCodeError = true;
+  }
   UI.populateShareModal({
     editableUrl: buildRoomUrl(BASE, _roomId),
     readOnlyUrl,
@@ -413,6 +422,8 @@ async function _openShareModal() {
     isEditingLocked: !!_room?.editing_locked,
     hasViewOnce: !!_room?.view_once,
     expiresAt: _room?.expires_at || null,
+    roomCode,
+    roomCodeError,
   });
   UI.openModal('share-modal');
 }
@@ -430,9 +441,32 @@ function wireLandingEvents() {
     joinRoom(roomId);
   };
 
-  const joinRoom_ = () => {
+  // A bare 6-character code from the short-code alphabet (see
+  // docs/migrations/short-room-codes.sql) — distinct enough from
+  // generateRoomId()'s "adjective-noun-suffix" shape and from any
+  // sanitizeRoomId() output containing a URL/slash that a false-positive
+  // match against a deliberately-chosen custom room id is very unlikely.
+  // Resolution failure just falls through to the existing room-id path
+  // below rather than erroring, so this can never make a previously
+  // working join input stop working.
+  const SHORT_CODE_RE = /^[23456789ABCDEFGHJKMNPQRSTVWXYZ]{6}$/i;
+
+  const joinRoom_ = async () => {
     const raw = joinInput?.value?.trim();
     if (!raw) return;
+
+    if (SHORT_CODE_RE.test(raw)) {
+      try {
+        const resolvedId = await resolveRoomCode(raw);
+        if (resolvedId) {
+          history.pushState(null, '', `${BASE}/${resolvedId}`);
+          UI.showScreen('loading');
+          joinRoom(resolvedId);
+          return;
+        }
+      } catch { /* fall through to the literal-room-id path below */ }
+    }
+
     // Accept full URL or bare ID
     let id;
     try {

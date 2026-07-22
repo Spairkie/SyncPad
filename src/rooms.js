@@ -125,6 +125,28 @@ export async function resolveReadOnlyShareLink(token) {
   return Array.isArray(data) ? data[0] || null : data;
 }
 
+// ── Short room codes ─────────────────────────────────────────────────────────
+// A short (6-char), human-typeable/speakable alternate spelling of a room's
+// full id — same access level as the editable link, just shorter. See
+// docs/migrations/short-room-codes.sql for the generation/lookup RPCs and
+// the reasoning behind treating it as equivalent (not reduced) trust.
+
+export async function getOrCreateRoomCode(roomId) {
+  const sb = getSupabaseClient();
+  const { data, error } = await sb.rpc('get_or_create_room_code', { p_room_id: roomId });
+  if (error) { logSupabaseError('getOrCreateRoomCode', error, { room_id: roomId }); throw error; }
+  const row = Array.isArray(data) ? data[0] || null : data;
+  return row?.code || null;
+}
+
+export async function resolveRoomCode(code) {
+  const sb = getSupabaseClient();
+  const { data, error } = await sb.rpc('resolve_room_code', { p_code: code });
+  if (error) { logSupabaseError('resolveRoomCode', error, { code }); throw error; }
+  const row = Array.isArray(data) ? data[0] || null : data;
+  return row?.room_id || null;
+}
+
 
 export async function submitRoomReport({ roomId, shareToken = null, reason, details = '', mode = 'editable', pageUrl = null, userAgent = null, reporterDeviceId = null } = {}) {
   const sb = getSupabaseClient();
