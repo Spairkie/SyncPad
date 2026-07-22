@@ -440,7 +440,7 @@ function _announcePresenceChanges(devices, myDeviceId) {
   if (region && messages.length) region.textContent = messages.join(' ');
 }
 
-export function renderDevicesList(devices, myDeviceId, onNameChange) {
+export function renderDevicesList(devices, myDeviceId, onNameChange, { followedDeviceId = null, onToggleFollow = null } = {}) {
   const list = document.getElementById('devices-list');
   if (!list) return;
   _announcePresenceChanges(devices, myDeviceId);
@@ -452,6 +452,7 @@ export function renderDevicesList(devices, myDeviceId, onNameChange) {
   }
   devices.forEach(device => {
     const isMe = device.device_id === myDeviceId;
+    const isFollowed = !isMe && !!device.device_id && device.device_id === followedDeviceId;
     const item = document.createElement('div');
     item.className = `device-item${isMe ? ' me' : ''}${device.read_only ? ' viewer' : ''}${device.typing ? ' typing' : ''}`;
     item.setAttribute('role', 'listitem');
@@ -477,6 +478,10 @@ export function renderDevicesList(devices, myDeviceId, onNameChange) {
       }
     }
 
+    const followBtnHtml = !isMe
+      ? `<button type="button" class="device-follow-btn${isFollowed ? ' is-active' : ''}" aria-pressed="${isFollowed}" title="${isFollowed ? 'Stop following this device' : 'Follow this device — jump your view to where they are'}" aria-label="${isFollowed ? 'Stop following' : 'Follow'} ${escapeHtml(device.device_name || 'this device')}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></button>`
+      : '';
+
     item.innerHTML = `
       <div class="device-dot"></div>
       <div class="device-info">
@@ -486,7 +491,11 @@ export function renderDevicesList(devices, myDeviceId, onNameChange) {
         }
         <div class="device-meta">${roBadge}${activityHtml}</div>
       </div>
-      <div class="${isMe ? 'device-you' : ''}">${isMe ? 'You' : ''}</div>`;
+      <div class="${isMe ? 'device-you' : ''}">${isMe ? 'You' : followBtnHtml}</div>`;
+
+    if (!isMe) {
+      item.querySelector('.device-follow-btn')?.addEventListener('click', () => onToggleFollow?.(device.device_id));
+    }
 
     if (isMe) {
       const input = item.querySelector('.device-name-edit');

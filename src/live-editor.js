@@ -340,25 +340,45 @@ export function colorForDevice(deviceId) {
 }
 
 /**
- * Render carets for remote collaborators.
- * @param {{ id: string, name: string, pos: number }[]} cursors
+ * Render carets (and selection ranges, when a collaborator has one) for
+ * remote collaborators.
+ * @param {{ id: string, name: string, pos: number, anchor?: number }[]} cursors
  */
 export function setRemoteCursors(cursors) {
   if (!_view) return;
   const docLen = _view.state.doc.length;
-  const ranges = (cursors || [])
-    .filter((c) => typeof c.pos === 'number' && c.pos >= 0)
-    .map((c) => {
-      const pos = Math.min(c.pos, docLen);
-      return Decoration.widget({
-        widget: new _RemoteCaretWidget(c.name || 'Someone', colorForDevice(c.id)),
-        side: -1,
-      }).range(pos);
-    });
+  const ranges = [];
+  for (const c of (cursors || [])) {
+    if (typeof c.pos !== 'number' || c.pos < 0) continue;
+    const pos = Math.min(c.pos, docLen);
+    const anchor = typeof c.anchor === 'number' && c.anchor >= 0 ? Math.min(c.anchor, docLen) : pos;
+    if (anchor !== pos) {
+      const from = Math.min(anchor, pos);
+      const to   = Math.max(anchor, pos);
+      ranges.push(Decoration.mark({
+        class: 'cm-remote-selection',
+        attributes: { style: `background: color-mix(in srgb, ${colorForDevice(c.id)} 28%, transparent)` },
+      }).range(from, to));
+    }
+    ranges.push(Decoration.widget({
+      widget: new _RemoteCaretWidget(c.name || 'Someone', colorForDevice(c.id)),
+      side: -1,
+    }).range(pos));
+  }
   _view.dispatch({
     effects: _setRemoteCursorsEffect.of(Decoration.set(ranges, true)),
     annotations: External.of(true),
   });
+}
+
+/**
+ * Scroll the local view so `pos` is visible — used by "Follow" mode to
+ * jump to where a followed collaborator's cursor/selection currently is.
+ * No-op when unmounted or pos is out of range.
+ */
+export function scrollToPos(pos) {
+  if (!_view || typeof pos !== 'number' || pos < 0 || pos > _view.state.doc.length) return;
+  _view.dispatch({ effects: EditorView.scrollIntoView(pos, { y: 'center' }) });
 }
 
 // Extract a Link node's destination for ctrl/cmd+click opening. Only http(s)
@@ -589,7 +609,8 @@ export function mount(container, initialValue, { onChange, onCursorActivity, rea
         EditorView.updateListener.of((update) => {
           const external = update.transactions.some((tr) => tr.annotation(External));
           if (update.selectionSet && !external) {
-            _onCursorActivity?.(update.state.selection.main.head);
+            const sel = update.state.selection.main;
+            _onCursorActivity?.(sel.head, sel.anchor);
           }
           if (!update.docChanged || external) return;
           _onChange?.(update.state.doc.toString());

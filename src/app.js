@@ -85,6 +85,9 @@ let _markdownMode  = 'write'; // 'write' | 'preview' | 'split'
 let _showPreview   = false;  // derived: _markdownMode !== 'write'
 let _previewObserverWired = false;
 let _expPreset = '10m';
+// Room-scoped: which remote device_id (if any) the local view auto-scrolls
+// to follow. Reset on room navigation like the other room-scoped state below.
+let _followedDeviceId = null;
 
 // ── Search state ──────────────────────────────────────────────────────────────
 let _searchMatches    = []; // [{start,end}]
@@ -868,17 +871,34 @@ async function startApp() {
 
   initPresence(_roomId, (devices) => {
     UI.updateDeviceCount(devices.length);
+    // A followed device that disconnected (or hid its presence) can't be
+    // followed anymore — drop it rather than leaving a dead toggle active.
+    if (_followedDeviceId && !devices.some((d) => d.device_id === _followedDeviceId && !d.isMe)) {
+      _followedDeviceId = null;
+    }
     UI.renderDevicesList(devices, deviceId, (name) => {
       setDeviceName(name);
       updatePresenceDeviceName(getDeviceName());
+    }, {
+      followedDeviceId: _followedDeviceId,
+      onToggleFollow: (id) => { _followedDeviceId = _followedDeviceId === id ? null : id; },
     });
-    // Render remote collaborators' carets in the live surface (no-op when
-    // it isn't mounted).
+    // Render remote collaborators' carets/selections in the live surface
+    // (no-op when it isn't mounted).
     LiveEditor.setRemoteCursors(
       devices
         .filter((d) => !d.isMe && typeof d.cursor_pos === 'number')
-        .map((d) => ({ id: d.device_id, name: d.device_name, pos: d.cursor_pos })),
+        .map((d) => ({ id: d.device_id, name: d.device_name, pos: d.cursor_pos, anchor: d.cursor_anchor })),
     );
+    // "Follow" mode: jump the local view to the followed device's cursor as
+    // it moves. Only meaningful where there's a real caret to scroll to —
+    // the CM6 live surface — same gating as cursor chat.
+    if (_followedDeviceId && _markdownMode !== 'write' && LiveEditor.isMounted()) {
+      const followed = devices.find((d) => d.device_id === _followedDeviceId);
+      if (followed && typeof followed.cursor_pos === 'number') {
+        LiveEditor.scrollToPos(followed.cursor_pos);
+      }
+    }
   }, { readOnly: _isReadOnly });
   // Re-applied on every room entry — destroyPresence() deliberately leaves
   // this preference alone since it's per-device, not room state (see
@@ -1759,13 +1779,18 @@ function _wireEditorToolbarAndLifecycle() {
     }
   });
 
-  // Broadcast cursor line on selection/click (throttled in presence.js at 800ms)
+  // Broadcast cursor line on selection/click (throttled in presence.js at 800ms).
+  // selectionEnd is reported as the "head" (matches CM6's convention, and is
+  // where the caret itself renders for a forward selection) with
+  // selectionStart as the anchor — so a Write-mode user's selected range
+  // shows up as a highlighted span for collaborators viewing in Preview/Split,
+  // not just a caret.
   const _broadcastCursor = () => {
     if (!editor) return;
-    const pos    = editor.selectionStart;
+    const pos    = editor.selectionEnd;
     const before = editor.value.substring(0, pos);
     const line   = (before.match(/\n/g) || []).length + 1;
-    setCursorLine(line, pos);
+    setCursorLine(line, pos, editor.selectionStart);
     UI.refreshFocusMode(); // no-op unless focus mode is on
     UI.refreshTypewriterMode(); // no-op unless typewriter mode is on
   };
@@ -2986,6 +3011,7 @@ function teardownRealtimeSession() {
   destroyBroadcast();
   destroySync();
   UI.clearCursorChat();
+  _followedDeviceId = null;
   // Remove the keydown handler so wireEvents() can install fresh callbacks
   // on the next room join. DOM element listeners (editor, buttons, etc.) are
   // protected by the _eventsWired guard and must NOT be reset here — resetting
@@ -3221,13 +3247,13 @@ function _onLiveEditorChange(text) {
   editor.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
-// Cursor movement in the live surface broadcasts the same presence payload
-// the textarea's keyup/mouseup path does — line for the devices list,
-// precise offset for in-text remote carets.
-function _onLiveCursorActivity(pos) {
-  const before = UI.getEditorValue().slice(0, pos);
+// Cursor/selection movement in the live surface broadcasts the same
+// presence payload the textarea's keyup/mouseup path does — line for the
+// devices list, precise offset(s) for in-text remote carets/selections.
+function _onLiveCursorActivity(head, anchor) {
+  const before = UI.getEditorValue().slice(0, head);
   const line   = (before.match(/\n/g) || []).length + 1;
-  setCursorLine(line, pos);
+  setCursorLine(line, head, anchor);
 }
 
 // Cursor chat only makes sense where there's a real caret to anchor a bubble

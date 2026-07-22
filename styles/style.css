@@ -742,6 +742,10 @@ svg { display: block; flex-shrink: 0; }
   pointer-events: none;
   z-index: 5;
 }
+/* A remote collaborator's selected text range — background color set inline
+   per-device (color-mix from colorForDevice()) since it's dynamic, same
+   pattern as the caret's border/label colors above. */
+.note-live .cm-remote-selection { border-radius: 2px; }
 @media (min-width: 768px) {
   .note-live { padding: 2rem max(5%, calc((100% - 800px) / 2)); font-size: 16px; }
 }
@@ -1212,6 +1216,13 @@ body.lock-mode .md-toolbar { opacity: 0.4; pointer-events: none; }
 .device-role { font-size: 10px; color: var(--blue); background: rgba(96,165,250,0.1); border-radius: 10px; padding: 1px 7px; }
 .device-you  { font-size: 11px; color: var(--text-muted); flex-shrink: 0; }
 .device-empty { font-size: 13px; color: var(--text-muted); padding: 6px 2px; }
+.device-follow-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
+  color: var(--text-muted); border: 1px solid transparent;
+}
+.device-follow-btn:hover { color: var(--text-primary); background: var(--bg-base); }
+.device-follow-btn.is-active { color: var(--accent); background: var(--accent-dim); border-color: var(--accent); }
 .device-name-edit {
   width: 100%; padding: 4px 8px; border-radius: var(--radius-sm);
   background: var(--bg-input); border: 1px solid var(--border);

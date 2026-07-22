@@ -57,15 +57,16 @@ export function initPresence(roomId, onPresenceChange, { readOnly = false } = {}
     .subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
         await _ch.track({
-          device_id:   deviceId,
-          device_name: getDeviceName(),
-          typing:      false,
-          read_only:   _readOnly,
-          cursor_line: null,
-          cursor_pos:  null,
-          hidden:      _hidden,
-          joined_at:   Date.now(),
-          tab_id:      tabId,
+          device_id:     deviceId,
+          device_name:   getDeviceName(),
+          typing:        false,
+          read_only:     _readOnly,
+          cursor_line:   null,
+          cursor_pos:    null,
+          cursor_anchor: null,
+          hidden:        _hidden,
+          joined_at:     Date.now(),
+          tab_id:        tabId,
         });
         notify();
       }
@@ -81,13 +82,14 @@ let _lastTracked = {};
 async function _track(updates) {
   if (!_ch) return;
   const payload = {
-    device_id:   getDeviceId(),
-    device_name: getDeviceName(),
-    typing:      false,
-    read_only:   _readOnly,
-    cursor_line: null,
-    cursor_pos:  null,
-    hidden:      _hidden,
+    device_id:     getDeviceId(),
+    device_name:   getDeviceName(),
+    typing:        false,
+    read_only:     _readOnly,
+    cursor_line:   null,
+    cursor_pos:    null,
+    cursor_anchor: null,
+    hidden:        _hidden,
     ..._lastTracked,
     ...updates,
   };
@@ -95,9 +97,10 @@ async function _track(updates) {
   // throttled setCursorLine queued before the toggle flipped) still passes
   // a real position — the device stays in the list, just with no activity.
   if (_hidden) {
-    payload.typing      = false;
-    payload.cursor_line = null;
-    payload.cursor_pos  = null;
+    payload.typing        = false;
+    payload.cursor_line   = null;
+    payload.cursor_pos    = null;
+    payload.cursor_anchor = null;
   }
   payload.hidden = _hidden;
   _lastTracked = { ...payload };
@@ -139,11 +142,17 @@ export function isPresenceHidden() {
  * Broadcast this device's cursor location (throttled).
  * Read-only devices broadcast their scroll position but NOT as "typing".
  * @param {number|null} lineNumber – 1-based line number, or null to clear
- * @param {number|null} [pos]      – precise character offset into the note,
- *                                   used to render in-text remote carets
+ * @param {number|null} [pos]      – precise character offset into the note
+ *                                   (selection head), used to render in-text
+ *                                   remote carets
+ * @param {number|null} [anchor]   – the other end of the selection, if any;
+ *                                   equal to pos for a plain caret (no
+ *                                   selection) — used to render a remote
+ *                                   collaborator's selected range, not just
+ *                                   their caret
  */
-export const setCursorLine = throttle(function(lineNumber, pos = null) {
-  _track({ cursor_line: lineNumber ?? null, cursor_pos: pos ?? null });
+export const setCursorLine = throttle(function(lineNumber, pos = null, anchor = null) {
+  _track({ cursor_line: lineNumber ?? null, cursor_pos: pos ?? null, cursor_anchor: anchor ?? pos ?? null });
 }, 800);
 
 /** Update the displayed device name in the presence channel. */
@@ -180,8 +189,9 @@ export function getConnectedDevices() {
         typing:      Boolean(prev?.typing || e.typing),
         read_only:   useCurrent ? !!e.read_only : !!prev.read_only,
         hidden:      useCurrent ? !!e.hidden : !!prev.hidden,
-        cursor_line: useCurrent ? (e.cursor_line ?? null) : (prev.cursor_line ?? null),
-        cursor_pos:  useCurrent ? (e.cursor_pos  ?? null) : (prev.cursor_pos  ?? null),
+        cursor_line:   useCurrent ? (e.cursor_line   ?? null) : (prev.cursor_line   ?? null),
+        cursor_pos:    useCurrent ? (e.cursor_pos    ?? null) : (prev.cursor_pos    ?? null),
+        cursor_anchor: useCurrent ? (e.cursor_anchor ?? null) : (prev.cursor_anchor ?? null),
         joined_at:   useCurrent ? joined : prevJoined,
         isMe:        id === myId,
       });
