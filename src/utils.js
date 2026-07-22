@@ -182,6 +182,12 @@ export function countWords(text) {
 
 export function countChars(text) { return (text || '').length; }
 
+export function estimateReadingTime(text) {
+  const words = countWords(text);
+  if (words === 0) return 0;
+  return Math.max(1, Math.round(words / 200));
+}
+
 // ── File helpers ─────────────────────────────────────────────────────────────
 
 export function formatFileSize(bytes) {

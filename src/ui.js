@@ -2,7 +2,7 @@
 // All DOM manipulation lives here. No business logic.
 import { TEMPLATE_CATEGORY_ORDER } from './templates.js';
 import {
-  countWords, countChars, formatFileSize, fileEmoji, formatTimestamp,
+  countWords, countChars, estimateReadingTime, formatFileSize, fileEmoji, formatTimestamp,
   escapeHtml, copyToClipboard,
 } from './utils.js';
 import { getIcon } from './icons.js';
@@ -263,7 +263,9 @@ export function setRoomTitleEditMode(editing, initialValue = '') {
 export function updateWordCount(text) {
   const w = countWords(text);
   const c = countChars(text);
-  const label = `${w} word${w !== 1 ? 's' : ''} · ${c} char${c !== 1 ? 's' : ''}`;
+  const mins = estimateReadingTime(text);
+  const readingLabel = mins > 0 ? ` · ${mins} min read` : '';
+  const label = `${w} word${w !== 1 ? 's' : ''} · ${c} char${c !== 1 ? 's' : ''}${readingLabel}`;
   const el = document.getElementById('word-count');
   if (el) el.textContent = label;
   const tb = document.getElementById('toolbar-word-count');

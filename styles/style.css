@@ -693,6 +693,15 @@ svg { display: block; flex-shrink: 0; }
   font-family: var(--font-mono); font-size: 0.9em;
   background: var(--bg-elevated); border-radius: 4px; padding: 1px 3px;
 }
+.note-live .cm-md-highlight {
+  background: color-mix(in srgb, var(--yellow) 35%, transparent);
+  border-radius: 3px;
+}
+.note-live .cm-md-checklist-progress {
+  display: inline-block; font-size: 11.5px; font-weight: 600;
+  color: var(--text-secondary); background: var(--bg-elevated);
+  border-radius: 100px; padding: 2px 9px; margin: 0.5em 0 0.2em;
+}
 .note-live .cm-md-blockquote {
   border-left: 3px solid var(--border);
   padding-left: 0.8em;
@@ -794,8 +803,38 @@ svg { display: block; flex-shrink: 0; }
 .note-toc-h4 { padding-left: 2.7em; }
 .note-toc-h5 { padding-left: 3.6em; }
 .note-toc-h6 { padding-left: 4.5em; }
+
+/* Inline [TOC] marker — Typora-style, rendered in document flow (not the
+   floating auto-nav above, which is .note-toc) */
+.md-inline-toc {
+  display: block;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  margin: 0 0 1.4em;
+  padding: 0.6em 0.9em;
+  font-size: 0.9em;
+}
+.md-inline-toc strong { color: var(--text-secondary); }
+.md-inline-toc ul { list-style: none; margin: 0.6em 0 0; padding: 0; }
+.md-inline-toc li { margin: 0.3em 0; overflow-wrap: break-word; word-break: break-word; }
+.md-inline-toc a { color: var(--text-primary); text-decoration: none; }
+.md-inline-toc a:hover { color: var(--accent); text-decoration: underline; }
+.note-live .cm-md-inline-toc {
+  display: block; border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--bg-elevated); padding: 0.6em 0.9em; margin: 0 0 1em; font-size: 0.9em;
+}
+.note-live .cm-md-inline-toc strong { color: var(--text-secondary); }
+.note-live .cm-md-inline-toc ul { list-style: none; margin: 0.6em 0 0; padding: 0; }
+.note-live .cm-md-inline-toc li { margin: 0.3em 0; }
+.note-live .cm-md-inline-toc a { color: var(--text-primary); text-decoration: none; pointer-events: none; }
 .note-preview pre code { background: none; padding: 0; font-size: 0.85em; line-height: 1.55; }
 .note-preview blockquote { border-left: 3px solid var(--accent); padding-left: 14px; margin: 0.8em 0; color: var(--text-secondary); }
+.md-checklist-progress {
+  display: inline-block; font-size: 11.5px; font-weight: 600;
+  color: var(--text-secondary); background: var(--bg-elevated);
+  border-radius: 100px; padding: 2px 9px; margin: 0.5em 0 0.2em;
+}
 .note-preview hr { border: 0; border-top: 1px solid var(--border); margin: 1.4em 0; }
 .note-preview li.md-task { list-style: none; margin-left: -1.4em; padding-left: 0.4em; }
 .note-preview li.md-task input[type="checkbox"] { margin-right: 8px; vertical-align: middle; accent-color: var(--accent); cursor: pointer; }
@@ -809,6 +848,11 @@ body.lock-mode .note-preview li.md-task input[type="checkbox"] { cursor: not-all
 .note-preview tbody tr:nth-child(even) td { background: var(--bg-elevated); opacity: 0.7; }
 /* Strikethrough */
 .note-preview del { color: var(--text-muted); text-decoration-color: var(--text-secondary); }
+/* Highlight */
+.note-preview mark {
+  background: color-mix(in srgb, var(--yellow) 35%, transparent);
+  color: var(--text-primary); border-radius: 3px; padding: 0.05em 0.15em;
+}
 
 /* ── Markdown formatting toolbar ────────────────────────────────────────────── */
 /* Toolbar lives in row 1 of .editor-wrap's grid; spans all columns in split mode */

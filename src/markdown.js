@@ -44,7 +44,38 @@ export function renderMarkdown(src, _parentCtx) {
   if (!src) return '';
   const ctx = _parentCtx || { cbCounter: 0, headingIds: new Set() };
   const blocks = _splitBlocks(String(src));
+  // A [TOC] marker anywhere in the document renders the *whole* document's
+  // headings, including ones that appear after it — so the full heading list
+  // must be known before the per-block render loop reaches it. Only done once,
+  // at the top-level call (not from blockquote's recursive renderMarkdown),
+  // and only when a [TOC] block actually exists, to avoid the extra pass
+  // otherwise. The ids computed here are then handed out to the *real*
+  // heading blocks as the main loop reaches them (via ctx._tocIdQueue) so
+  // both passes agree — recomputing independently could disagree on
+  // duplicate-heading suffixes (-1, -2, …).
+  if (!_parentCtx && !ctx._tocEntries && blocks.some((b) => b.type === 'toc')) {
+    const idSet = new Set();
+    ctx._tocIdQueue = [];
+    ctx._tocEntries = _collectHeadingTexts(blocks).map((h) => {
+      const id = _slugifyHeading(h.text, idSet);
+      ctx._tocIdQueue.push(id);
+      return { level: h.level, id, text: _stripHtmlTags(_renderInline(h.text)) };
+    });
+  }
   return blocks.map((b) => _renderBlock(b, ctx)).join('\n');
+}
+
+/** Flatten heading text (in document order) out of a block list, recursing into
+ *  blockquotes so [TOC] picks up blockquoted headings too. Used only to
+ *  pre-compute the full heading list for the [TOC] block, ahead of the main
+ *  per-block render pass. */
+function _collectHeadingTexts(blocks) {
+  const out = [];
+  for (const b of blocks) {
+    if (b.type === 'heading') out.push({ level: b.level, text: b.text });
+    else if (b.type === 'blockquote') out.push(..._collectHeadingTexts(_splitBlocks(b.text)));
+  }
+  return out;
 }
 
 /**
@@ -140,6 +171,12 @@ function _splitBlocks(src) {
       i++; continue;
     }
 
+    // Typora-style inline table-of-contents marker — a line containing only "[TOC]"
+    if (/^\[toc\]$/i.test(line.trim())) {
+      blocks.push({ type: 'toc' });
+      i++; continue;
+    }
+
     // Blockquote — collect consecutive > lines, strip the > prefix
     if (/^>/.test(line)) {
       const bqLines = [];
@@ -221,7 +258,7 @@ function _splitBlocks(src) {
  */
 function _slugifyHeading(text, usedIds) {
   const base = String(text)
-    .replace(/[*_`~]/g, '')
+    .replace(/[*_`~=]/g, '')
     .toLowerCase()
     .trim()
     .replace(/[^a-z0-9\s-]/g, '')
@@ -256,7 +293,10 @@ function _stripHtmlTags(html) {
 function _renderBlock(block, ctx) {
   switch (block.type) {
     case 'heading': {
-      const id = _slugifyHeading(block.text, ctx.headingIds);
+      // When a [TOC] block pre-computed the full heading list, reuse its ids
+      // in order instead of slugifying again — see renderMarkdown().
+      const id = ctx._tocIdQueue ? ctx._tocIdQueue.shift() : _slugifyHeading(block.text, ctx.headingIds);
+      ctx.headingIds.add(id);
       const inlineHtml = _renderInline(block.text);
       // The live preview's TOC reads the rendered heading's textContent, so
       // a heading like "## [API guide](url)" shows just "API guide" there.
@@ -287,10 +327,19 @@ function _renderBlock(block, ctx) {
       // index of every checkbox rendered after the first blockquoted
       // checklist in the document — breaking far more checkboxes than just
       // the blockquoted ones.
-      return `<blockquote>${renderMarkdown(block.text, { cbCounter: 0, headingIds: ctx.headingIds, headings: ctx.headings })}</blockquote>`;
+      return `<blockquote>${renderMarkdown(block.text, { cbCounter: 0, headingIds: ctx.headingIds, headings: ctx.headings, _tocIdQueue: ctx._tocIdQueue })}</blockquote>`;
 
     case 'hr':
       return `<hr>`;
+
+    case 'toc': {
+      const entries = ctx._tocEntries || [];
+      if (entries.length < 2) return '';
+      const items = entries.map((h) =>
+        `<li class="note-toc-item note-toc-h${h.level}"><a href="#${h.id}">${escapeHtml(h.text)}</a></li>`
+      ).join('');
+      return `<nav class="md-inline-toc" aria-label="Table of contents"><strong>Contents</strong><ul>${items}</ul></nav>`;
+    }
 
     case 'table': {
       const thead = `<thead><tr>${block.headers
@@ -323,7 +372,19 @@ function _renderListTree(rawLines, ctx) {
     ordered: /^[ \t]*\d+\.[ \t]+/.test(raw),
     content: raw.replace(/^[ \t]*(?:[-*+]|\d+\.)[ \t]+/, ''),
   }));
-  return _buildListLevel(items, 0, items.length, ctx);
+  const listHtml = _buildListLevel(items, 0, items.length, ctx);
+
+  // Progress badge ("3/5 done") above the list when it's a checklist —
+  // counts every checkbox in the block, nested sub-items included.
+  let total = 0, checked = 0;
+  for (const it of items) {
+    const m = it.content.match(/^\[( |x|X)\][ \t]+/);
+    if (m) { total++; if (m[1].toLowerCase() === 'x') checked++; }
+  }
+  if (total > 0) {
+    return `<div class="md-checklist-progress">${checked}/${total} done</div>\n${listHtml}`;
+  }
+  return listHtml;
 }
 
 /** Renders items[start, end) that share a base indent as one <ul>/<ol>. */
@@ -409,6 +470,7 @@ function _renderInline(raw) {
   text = text.replace(/\*([^*\n]+?)\*/g,     '<em>$1</em>');
   text = text.replace(/(?<![a-zA-Z0-9])_([^_\n]+?)_(?![a-zA-Z0-9])/g,   '<em>$1</em>');
   text = text.replace(/~~([^~\n]+?)~~/g,     '<del>$1</del>');
+  text = text.replace(/==([^=\n]+?)==/g,     '<mark>$1</mark>');
 
   // 5. Links — http/https/mailto only.
   // NOTE: `url` here comes from step-2-escaped text, so special chars like &

@@ -2852,6 +2852,7 @@ function _applyMarkdownFormat(action, editor) {
     case 'bold':          wrapSel('**', '**'); break;
     case 'italic':        wrapSel('_',  '_');  break;
     case 'strikethrough': wrapSel('~~', '~~'); break;
+    case 'highlight':     wrapSel('==', '=='); break;
     case 'code':          wrapSel('`',  '`');  break;
     case 'h1':            toggleHeading(1);    break;
     case 'h2':            toggleHeading(2);    break;
@@ -2882,6 +2883,15 @@ function _applyMarkdownFormat(action, editor) {
     case 'hr': {
       const before = start > 0 && val[start - 1] !== '\n' ? '\n' : '';
       const ins = `${before}---\n`;
+      editor.value = val.slice(0, start) + ins + val.slice(end);
+      editor.selectionStart = editor.selectionEnd = start + ins.length;
+      editor.dispatchEvent(new Event('input', { bubbles: true }));
+      break;
+    }
+    case 'toc': {
+      const before = start > 0 && val[start - 1] !== '\n' ? '\n' : '';
+      const after  = end < val.length && val[end] !== '\n' ? '\n' : '';
+      const ins = `${before}[TOC]\n${after}`;
       editor.value = val.slice(0, start) + ins + val.slice(end);
       editor.selectionStart = editor.selectionEnd = start + ins.length;
       editor.dispatchEvent(new Event('input', { bubbles: true }));

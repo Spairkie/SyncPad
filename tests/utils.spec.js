@@ -97,6 +97,32 @@ test.describe('countWords()', () => {
   });
 });
 
+test.describe('estimateReadingTime()', () => {
+  test('returns 0 for empty text', async ({ page }) => {
+    await goToLanding(page);
+    const result = await inBrowser(page, '/SyncPad/src/utils.js', (mod) =>
+      mod.estimateReadingTime('')
+    );
+    expect(result).toBe(0);
+  });
+
+  test('rounds up to at least 1 minute for any non-empty text', async ({ page }) => {
+    await goToLanding(page);
+    const result = await inBrowser(page, '/SyncPad/src/utils.js', (mod) =>
+      mod.estimateReadingTime('just a few words')
+    );
+    expect(result).toBe(1);
+  });
+
+  test('estimates ~200 words per minute', async ({ page }) => {
+    await goToLanding(page);
+    const result = await inBrowser(page, '/SyncPad/src/utils.js', (mod) =>
+      mod.estimateReadingTime(Array(450).fill('word').join(' '))
+    );
+    expect(result).toBe(2);
+  });
+});
+
 test.describe('Templates module', () => {
   test('TEMPLATES has at least 13 entries', async ({ page }) => {
     await goToLanding(page);
