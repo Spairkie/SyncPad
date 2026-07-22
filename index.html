@@ -649,6 +649,15 @@
       <div class="mini-spinner"></div>
       <span>Loading versions…</span>
     </div>
+    <div class="history-scrubber hidden" id="history-scrubber">
+      <div class="history-scrubber-header">
+        <span class="history-scrubber-title">Scrub through history</span>
+        <span class="history-scrubber-label" id="history-scrubber-label">Now</span>
+      </div>
+      <input type="range" id="history-slider" class="history-slider" min="0" max="0" value="0" step="1" aria-label="Scrub through version history" />
+      <div class="history-scrubber-preview" id="history-scrubber-preview" aria-live="polite"></div>
+      <button class="setting-btn history-scrubber-restore-btn" id="history-scrubber-restore-btn" type="button" disabled>Restore this version</button>
+    </div>
     <div id="history-list"></div>
     <div class="history-empty hidden" id="history-empty">
       <div class="empty-state">

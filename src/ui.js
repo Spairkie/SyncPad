@@ -633,6 +633,55 @@ export function renderHistoryList(revisions, onRestore, opts = {}) {
   });
 }
 
+/**
+ * A scrubbable slider over version history (Etherpad's time-slider pattern),
+ * shown above the discrete list rendered by renderHistoryList() rather than
+ * replacing it. `entries` must be ordered oldest-to-newest and end with the
+ * current live content as its last ("Now") entry.
+ * @param {{ label: string, text: string|null, locked?: boolean, isNow?: boolean, rev?: object }[]} entries
+ * @param {(entry: object) => void} onRestore — called with the scrubbed-to entry
+ */
+export function renderHistoryScrubber(entries, onRestore) {
+  const wrap      = document.getElementById('history-scrubber');
+  const slider    = document.getElementById('history-slider');
+  const label     = document.getElementById('history-scrubber-label');
+  const preview   = document.getElementById('history-scrubber-preview');
+  const restoreBtn = document.getElementById('history-scrubber-restore-btn');
+  if (!wrap || !slider || !label || !preview || !restoreBtn) return;
+
+  // Needs at least one real revision plus the synthetic "Now" entry to be
+  // worth scrubbing through — a brand-new room has nothing to slide across.
+  if (!entries || entries.length < 2) {
+    wrap.classList.add('hidden');
+    return;
+  }
+  wrap.classList.remove('hidden');
+
+  const maxIndex = entries.length - 1;
+  slider.min = '0';
+  slider.max = String(maxIndex);
+  slider.value = String(maxIndex); // start at "Now"
+
+  const renderAt = (index) => {
+    const entry = entries[index];
+    if (!entry) return;
+    label.textContent = entry.label;
+    if (entry.locked) {
+      preview.innerHTML = '<span class="history-preview-locked">🔒 Encrypted — open with the passphrase to preview</span>';
+    } else {
+      preview.textContent = entry.text || '';
+    }
+    restoreBtn.disabled = !!entry.isNow || !!entry.locked;
+  };
+
+  renderAt(maxIndex);
+  slider.oninput = () => renderAt(Number(slider.value));
+  restoreBtn.onclick = () => {
+    const entry = entries[Number(slider.value)];
+    if (entry && !entry.isNow && !entry.locked) onRestore?.(entry);
+  };
+}
+
 // ── Panels ────────────────────────────────────────────────────────────────────
 
 const PANEL_IDS = ['tools-panel', 'files-panel', 'presence-panel', 'settings-panel', 'search-panel', 'history-panel'];

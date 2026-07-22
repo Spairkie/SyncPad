@@ -3211,6 +3211,21 @@ async function _openHistoryPanel() {
       canRestore: canEdit(),
       deviceId:   getDeviceId(),
     });
+
+    // Scrubbable time-slider: oldest → newest → "Now" (the live content),
+    // reusing the same decrypted previews already computed above.
+    const oldestFirst = [...withPreviews].reverse().map((rev) => ({
+      label:  formatTimestamp(rev.created_at),
+      text:   rev._preview,
+      locked: rev._preview == null,
+      rev,
+    }));
+    oldestFirst.push({ label: 'Now', text: UI.getEditorValue(), isNow: true });
+    if (canEdit()) {
+      UI.renderHistoryScrubber(oldestFirst, (entry) => _restoreRevision(entry.rev));
+    } else {
+      UI.renderHistoryScrubber([], null);
+    }
   } catch {
     UI.showToast('Could not load version history.', 'error');
   } finally {

@@ -1123,6 +1123,38 @@ body.lock-mode .md-toolbar { opacity: 0.4; pointer-events: none; }
 .history-restore-btn:hover { background: var(--bg-base); color: var(--accent); border-color: var(--accent); }
 .history-empty { font-size: 13px; color: var(--text-muted); text-align: center; padding: 24px 0; }
 
+/* Scrubbable time-slider — drag through history live, alongside the
+   discrete list above rather than replacing it. */
+.history-scrubber {
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--bg-elevated); padding: 12px 14px; margin-bottom: 14px;
+}
+.history-scrubber-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.history-scrubber-title { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.history-scrubber-label { font-size: 12px; font-weight: 600; color: var(--accent); white-space: nowrap; }
+.history-slider {
+  width: 100%; appearance: none; height: 4px; border-radius: 2px;
+  background: var(--border); outline: none; margin: 6px 0 10px;
+}
+.history-slider::-webkit-slider-thumb {
+  appearance: none; width: 15px; height: 15px; border-radius: 50%;
+  background: var(--accent); cursor: pointer; border: 2px solid var(--bg-elevated);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.history-slider::-moz-range-thumb {
+  width: 15px; height: 15px; border-radius: 50%; border: 2px solid var(--bg-elevated);
+  background: var(--accent); cursor: pointer; box-shadow: 0 0 0 1px var(--accent);
+}
+.history-scrubber-preview {
+  font-size: 12.5px; font-family: var(--font-mono); color: var(--text-primary);
+  background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 10px 12px; max-height: 160px; overflow-y: auto; white-space: pre-wrap;
+  word-break: break-word; margin-bottom: 10px;
+}
+.history-scrubber-preview:empty::before { content: '(empty note)'; color: var(--text-muted); font-style: italic; }
+.history-scrubber-restore-btn { width: 100%; text-align: center; }
+.history-scrubber-restore-btn:disabled { opacity: 0.5; cursor: default; pointer-events: none; }
+
 /* Files panel — select mode */
 .panel-header-actions { display: flex; align-items: center; gap: 6px; }
 
