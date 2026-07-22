@@ -1,0 +1,253 @@
+/* ============================================================
+   SyncPad – base.css
+   Theme variables (7 themes), reset, theme transitions, loading screen.
+   First of several stylesheets — see index.html for load order, which
+   mirrors the original single style.css's rule order exactly.
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;1,400&family=DM+Mono:wght@400;500&display=swap');
+
+/* ── Default theme variables (Charcoal Amber) ──────────────── */
+:root {
+  --bg-base:        #0f0f11;
+  --bg-surface:     #18181c;
+  --bg-elevated:    #222228;
+  --bg-input:       #1c1c22;
+  --border:         #2e2e38;
+  --border-soft:    #222228;
+  --accent:         #f5a623;
+  --accent-rgb:     245,166,35;
+  --accent-dim:     rgba(245,166,35,0.12);
+  --accent-glow:    rgba(245,166,35,0.25);
+  --text-primary:   #e8e8ed;
+  --text-secondary: #8a8a9a;
+  --text-muted:     #55556a;
+  --text-inverse:   #0f0f11;
+  --green:          #4ade80;
+  --red:            #f87171;
+  --blue:           #60a5fa;
+  --yellow:         #fbbf24;
+  --radius-sm:      6px;
+  --radius-md:      10px;
+  --radius-lg:      16px;
+  --radius-xl:      22px;
+  --shadow-sm:      0 1px 3px rgba(0,0,0,0.4);
+  --shadow-md:      0 4px 16px rgba(0,0,0,0.5);
+  --shadow-lg:      0 12px 40px rgba(0,0,0,0.6);
+  --font-ui:        'DM Sans', system-ui, sans-serif;
+  --font-mono:      'DM Mono', 'Fira Code', monospace;
+  --transition:     0.18s ease;
+  /* Syntax-highlight token colours (bright variants for dark themes) */
+  --syntax-string:  #4ade80;
+  --syntax-number:  #fb923c;
+  --syntax-fn:      #60a5fa;
+  --syntax-regex:   #f472b6;
+  --panel-width:    340px;
+  --landing-glow:   rgba(245,166,35,0.08);
+}
+
+/* ── Theme: Midnight Blue ──────────────────────────────────── */
+[data-theme="midnight-blue"] {
+  --bg-base:        #0c0e1a;
+  --bg-surface:     #111624;
+  --bg-elevated:    #1a1f35;
+  --bg-input:       #141828;
+  --border:         #252d4a;
+  --border-soft:    #1a1f35;
+  --accent:         #60a5fa;
+  --accent-rgb:     96,165,250;
+  --accent-dim:     rgba(96,165,250,0.12);
+  --accent-glow:    rgba(96,165,250,0.25);
+  --text-primary:   #dde4f0;
+  --text-secondary: #7a87a8;
+  --text-muted:     #404d6a;
+  --text-inverse:   #0c0e1a;
+  --landing-glow:   rgba(96,165,250,0.06);
+}
+
+/* ── Theme: Forest Green ───────────────────────────────────── */
+[data-theme="forest-green"] {
+  --bg-base:        #0a0f0d;
+  --bg-surface:     #0f1812;
+  --bg-elevated:    #162118;
+  --bg-input:       #121c14;
+  --border:         #1e3024;
+  --border-soft:    #162118;
+  --accent:         #4ade80;
+  --accent-rgb:     74,222,128;
+  --accent-dim:     rgba(74,222,128,0.12);
+  --accent-glow:    rgba(74,222,128,0.25);
+  --text-primary:   #d8edd8;
+  --text-secondary: #6a8a6e;
+  --text-muted:     #385040;
+  --text-inverse:   #0a0f0d;
+  --landing-glow:   rgba(74,222,128,0.06);
+}
+
+/* ── Theme: Paper Light ────────────────────────────────────── */
+[data-theme="paper-light"] {
+  --bg-base:        #f5f4f0;
+  --bg-surface:     #ffffff;
+  --bg-elevated:    #eeecea;
+  --bg-input:       #f0eeeb;
+  --border:         #d8d4cc;
+  --border-soft:    #e8e4df;
+  --accent:         #c17d2e;
+  --accent-rgb:     193,125,46;
+  --accent-dim:     rgba(193,125,46,0.12);
+  --accent-glow:    rgba(193,125,46,0.25);
+  --text-primary:   #1a1612;
+  --text-secondary: #6a5e50;
+  --text-muted:     #a89a88;
+  --text-inverse:   #ffffff;
+  /* Semantic status colours — darker shades for legibility on light backgrounds */
+  --green:          #15803d;
+  --red:            #b91c1c;
+  --blue:           #1d4ed8;
+  --yellow:         #92400e;
+  --shadow-sm:      0 1px 3px rgba(0,0,0,0.1);
+  --shadow-md:      0 4px 16px rgba(0,0,0,0.12);
+  --shadow-lg:      0 12px 40px rgba(0,0,0,0.15);
+  --landing-glow:   rgba(193,125,46,0.05);
+  /* Syntax colours — darker shades for legibility on light backgrounds */
+  --syntax-string:  #15803d;
+  --syntax-number:  #c2410c;
+  --syntax-fn:      #1d4ed8;
+  --syntax-regex:   #9d174d;
+}
+
+/* ── Theme: Terminal ───────────────────────────────────────── */
+[data-theme="terminal"] {
+  --bg-base:        #020202;
+  --bg-surface:     #080808;
+  --bg-elevated:    #0f0f0f;
+  --bg-input:       #0a0a0a;
+  --border:         #1a2e1a;
+  --border-soft:    #0f1a0f;
+  --accent:         #00ff41;
+  --accent-rgb:     0,255,65;
+  --accent-dim:     rgba(0,255,65,0.10);
+  --accent-glow:    rgba(0,255,65,0.20);
+  --text-primary:   #c8ffc8;
+  --text-secondary: #5a8a5a;
+  --text-muted:     #2a4a2a;
+  --text-inverse:   #020202;
+  --font-ui:        'DM Mono', 'Fira Code', monospace;
+  --landing-glow:   rgba(0,255,65,0.05);
+}
+
+/* ── Theme: Mocha Dark ─────────────────────────────────────── */
+[data-theme="mocha-dark"] {
+  --bg-base:        #1a110a;
+  --bg-surface:     #221610;
+  --bg-elevated:    #2d1e14;
+  --bg-input:       #261912;
+  --border:         #3d2a1e;
+  --border-soft:    #2d1e14;
+  --accent:         #d4956a;
+  --accent-rgb:     212,149,106;
+  --accent-dim:     rgba(212,149,106,0.12);
+  --accent-glow:    rgba(212,149,106,0.25);
+  --text-primary:   #eddcc8;
+  --text-secondary: #8a7060;
+  --text-muted:     #5a4030;
+  --text-inverse:   #1a110a;
+  --landing-glow:   rgba(212,149,106,0.07);
+}
+
+/* ── Theme: Lavender Light ─────────────────────────────────── */
+[data-theme="lavender-light"] {
+  --bg-base:        #f5f3ff;
+  --bg-surface:     #ffffff;
+  --bg-elevated:    #ede9fe;
+  --bg-input:       #f0ecff;
+  --border:         #d4c9f5;
+  --border-soft:    #e8e2ff;
+  --accent:         #7c5cbf;
+  --accent-rgb:     124,92,191;
+  --accent-dim:     rgba(124,92,191,0.12);
+  --accent-glow:    rgba(124,92,191,0.25);
+  --text-primary:   #1e1632;
+  --text-secondary: #6b5a8a;
+  --text-muted:     #a898c4;
+  --text-inverse:   #ffffff;
+  /* Semantic status colours — darker shades for legibility on light backgrounds */
+  --green:          #15803d;
+  --red:            #b91c1c;
+  --blue:           #1d4ed8;
+  --yellow:         #92400e;
+  --shadow-sm:      0 1px 3px rgba(0,0,0,0.08);
+  --shadow-md:      0 4px 16px rgba(0,0,0,0.1);
+  --shadow-lg:      0 12px 40px rgba(0,0,0,0.12);
+  --landing-glow:   rgba(124,92,191,0.06);
+  /* Syntax colours — darker shades for legibility on light backgrounds */
+  --syntax-string:  #15803d;
+  --syntax-number:  #c2410c;
+  --syntax-fn:      #1d4ed8;
+  --syntax-regex:   #9d174d;
+}
+
+/* ── Reset ─────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { height: 100%; font-size: 16px; -webkit-text-size-adjust: 100%; }
+body {
+  height: 100%; font-family: var(--font-ui);
+  background: var(--bg-base); color: var(--text-primary);
+  overflow: hidden; display: flex; flex-direction: column;
+}
+button { font-family: inherit; cursor: pointer; border: none; background: none; }
+
+/* ── Theme transition ───────────────────────────────────────── */
+/* When a theme is applied, key surfaces animate their background/border.
+   Uses a precise selector list to avoid clobbering interaction transitions
+   on buttons, inputs, and animated components. */
+body,
+.app-header,
+.editor-wrap,
+#note-editor,
+#note-preview,
+.panel,
+.modal,
+.modal-backdrop,
+.landing-inner,
+#landing-screen,
+.auth-card,
+.file-item,
+.device-item,
+.toast,
+.expiration-bar,
+.offline-banner {
+  transition: background-color 0.22s ease, border-color 0.22s ease, color 0.22s ease;
+}
+
+input, textarea { font-family: inherit; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+svg { display: block; flex-shrink: 0; }
+
+/* ── Loading Screen ────────────────────────────────────────── */
+#loading-screen {
+  position: fixed; inset: 0; z-index: 1000;
+  background: var(--bg-base);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 20px; transition: opacity 0.35s ease;
+}
+#loading-screen.hidden { opacity: 0; pointer-events: none; }
+.loading-logo { font-size: 28px; font-weight: 600; color: var(--text-primary); letter-spacing: -0.5px; }
+.loading-logo span { color: var(--accent); }
+.loading-spinner {
+  width: 28px; height: 28px;
+  border: 2.5px solid var(--border); border-top-color: var(--accent);
+  border-radius: 50%; animation: spin 0.8s linear infinite;
+}
+.loading-message { font-size: 13px; color: var(--text-secondary); }
+.loading-retry-btn {
+  margin-top: 12px; padding: 8px 20px;
+  background: var(--accent); color: var(--text-inverse); font-weight: 600; font-size: 13px;
+  border: none; border-radius: var(--radius-md); cursor: pointer;
+  transition: opacity var(--transition);
+}
+.loading-retry-btn:hover { opacity: .85; }
+@keyframes spin { to { transform: rotate(360deg); } }
+

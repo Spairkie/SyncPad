@@ -26,9 +26,17 @@
     } catch {}
   </script>
 
-  <!-- Styles -->
-  <link rel="stylesheet" href="/SyncPad/styles/style.css" />
+  <!-- Styles — order matters: later files' rules override earlier ones at
+       equal specificity, mirroring the original single style.css's rule
+       order exactly. admin.css is lazy-loaded separately by admin.js. -->
+  <link rel="stylesheet" href="/SyncPad/styles/base.css" />
+  <link rel="stylesheet" href="/SyncPad/styles/landing.css" />
+  <link rel="stylesheet" href="/SyncPad/styles/app-shell.css" />
+  <link rel="stylesheet" href="/SyncPad/styles/editor.css" />
+  <link rel="stylesheet" href="/SyncPad/styles/panels.css" />
+  <link rel="stylesheet" href="/SyncPad/styles/modals.css" />
   <link rel="stylesheet" href="/SyncPad/styles/file-preview.css" />
+  <link rel="stylesheet" href="/SyncPad/styles/room-tools.css" />
 
   <!-- Supabase JS -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
