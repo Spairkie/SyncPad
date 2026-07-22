@@ -524,6 +524,24 @@ const _theme = EditorView.theme({
 
 export function isMounted() { return !!_view; }
 
+/** Current local caret offset into the doc, or null if unmounted. */
+export function getCaretPos() {
+  return _view ? _view.state.selection.main.head : null;
+}
+
+/**
+ * Viewport pixel coordinates for a document offset (cursor-chat bubble
+ * placement). Returns null when unmounted or the position can't be resolved
+ * (e.g. a remote peer's offset from a doc that has since changed length).
+ */
+export function coordsAtPos(pos) {
+  if (!_view || !Number.isFinite(pos) || pos < 0 || pos > _view.state.doc.length) return null;
+  try {
+    const c = _view.coordsAtPos(pos);
+    return c ? { x: c.left, y: c.top } : null;
+  } catch { return null; }
+}
+
 /**
  * Mount the surface into `container` (idempotent — remounts if called while
  * already mounted). `onChange(text)` fires only for edits made in this

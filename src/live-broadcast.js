@@ -37,6 +37,7 @@ export function initBroadcast(roomId, handlers) {
     .on('broadcast', { event: 'files' },            _on('files',            'onRemoteFiles'))
     .on('broadcast', { event: 'clear' },            _on('clear',            'onRemoteClear'))
     .on('broadcast', { event: 'view_once_cleared' },_on('view_once_cleared','onRemoteViewOnce'))
+    .on('broadcast', { event: 'cursor_chat' },      _on('cursor_chat',      'onRemoteCursorChat'))
     .subscribe();
 
   return _channel;
@@ -113,4 +114,18 @@ export function broadcastClear(reason) {
 /** Signal other devices that a view-once note was consumed. */
 export function broadcastViewOnceCleared() {
   _send('view_once_cleared', { ts: Date.now() });
+}
+
+/**
+ * Send an ephemeral "cursor chat" message anchored to a caret position
+ * (Figma's cursor-chat pattern). Never written to Postgres or the revision
+ * history — receiving devices show it as a fading bubble and discard it.
+ * @param {string} text
+ * @param {number} pos – character offset into the note, for positioning
+ *                        the bubble near the sender's caret.
+ */
+export function broadcastCursorChat(text, pos) {
+  const trimmed = String(text || '').trim().slice(0, 80);
+  if (!trimmed) return;
+  _send('cursor_chat', { device_name: getDeviceName(), text: trimmed, pos, ts: Date.now() });
 }

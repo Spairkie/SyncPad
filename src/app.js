@@ -16,7 +16,7 @@ import { listRevisions } from './revisions.js';
 import {
   initBroadcast, destroyBroadcast,
   broadcastSettingsChange, broadcastFilesChange, cancelPendingTypingBroadcast, cancelPendingLiveContentBroadcast,
-  broadcastClear, broadcastViewOnceCleared,
+  broadcastClear, broadcastViewOnceCleared, broadcastCursorChat,
 } from './live-broadcast.js';
 
 import {
@@ -814,6 +814,22 @@ async function startApp() {
       _refreshPreviewIfActive();
       UI.showToast('This note was view-once and has been cleared from the server.', 'warning', 6000);
     },
+    onRemoteCursorChat: (payload) => {
+      // Only meaningful where there's a real caret to anchor to — the CM6
+      // live surface, the same place remote carets themselves render.
+      // Write mode has no per-character screen coordinates to place a
+      // bubble at (and LiveEditor stays mounted-but-hidden there), so the
+      // message is silently dropped rather than faked into a wrong position.
+      if (_markdownMode === 'write' || !LiveEditor.isMounted()) return;
+      const coords = LiveEditor.coordsAtPos(payload.pos);
+      if (!coords) return;
+      UI.showCursorChatBubble({
+        deviceId:   payload.device_id,
+        deviceName: payload.device_name,
+        text:       String(payload.text || '').slice(0, 80),
+        x: coords.x, y: coords.y,
+      });
+    },
   });
 
   initPresence(_roomId, (devices) => {
@@ -1465,6 +1481,7 @@ function _wireShortcuts() {
           ? UI.showToast('Copied to clipboard.', 'success')
           : UI.showToast('Could not copy.', 'error'));
     },
+    onCursorChat: () => _openCursorChatComposer(),
   });
 
 }
@@ -1917,6 +1934,8 @@ function _wireFooterQuickButtons() {
     UI.insertAtCursor(insertTimestamp());
   });
   UI.initFooterClock();
+
+  document.getElementById('btn-cursor-chat')?.addEventListener('click', () => _openCursorChatComposer());
 
 }
 
@@ -2932,6 +2951,7 @@ function teardownRealtimeSession() {
   destroyPresence();
   destroyBroadcast();
   destroySync();
+  UI.clearCursorChat();
   // Remove the keydown handler so wireEvents() can install fresh callbacks
   // on the next room join. DOM element listeners (editor, buttons, etc.) are
   // protected by the _eventsWired guard and must NOT be reset here — resetting
@@ -3119,6 +3139,10 @@ async function _restoreRevision(rev) {
  * to mount for any reason the old rendered-HTML preview is the fallback.
  */
 function _applyMarkdownMode(mode) {
+  // Cursor-chat bubbles/composer are positioned in viewport coordinates from
+  // the live surface, which is about to be hidden (or was never shown) —
+  // leaving them up would float a stale bubble over whatever mode follows.
+  if (mode === 'write') UI.clearCursorChat();
   _markdownMode = mode;
   _showPreview  = mode !== 'write';
 
@@ -3170,6 +3194,27 @@ function _onLiveCursorActivity(pos) {
   const before = UI.getEditorValue().slice(0, pos);
   const line   = (before.match(/\n/g) || []).length + 1;
   setCursorLine(line, pos);
+}
+
+// Cursor chat only makes sense where there's a real caret to anchor a bubble
+// to — the CM6 live surface (Preview/Split), the same place remote carets
+// themselves render. Write mode's plain textarea has no per-character
+// screen coordinates to place one at.
+function _openCursorChatComposer() {
+  // LiveEditor stays mounted (just hidden) after switching back to Write
+  // mode, so isMounted() alone isn't enough — the surface has to actually
+  // be the visible one for its screen coordinates to mean anything.
+  if (_markdownMode === 'write' || !LiveEditor.isMounted()) {
+    UI.showToast('Switch to Preview or Split mode to send a cursor chat.', 'info', 3000);
+    return;
+  }
+  const pos = LiveEditor.getCaretPos();
+  const coords = pos != null ? LiveEditor.coordsAtPos(pos) : null;
+  if (!coords) return;
+  UI.openCursorChatComposer(coords, (text) => {
+    broadcastCursorChat(text, pos);
+    UI.showCursorChatBubble({ deviceId: getDeviceId(), deviceName: 'You', text, x: coords.x, y: coords.y });
+  });
 }
 
 function _refreshPreviewIfActive() {

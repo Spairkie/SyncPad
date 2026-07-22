@@ -114,6 +114,106 @@ export function showToast(message, type = '', duration = 2800) {
   }, duration);
 }
 
+// ── Cursor chat (Figma-style ephemeral message near a caret) ──────────────────
+// Bubbles live in #cursor-chat-layer, a full-viewport fixed layer — see
+// style.css. Never persisted; a bubble is just a DOM node with a timer.
+
+const _cursorChatBubbles = new Map(); // device_id -> { el, timer }
+let _cursorChatComposerEl = null;
+
+/**
+ * Open a small inline input at `{x, y}` (viewport coordinates, e.g. from
+ * LiveEditor.coordsAtPos()) for composing a cursor-chat message. Only one
+ * composer at a time — opening a new one discards any other in progress.
+ * @param {{x:number, y:number}} coords
+ * @param {(text: string) => void} onSubmit – called with the trimmed text on Enter; not called on cancel.
+ */
+export function openCursorChatComposer(coords, onSubmit) {
+  closeCursorChatComposer();
+  const layer = document.getElementById('cursor-chat-layer');
+  if (!layer) return;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'cursor-chat-composer';
+  wrap.style.left = `${coords.x}px`;
+  wrap.style.top  = `${coords.y}px`;
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.maxLength = 80;
+  input.placeholder = 'Say something…';
+  input.setAttribute('aria-label', 'Cursor chat message');
+  wrap.appendChild(input);
+  layer.appendChild(wrap);
+  _cursorChatComposerEl = wrap;
+  input.focus();
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const text = input.value.trim();
+      closeCursorChatComposer();
+      if (text) onSubmit?.(text);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      closeCursorChatComposer();
+    }
+  });
+  input.addEventListener('blur', () => closeCursorChatComposer());
+}
+
+export function closeCursorChatComposer() {
+  // Removing a focused input can synchronously fire its own 'blur' handler
+  // (which also calls this function) before .remove() returns — null the
+  // reference out first so that re-entrant call sees nothing to do, instead
+  // of racing to remove the same node twice.
+  const el = _cursorChatComposerEl;
+  _cursorChatComposerEl = null;
+  el?.remove();
+}
+
+/**
+ * Show (or replace) an ephemeral cursor-chat bubble from `deviceId`, fading
+ * out on its own after ~5s. A second message from the same device before
+ * the first fades replaces it and resets the timer, rather than stacking.
+ * @param {{deviceId: string, deviceName: string, text: string, x: number, y: number}} msg
+ */
+export function showCursorChatBubble({ deviceId, deviceName, text, x, y }) {
+  const layer = document.getElementById('cursor-chat-layer');
+  if (!layer) return;
+
+  const existing = _cursorChatBubbles.get(deviceId);
+  if (existing) { clearTimeout(existing.timer); existing.el.remove(); }
+
+  const el = document.createElement('div');
+  el.className = 'cursor-chat-bubble';
+  el.style.left = `${x}px`;
+  el.style.top  = `${y}px`;
+  el.innerHTML = `
+    <span class="cursor-chat-bubble-name">${escapeHtml(deviceName || 'Someone')}</span>
+    <span class="cursor-chat-bubble-text">${escapeHtml(text)}</span>`;
+  layer.appendChild(el);
+
+  const timer = setTimeout(() => {
+    el.classList.add('out');
+    setTimeout(() => { el.remove(); _cursorChatBubbles.delete(deviceId); }, 400);
+  }, 5000);
+  _cursorChatBubbles.set(deviceId, { el, timer });
+
+  // The bubble itself is a purely visual, viewport-positioned element — a
+  // screen reader has no way to discover it otherwise, so announce it
+  // through the same live region presence typing/join events use.
+  const region = document.getElementById('presence-live-region');
+  if (region) region.textContent = `${deviceName || 'Someone'} says: ${text}`;
+}
+
+/** Clear every cursor-chat bubble/composer immediately — used on room navigation. */
+export function clearCursorChat() {
+  for (const { el, timer } of _cursorChatBubbles.values()) { clearTimeout(timer); el.remove(); }
+  _cursorChatBubbles.clear();
+  closeCursorChatComposer();
+}
+
 // ── Remote update notice (4 actions: Apply / Keep mine / Copy remote / Dismiss) ─
 
 export function showRemoteNotice({ onApply, onKeep, onCopy, onDismiss, localText, remoteText, remoteTs } = {}) {

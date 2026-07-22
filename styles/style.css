@@ -1646,6 +1646,42 @@ body.lock-mode .md-toolbar { opacity: 0.4; pointer-events: none; }
 @keyframes toast-out { from{ opacity:1; transform:translateY(0); } to{ opacity:0; transform:translateY(8px); } }
 
 /* ══════════════════════════════════════════════════════════════
+   CURSOR CHAT — ephemeral, viewport-anchored messages near a caret.
+   Only shown while the CM6 live surface (Preview/Split) is mounted, the
+   same surface remote carets already render in — see live-editor.js.
+══════════════════════════════════════════════════════════════ */
+#cursor-chat-layer {
+  position: fixed; inset: 0; z-index: 55; pointer-events: none;
+}
+.cursor-chat-bubble, .cursor-chat-composer {
+  position: absolute; transform: translate(-8px, -100%);
+  max-width: 220px; font-size: 12.5px; line-height: 1.35;
+}
+.cursor-chat-bubble {
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: var(--radius-md) var(--radius-md) var(--radius-md) 2px;
+  padding: 6px 10px; box-shadow: var(--shadow-md);
+  animation: cursor-chat-in 0.15s ease forwards;
+  overflow-wrap: break-word; word-break: break-word;
+}
+.cursor-chat-bubble.out { animation: cursor-chat-out 0.4s ease forwards; }
+.cursor-chat-bubble-name {
+  display: block; font-size: 10.5px; font-weight: 650; margin-bottom: 2px;
+}
+.cursor-chat-bubble-text { color: var(--text-primary); }
+.cursor-chat-composer {
+  pointer-events: auto; padding: 0;
+}
+.cursor-chat-composer input {
+  width: 220px; font: inherit; font-size: 12.5px; color: var(--text-primary);
+  background: var(--bg-elevated); border: 1px solid var(--accent);
+  border-radius: var(--radius-md) var(--radius-md) var(--radius-md) 2px;
+  padding: 6px 10px; box-shadow: var(--shadow-md); outline: none;
+}
+@keyframes cursor-chat-in  { from{ opacity:0; transform:translate(-8px, -94%); } to{ opacity:1; transform:translate(-8px, -100%); } }
+@keyframes cursor-chat-out { from{ opacity:1; } to{ opacity:0; } }
+
+/* ══════════════════════════════════════════════════════════════
    MOBILE BOTTOM ACTION BAR
 ══════════════════════════════════════════════════════════════ */
 .mobile-action-bar {
