@@ -368,8 +368,6 @@ export function updateWordCount(text) {
   const label = `${w} word${w !== 1 ? 's' : ''} · ${c} char${c !== 1 ? 's' : ''}${readingLabel}`;
   const el = document.getElementById('word-count');
   if (el) el.textContent = label;
-  const tb = document.getElementById('toolbar-word-count');
-  if (tb) tb.textContent = label;
 }
 
 // ── Device count ──────────────────────────────────────────────────────────────

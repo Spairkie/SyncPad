@@ -355,14 +355,13 @@
     </div>
   </section>
 
-  <!-- ── Editor toolbar (Write / Preview / Split + word count) ── -->
+  <!-- ── Editor toolbar (Source / Live / Split) ── -->
   <div class="editor-toolbar">
     <div class="md-segmented" role="group" aria-label="View mode">
-      <button class="md-seg-btn active" data-mode="write"   aria-pressed="true">Write</button>
-      <button class="md-seg-btn"        data-mode="preview" aria-pressed="false">Preview</button>
-      <button class="md-seg-btn"        data-mode="split"   aria-pressed="false">Split</button>
+      <button class="md-seg-btn active" data-mode="write"   aria-pressed="true"  title="Raw markdown source">Source</button>
+      <button class="md-seg-btn"        data-mode="preview" aria-pressed="false" title="Editable rendered view">Live</button>
+      <button class="md-seg-btn"        data-mode="split"   aria-pressed="false" title="Source and Live side by side">Split</button>
     </div>
-    <span class="toolbar-word-count" id="toolbar-word-count" aria-live="polite"></span>
   </div>
 
   <!-- ── Editor area ────────────────────────────────────────────── -->
@@ -456,7 +455,7 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
         <span id="footer-current-time">Time</span>
       </button>
-      <button class="footer-tool-btn" id="btn-cursor-chat" title="Send a quick note near your cursor (Ctrl+Shift+/) — Preview/Split only" aria-label="Send a cursor chat message">
+      <button class="footer-tool-btn" id="btn-cursor-chat" title="Send a quick note near your cursor (Ctrl+Shift+/) — Live/Split only" aria-label="Send a cursor chat message">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
         Chat
       </button>
@@ -805,7 +804,7 @@
         </div>
         <button class="setting-btn" id="setting-exp-btn">Set expiry</button>
       </div>
-      <div class="setting-stack hidden" id="setting-exp-controls">
+      <div class="setting-stack hidden" id="setting-exp-controls" inert>
         <div class="setting-sub">Clear this room automatically after:</div>
         <div class="exp-presets" id="exp-presets">
           <button class="setting-chip is-active" data-exp-preset="10m" type="button">10 min</button>
@@ -1150,7 +1149,7 @@
         <div class="shortcuts-group-title">View</div>
         <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>S</kbd> <span>Save note</span></div>
         <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>F</kbd> <span>Find &amp; Replace</span></div>
-        <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>P</kbd> <span>Toggle Preview</span></div>
+        <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>P</kbd> <span>Toggle Live view</span></div>
         <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>S</kbd> <span>Split view</span></div>
         <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>M</kbd> <span>Toggle Monospace</span></div>
       </div>
@@ -1165,7 +1164,7 @@
         <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>K</kbd> <span>Share room</span></div>
         <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>T</kbd> <span>Insert timestamp</span></div>
         <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>C</kbd> <span>Copy note</span></div>
-        <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>/</kbd> <span>Send a cursor chat (Preview/Split)</span></div>
+        <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>/</kbd> <span>Send a cursor chat (Live/Split)</span></div>
       </div>
       <div class="shortcuts-group">
         <div class="shortcuts-group-title">Navigation</div>

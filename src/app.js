@@ -1438,9 +1438,6 @@ function _buildExpirationDuration() {
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) return { error: 'Custom auto-expire must be a number greater than 0.' };
   if (!['s', 'm', 'h', 'd'].includes(unit)) return { error: 'Unsupported unit. Use seconds, minutes, hours, or days.' };
-  // Enforce a 5-minute minimum to prevent accidental near-immediate expiry.
-  const seconds = unit === 's' ? n : unit === 'm' ? n * 60 : unit === 'h' ? n * 3600 : n * 86400;
-  if (seconds < 300) return { error: 'Minimum auto-expire duration is 5 minutes.' };
   return `${n}${unit}`;
 }
 
@@ -2410,6 +2407,7 @@ function _wireSettings() {
     const controls = document.getElementById('setting-exp-controls');
     if (!controls) return;
     const isHidden = controls.classList.toggle('hidden');
+    controls.toggleAttribute('inert', isHidden); // keep its clipped controls out of Tab order while collapsed
     if (!isHidden) _updateExpirationPreview(); // refresh preview when expanding
   });
   document.querySelectorAll('[data-exp-preset]').forEach((el) => el.addEventListener('click', () => _selectExpirationPreset(el.dataset.expPreset || '10m')));
@@ -2916,6 +2914,14 @@ function _wireEditorPreferenceToggles() {
     UI.showToast(_hidePresence ? 'Cursor & typing hidden from others' : 'Cursor & typing visible to others', 'info', 2000);
   });
 
+  // These are simple on/off flips, not navigations — clicking one shouldn't
+  // steal focus (and with it the caret position/selection) from the editor.
+  // preventDefault on mousedown stops the browser's default click-to-focus
+  // behavior for pointer users while leaving keyboard activation (Tab +
+  // Enter/Space, which never fires mousedown) untouched.
+  ['setting-monospace-btn', 'setting-strip-paste-btn', 'setting-smart-punct-btn',
+   'setting-focus-mode-btn', 'setting-typewriter-mode-btn', 'setting-hide-presence-btn']
+    .forEach((id) => document.getElementById(id)?.addEventListener('mousedown', (e) => e.preventDefault()));
 }
 
 function wireEvents() {
@@ -3450,7 +3456,7 @@ function _openCursorChatComposer() {
   // mode, so isMounted() alone isn't enough — the surface has to actually
   // be the visible one for its screen coordinates to mean anything.
   if (_markdownMode === 'write' || !LiveEditor.isMounted()) {
-    UI.showToast('Switch to Preview or Split mode to send a cursor chat.', 'info', 3000);
+    UI.showToast('Switch to Live or Split mode to send a cursor chat.', 'info', 3000);
     return;
   }
   const pos = LiveEditor.getCaretPos();

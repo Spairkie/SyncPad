@@ -531,7 +531,7 @@ svg { display: block; flex-shrink: 0; }
    EDITOR TOOLBAR (segmented control + word count)
 ══════════════════════════════════════════════════════════════ */
 .editor-toolbar {
-  display: flex; align-items: center; justify-content: space-between;
+  display: flex; align-items: center;
   padding: 6px 16px;
   background: var(--bg-surface); border-bottom: 1px solid var(--border);
   flex-shrink: 0; gap: 12px;
@@ -554,11 +554,6 @@ svg { display: block; flex-shrink: 0; }
   background: var(--bg-surface); color: var(--accent);
   box-shadow: var(--shadow-sm);
 }
-.toolbar-word-count {
-  font-size: 11px; color: var(--text-muted);
-  font-family: var(--font-mono); white-space: nowrap; flex-shrink: 0;
-}
-
 /* ══════════════════════════════════════════════════════════════
    EDITOR AREA
 ══════════════════════════════════════════════════════════════ */
@@ -609,6 +604,7 @@ svg { display: block; flex-shrink: 0; }
   padding: 1.25rem 1rem;
   background: var(--bg-surface); border: none; resize: none; overflow-y: auto;
   color: var(--text-primary); font-size: 15px; line-height: 1.7;
+  letter-spacing: 0.01em;
   font-family: var(--font-ui); outline: none;
   transition: font-family var(--transition), box-shadow var(--transition);
 }
@@ -668,13 +664,16 @@ svg { display: block; flex-shrink: 0; }
   width: 100%; height: 100%; min-height: 0;
   padding: 1.25rem 1rem;
   background: var(--bg-surface); color: var(--text-primary);
-  font-size: 15px; line-height: 1.7; font-family: var(--font-ui); overflow-y: auto;
+  font-size: 15px; line-height: 1.7; letter-spacing: 0.01em;
+  font-family: var(--font-ui); overflow-y: auto;
 }
 .note-preview.monospace { font-family: var(--font-mono); font-size: 14px; }
 .note-preview.hidden    { display: none; }
 @media (min-width: 768px) {
-  /* Generous padding; max() keeps readable text ≤ 800px wide on large panes */
-  .note-preview { padding: 2rem max(5%, calc((100% - 800px) / 2)); }
+  /* Generous padding; max() keeps readable text ≤ 800px wide on large panes.
+     font-size matches #note-editor's and .note-live's own 768px bump so
+     Write/Live/Preview stay visually identical at this breakpoint. */
+  .note-preview { padding: 2rem max(5%, calc((100% - 800px) / 2)); font-size: 16px; }
 }
 
 /* Typora-style editable live-preview surface (CodeMirror 6 mounts inside).
@@ -684,7 +683,7 @@ svg { display: block; flex-shrink: 0; }
   width: 100%; height: 100%; min-height: 0;
   padding: 1.25rem 1rem;
   background: var(--bg-surface); color: var(--text-primary);
-  font-size: 15px; line-height: 1.7; font-family: var(--font-ui);
+  font-size: 15px; line-height: 1.7; letter-spacing: 0.01em; font-family: var(--font-ui);
   overflow: hidden; /* CM6's own .cm-scroller scrolls */
 }
 .note-live.hidden { display: none; }
@@ -947,6 +946,18 @@ body.lock-mode .md-toolbar { opacity: 0.4; pointer-events: none; }
 .expiration-bar .exp-cancel { margin-left: auto; font-size: 11px; color: var(--text-secondary); transition: color var(--transition); }
 .expiration-bar .exp-cancel:hover { color: var(--text-primary); }
 .setting-stack  { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+/* Auto-expire's accordion grows the panel's scroll height in place — an
+   animated reveal instead of the instant display:none/flex flip (shared by
+   the rest of the .hidden utility) softens that jump for the rows below it. */
+#setting-exp-controls {
+  overflow: hidden;
+  max-height: 500px; opacity: 1; margin-top: 10px;
+  transition: max-height 0.22s ease, opacity 0.18s ease, margin-top 0.22s ease;
+}
+#setting-exp-controls.hidden {
+  display: flex !important; /* override .hidden's display:none so height can animate */
+  max-height: 0; opacity: 0; margin-top: 0; pointer-events: none;
+}
 .exp-presets    { display: flex; flex-wrap: wrap; gap: 8px; }
 .setting-chip   { padding: 6px 10px; border: 1px solid var(--border); border-radius: 999px; font-size: 12px; color: var(--text-secondary); }
 .setting-chip.is-active { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
@@ -979,7 +990,7 @@ body.lock-mode .md-toolbar { opacity: 0.4; pointer-events: none; }
    SIDE PANELS
 ══════════════════════════════════════════════════════════════ */
 .panel-backdrop {
-  position: fixed; inset: 0; z-index: 40;
+  position: fixed; inset: 0; z-index: 135;
   background: rgba(0,0,0,0.45);
   opacity: 0; pointer-events: none; transition: opacity 0.2s ease;
 }
@@ -988,7 +999,10 @@ body.lock-mode .md-toolbar { opacity: 0.4; pointer-events: none; }
   position: fixed; top: 0; right: 0; bottom: 0;
   width: var(--panel-width); max-width: 100vw;
   background: var(--bg-surface); border-left: 1px solid var(--border);
-  z-index: 50; display: flex; flex-direction: column;
+  /* Must outrank .app-header (120) and #more-dropdown (130) — a panel is a
+     full-height overlay and needs to fully cover the header (including its
+     own panel-header/close button) rather than sliding in underneath it. */
+  z-index: 140; display: flex; flex-direction: column;
   transform: translateX(100%);
   transition: transform 0.25s cubic-bezier(0.4,0,0.2,1);
   box-shadow: var(--shadow-lg);
@@ -2553,11 +2567,6 @@ kbd {
   overflow: hidden;
   /* position: relative anchors ::after (read-only/lock bar) to this card */
   position: relative;
-}
-#note-editor {
-  line-height: 1.7;
-  letter-spacing: 0.01em;
-  color: var(--text-primary);
 }
 #note-editor::placeholder {
   color: color-mix(in srgb, var(--text-secondary) 70%, transparent);
