@@ -442,3 +442,34 @@ test.describe('Typewriter mode (opt-in)', () => {
     await expect(page.locator('#note-editor')).toHaveClass(/typewriter-mode/);
   });
 });
+
+test.describe('Hide my cursor & typing (opt-in)', () => {
+  test('is off by default', async ({ page }) => {
+    await createRoom(page);
+    await openPanel(page, 'presence');
+    await expect(page.locator('#setting-hide-presence-btn')).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  test('toggling flips the button state', async ({ page }) => {
+    await createRoom(page);
+    await openPanel(page, 'presence');
+    const btn = page.locator('#setting-hide-presence-btn');
+
+    await btn.click();
+    await expect(btn).toHaveAttribute('aria-pressed', 'true');
+    await expect(btn).toHaveText('On');
+
+    await btn.click();
+    await expect(btn).toHaveAttribute('aria-pressed', 'false');
+    await expect(btn).toHaveText('Off');
+  });
+
+  test('the preference persists across a page reload', async ({ page }) => {
+    await createRoom(page);
+    await openPanel(page, 'presence');
+    await page.locator('#setting-hide-presence-btn').click();
+    await page.reload();
+    await openPanel(page, 'presence');
+    await expect(page.locator('#setting-hide-presence-btn')).toHaveAttribute('aria-pressed', 'true');
+  });
+});

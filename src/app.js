@@ -21,7 +21,7 @@ import {
 
 import {
   initPresence, destroyPresence,
-  setTyping, updatePresenceDeviceName, setCursorLine,
+  setTyping, updatePresenceDeviceName, setCursorLine, setPresenceHidden,
 } from './presence.js';
 
 import {
@@ -104,6 +104,8 @@ const _FOCUS_MODE_KEY = 'syncpad_focus_mode';
 let _focusMode = localStorage.getItem(_FOCUS_MODE_KEY) === 'true';
 const _TYPEWRITER_MODE_KEY = 'syncpad_typewriter_mode';
 let _typewriterMode = localStorage.getItem(_TYPEWRITER_MODE_KEY) === 'true';
+const _HIDE_PRESENCE_KEY = 'syncpad_hide_presence';
+let _hidePresence = localStorage.getItem(_HIDE_PRESENCE_KEY) === 'true';
 
 // ── Files state ───────────────────────────────────────────────────────────────
 let _filesSelectMode = false;
@@ -828,6 +830,11 @@ async function startApp() {
         .map((d) => ({ id: d.device_id, name: d.device_name, pos: d.cursor_pos })),
     );
   }, { readOnly: _isReadOnly });
+  // Re-applied on every room entry — destroyPresence() deliberately leaves
+  // this preference alone since it's per-device, not room state (see
+  // presence.js), so the fresh channel from initPresence() above always
+  // starts back at the default until this runs.
+  setPresenceHidden(_hidePresence);
 
   _unsubRoom = subscribeToRoom(_roomId, async ({ event, room }) => {
     if (event === 'DELETE') {
@@ -2742,6 +2749,23 @@ function _wireEditorPreferenceToggles() {
     UI.setTypewriterMode(_typewriterMode);
     _updateTypewriterModeUI();
     UI.showToast(_typewriterMode ? 'Typewriter mode: On' : 'Typewriter mode: Off', 'info', 2000);
+  });
+
+  // ── Hide-my-cursor-&-typing setting button ──────────────────────────────────
+  const _updateHidePresenceUI = () => {
+    const btn = document.getElementById('setting-hide-presence-btn');
+    if (!btn) return;
+    btn.textContent = _hidePresence ? 'On' : 'Off';
+    btn.setAttribute('aria-pressed', String(_hidePresence));
+  };
+  _updateHidePresenceUI();
+
+  document.getElementById('setting-hide-presence-btn')?.addEventListener('click', () => {
+    _hidePresence = !_hidePresence;
+    try { localStorage.setItem(_HIDE_PRESENCE_KEY, String(_hidePresence)); } catch {}
+    setPresenceHidden(_hidePresence);
+    _updateHidePresenceUI();
+    UI.showToast(_hidePresence ? 'Cursor & typing hidden from others' : 'Cursor & typing visible to others', 'info', 2000);
   });
 
 }
