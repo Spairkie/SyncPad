@@ -8,6 +8,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Phase 18 — Full-repo review: test infra, editor DOM boundary, admin error handling
+
+Branch: `claude/codebase-review-testing-fjicqa`
+
+Every file in `src/`, `styles/`, `index.html`, and the service worker read in full, cross-checked against 3 independent agent passes over `app.js`/`ui.js`/`admin.js`, a live 291-test Playwright run, and a visual pass across all 7 themes and desktop/mobile layouts.
+
+#### Fixed
+- **The entire Playwright suite failed to start**: `package.json` had no `"type": "module"` while every test file uses ES import/export; under Playwright's parallel file loading, Node's per-file CJS-then-ESM reparse fallback could misattribute a CommonJS parse error to the wrong spec file. The actual offender was `tests/spa-server.js`'s three `require()` calls, the only CommonJS left in the repo. Added `"type": "module"`, converted `spa-server.js` to ES module imports.
+- **View-once "already viewed" overlay could be visually hidden by an open side panel**: `.view-once-consumed-panel`'s `z-index: 55` carried a stale comment claiming it was "above side-panels (50)" — side panels were later bumped to `140`/`135` to fix a different overlap bug, and this one was never updated to match. Bumped to `150`.
+- **Double-escaped filename in the single-file delete confirm**: `app.js` passed `escapeHtml(file.filename)` into `UI.showConfirm()`, which already escapes via `textContent` — a filename with `&` showed literal `&amp;` in the dialog.
+- **Comment delete had no handler-level permission check**: unlike comment submit, `_deleteCommentClick()` relied entirely on the delete button being UI-gated by `canEdit()`, not a check inside the handler itself — the same shape as the Phase 14 paste-permission bug, closed before it could become reachable.
+- **Admin "delete all expired rooms now" skipped the report-cleanup step** that `_deleteRoomAndStorage()` already does for every other delete path (marking related `'new'` reports `'reviewed'` so they don't keep pointing at a deleted room) — added the same step, batched to match the rest of the function's batching.
+- **Typing indicator could bleed into the next room**: `teardownRealtimeSession()` reset nearly every other piece of room-scoped UI state but never cleared a still-showing "X is typing…" banner or its auto-hide timer.
+- **`BODY_MAX` (50,000 chars) was unenforced** on text-file import, template append, template insert, and native paste — only custom-template saves respected it. Enforced centrally in the editor's single `input` listener (the one choke point every edit path already dispatches through) rather than at each write site.
+- **Admin mutation errors leaked raw Postgres/PostgREST messages**: only the tab-load paths translated a PGRST301/permission failure into "You do not have admin access." (per `docs/security.md`); every delete/lock/quarantine/cleanup action showed the raw error instead. All ~15 mutation error paths now share the same translation.
+
+#### Changed
+- **`app.js` no longer writes `editor.value`/`selectionStart`/`selectionEnd` directly** (23 call sites: auto-pair, smart punctuation, indent/list-continue, search replace, paste sanitization, toolbar formatting). Added `UI.replaceEditorRange()` and `UI.setEditorSelection()` to `ui.js` as the general-purpose siblings of the existing `UI.insertAtCursor()`/`UI.setEditorValue()`, so `ui.js` is now actually the single DOM touchpoint the module boundary in `CLAUDE.md`/`docs/architecture.md` describes, not just for whole-document replacement.
+- Consolidated the passcode/encryption error-field show/clear helpers in `ui.js` into one generic implementation (4 public functions unchanged, same call sites).
+- Unified the Settings-panel and keyboard-shortcut monospace toggles into one `_toggleMonospace()` — the keyboard-shortcut path previously left the Settings panel's button showing stale state until the panel was closed and reopened.
+- Wired up `UI.setCommentLoading()` (already-built plumbing, never called) to the Comments panel's open path, matching Version History's existing loading-state pattern.
+- Removed an unreachable `{ filter }` param from admin's `_renderRoomsTab()` / `switchTab()` — no caller ever populated it; the real filter path is the stat-card click handler setting `_roomsFilter` directly.
+- Renamed the export modal's `#export-copy-md` button id to `#export-copy-html` — it copies rendered HTML, not Markdown, and has since the feature was last changed.
+- Merged two CSS rules each fully overridden by a later "polish" declaration (`.share-room-title`, `.report-room-modal`), removed the entirely-unused `.share-card-title`.
+- Added `src/comments.js` to the service worker's precache list (only recently-added module missing from it); bumped cache to `syncpad-v37`.
+- Corrected doc drift: `CLAUDE.md`/`README.md`'s "4 browser projects" claim now notes only `chromium` runs by default (`playwright.config.js`), README's Export description now says "HTML" not "Markdown", `spa-server.js`'s usage comment now matches its actual `PORT` env var (not a positional arg it never read).
+
 ### Phase 17 — UI bug-fix pass, CSS modularization, Markdown feature audit
 
 Branch: `claude/repo-review-refactor-kba1k5`

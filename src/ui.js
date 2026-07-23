@@ -289,6 +289,7 @@ export function showTypingIndicator(deviceName) {
 }
 
 export function hideTypingIndicator() {
+  clearTimeout(_typingTimer);
   document.getElementById('typing-indicator')?.classList.add('hidden');
   document.getElementById('note-editor')?.classList.remove('remote-typing');
 }
@@ -1012,34 +1013,27 @@ function _wireNativeShare(btnId, url, label) {
 
 // ── Auth error helpers ────────────────────────────────────────────────────────
 
-export function showPasscodeError(msg) {
-  const el    = document.getElementById('passcode-error');
-  const input = document.getElementById('passcode-input');
+// Shared by every auth-screen error field (passcode, encryption): show a
+// message and mark the input invalid, self-clearing on the field's next
+// input. Uses .oninput (not addEventListener) so repeated calls never
+// accumulate listeners — the handler clears itself after firing once.
+function _showFieldError(inputId, errorId, msg) {
+  const el    = document.getElementById(errorId);
+  const input = document.getElementById(inputId);
   if (el) el.textContent = msg;
-  // Use .oninput (not addEventListener) so repeated calls never accumulate listeners.
-  // The handler clears itself after firing once.
-  if (input) { input.classList.add('error'); input.oninput = () => { clearPasscodeError(); input.oninput = null; }; }
+  if (input) { input.classList.add('error'); input.oninput = () => { _clearFieldError(inputId, errorId); input.oninput = null; }; }
 }
-export function clearPasscodeError() {
-  const el    = document.getElementById('passcode-error');
-  const input = document.getElementById('passcode-input');
+function _clearFieldError(inputId, errorId) {
+  const el    = document.getElementById(errorId);
+  const input = document.getElementById(inputId);
   if (el) el.textContent = '';
   if (input) { input.classList.remove('error'); input.oninput = null; }
 }
 
-export function showEncryptionError(msg) {
-  const el    = document.getElementById('encryption-error');
-  const input = document.getElementById('encryption-input');
-  if (el) el.textContent = msg;
-  // Use .oninput so repeated calls never accumulate listeners.
-  if (input) { input.classList.add('error'); input.oninput = () => { clearEncryptionError(); input.oninput = null; }; }
-}
-export function clearEncryptionError() {
-  const el = document.getElementById('encryption-error');
-  if (el) el.textContent = '';
-  const input = document.getElementById('encryption-input');
-  if (input) { input.classList.remove('error'); input.oninput = null; }
-}
+export function showPasscodeError(msg)  { _showFieldError('passcode-input', 'passcode-error', msg); }
+export function clearPasscodeError()    { _clearFieldError('passcode-input', 'passcode-error'); }
+export function showEncryptionError(msg) { _showFieldError('encryption-input', 'encryption-error', msg); }
+export function clearEncryptionError()   { _clearFieldError('encryption-input', 'encryption-error'); }
 
 // ── Editor helpers ────────────────────────────────────────────────────────────
 
@@ -1075,6 +1069,63 @@ export function insertAtCursor(text) {
   editor.value = editor.value.slice(0, start) + text + editor.value.slice(end);
   editor.selectionStart = editor.selectionEnd = start + text.length;
   editor.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+/**
+ * Replace editor.value[start:end] with `insert`, set the resulting
+ * selection, and dispatch 'input' — the general-purpose sibling of
+ * insertAtCursor() for callers that replace an arbitrary range and/or need
+ * an explicit resulting selection rather than a collapsed caret right after
+ * the inserted text.
+ *
+ * This is the one primitive every cursor-precise editing operation in app.js
+ * (auto-pair, smart punctuation, indent/dedent, list-continue, search
+ * replace, paste sanitization, toolbar formatting) goes through. app.js
+ * decides WHAT edit to make and WHERE; this is the only place that actually
+ * writes editor.value/selectionStart/selectionEnd for it, keeping ui.js the
+ * single DOM touchpoint the module boundary calls for.
+ *
+ * @param {number} start
+ * @param {number} end
+ * @param {string} insert
+ * @param {number} [selStart] - defaults to start + insert.length (caret right after the inserted text)
+ * @param {number} [selEnd]   - defaults to selStart
+ */
+export function replaceEditorRange(start, end, insert, selStart, selEnd) {
+  const editor = document.getElementById('note-editor');
+  if (!editor) return;
+  if (editor.readOnly) return;
+  const val = editor.value;
+  editor.value = val.slice(0, start) + insert + val.slice(end);
+  const s = selStart ?? (start + insert.length);
+  editor.selectionStart = s;
+  editor.selectionEnd   = selEnd ?? s;
+  editor.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+/** Move the editor's selection without touching its value or firing 'input'. */
+export function setEditorSelection(start, end) {
+  const editor = document.getElementById('note-editor');
+  if (!editor) return;
+  editor.selectionStart = start;
+  editor.selectionEnd   = end ?? start;
+}
+
+/**
+ * Truncate the editor's value to `max` characters if it currently exceeds
+ * it, keeping the selection in bounds. Does not fire 'input' — callers use
+ * this from inside their own input pipeline, where dispatching again would
+ * recurse. Returns true if truncation occurred.
+ */
+export function clampEditorValue(max) {
+  const editor = document.getElementById('note-editor');
+  if (!editor || editor.value.length <= max) return false;
+  const selStart = editor.selectionStart;
+  const selEnd   = editor.selectionEnd;
+  editor.value = editor.value.slice(0, max);
+  editor.selectionStart = Math.min(selStart, max);
+  editor.selectionEnd   = Math.min(selEnd, max);
+  return true;
 }
 
 export function setMonospace(on) {

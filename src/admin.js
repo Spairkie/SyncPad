@@ -237,7 +237,10 @@ async function _renderDashboard(sb, session) {
   // ── Tab switching ──────────────────────────────────────────────
   const contentEl = document.getElementById('admin-content');
 
-  async function switchTab(tab, opts = {}) {
+  // Tab-specific filters (e.g. _roomsFilter) are set directly by the caller
+  // — see the stat-card click handler above — before switchTab() runs, not
+  // threaded through here.
+  async function switchTab(tab) {
     _activeTab = tab;
     document.querySelectorAll('.admin-tab').forEach(btn => {
       const isActive = btn.dataset.tab === tab;
@@ -245,8 +248,8 @@ async function _renderDashboard(sb, session) {
       btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
     });
     contentEl.innerHTML = _skeletonTabHtml();
-    if (tab === 'rooms')   await _renderRoomsTab(contentEl, opts);
-    if (tab === 'reports') await _renderReportsTab(contentEl, opts);
+    if (tab === 'rooms')   await _renderRoomsTab(contentEl);
+    if (tab === 'reports') await _renderReportsTab(contentEl);
     if (tab === 'files')   await _renderFilesTab(contentEl);
     if (tab === 'audit')   await _renderAuditTab(contentEl);
     if (tab === 'cleanup') await _renderCleanupTab(contentEl);
@@ -382,8 +385,7 @@ async function _probeTable(sb, table) {
 
 // ── Rooms tab ─────────────────────────────────────────────────────────────────
 
-async function _renderRoomsTab(contentEl, { filter } = {}) {
-  if (filter) _roomsFilter = filter;
+async function _renderRoomsTab(contentEl) {
   _roomsOffset = 0;
   _rooms = [];
   _roomsSelected.clear();
@@ -766,7 +768,7 @@ function _wireRows(tbody, updateBulkBar, selectCols, renderRows) {
       const { error } = await _sb.from('syncpad_rooms')
         .update({ content: '', cleared_reason: 'manual' }).eq('room_id', roomId);
       if (error) {
-        await showAlert(`Error clearing room: ${error.message}`);
+        await showAlert(`Error clearing room: ${_friendlyErrorMessage(error)}`);
         btn.disabled = false; return;
       }
       const room = _rooms.find(r => r.room_id === roomId);
@@ -792,7 +794,7 @@ function _wireRows(tbody, updateBulkBar, selectCols, renderRows) {
       btn.disabled = true;
       const { error } = await _deleteRoomAndStorage(roomId);
       if (error) {
-        await showAlert(`Error deleting room: ${error.message}`);
+        await showAlert(`Error deleting room: ${_friendlyErrorMessage(error)}`);
         btn.disabled = false; return;
       }
       const idx = _rooms.findIndex(r => r.room_id === roomId);
@@ -953,7 +955,7 @@ async function _openRoomDetail(roomId) {
     const ok = await showConfirm(`Clear content from room "${room.room_id}"?`, { confirmLabel: 'Clear', danger: true });
     if (!ok) return;
     const { error } = await _sb.from('syncpad_rooms').update({ content: '', cleared_reason: 'manual' }).eq('room_id', room.room_id);
-    if (error) { await showAlert(`Error: ${error.message}`); return; }
+    if (error) { await showAlert(`Error: ${_friendlyErrorMessage(error)}`); return; }
     await _logAdminAction('clear_room', { target_room_id: room.room_id });
     _showToast('Room cleared.', 'success');
     _closeDrawer();
@@ -962,13 +964,13 @@ async function _openRoomDetail(roomId) {
 
   document.getElementById('drawer-lock-btn')?.addEventListener('click', async () => {
     const { error } = await _sb.from('syncpad_rooms').update({ editing_locked: true }).eq('room_id', room.room_id);
-    if (error) { await showAlert(`Error: ${error.message}`); return; }
+    if (error) { await showAlert(`Error: ${_friendlyErrorMessage(error)}`); return; }
     await _logAdminAction('lock_editing', { target_room_id: room.room_id });
     _showToast('Editing locked.', 'success'); _closeDrawer();
   });
   document.getElementById('drawer-unlock-btn')?.addEventListener('click', async () => {
     const { error } = await _sb.from('syncpad_rooms').update({ editing_locked: false }).eq('room_id', room.room_id);
-    if (error) { await showAlert(`Error: ${error.message}`); return; }
+    if (error) { await showAlert(`Error: ${_friendlyErrorMessage(error)}`); return; }
     await _logAdminAction('unlock_editing', { target_room_id: room.room_id });
     _showToast('Editing unlocked.', 'success'); _closeDrawer();
   });
@@ -991,7 +993,7 @@ async function _openRoomDetail(roomId) {
         quarantined_by: _session?.user?.email || 'admin',
         quarantine_reason: reason,
       }).eq('room_id', room.room_id);
-      if (e2) { await showAlert(`Error: ${e2.message}`); return; }
+      if (e2) { await showAlert(`Error: ${_friendlyErrorMessage(e2)}`); return; }
     }
     await _logAdminAction('quarantine_room', { target_room_id: room.room_id, metadata: { reason } });
     _showToast('Room quarantined.', 'success'); _closeDrawer();
@@ -1003,7 +1005,7 @@ async function _openRoomDetail(roomId) {
       const { error: e2 } = await _sb.from('syncpad_rooms').update({
         quarantined_at: null, quarantined_by: null, quarantine_reason: null,
       }).eq('room_id', room.room_id);
-      if (e2) { await showAlert(`Error: ${e2.message}`); return; }
+      if (e2) { await showAlert(`Error: ${_friendlyErrorMessage(e2)}`); return; }
     }
     await _logAdminAction('unquarantine_room', { target_room_id: room.room_id });
     _showToast('Room unquarantined.', 'success'); _closeDrawer();
@@ -1017,7 +1019,7 @@ async function _openRoomDetail(roomId) {
     );
     if (!ok) return;
     const { error } = await _deleteRoomAndStorage(room.room_id);
-    if (error) { await showAlert(`Error: ${error.message}`); return; }
+    if (error) { await showAlert(`Error: ${_friendlyErrorMessage(error)}`); return; }
     const idx = _rooms.findIndex(r => r.room_id === room.room_id);
     if (idx !== -1) _rooms.splice(idx, 1);
     await _logAdminAction('delete_room', { target_room_id: room.room_id });
@@ -1205,7 +1207,7 @@ function _wireReportsTab() {
         if (action === 'review') {
           btn.disabled = true;
           const { error } = await _sb.from('syncpad_room_reports').update({ status: 'reviewed' }).eq('id', reportId);
-          if (error) { await showAlert(`Error: ${error.message}`); btn.disabled = false; return; }
+          if (error) { await showAlert(`Error: ${_friendlyErrorMessage(error)}`); btn.disabled = false; return; }
           const rep = _reports.find(r => String(r.id) === reportId);
           if (rep) rep.status = 'reviewed';
           await _logAdminAction('review_report', { target_report_id: reportId });
@@ -1215,7 +1217,7 @@ function _wireReportsTab() {
         if (action === 'dismiss') {
           btn.disabled = true;
           const { error } = await _sb.from('syncpad_room_reports').update({ status: 'dismissed' }).eq('id', reportId);
-          if (error) { await showAlert(`Error: ${error.message}`); btn.disabled = false; return; }
+          if (error) { await showAlert(`Error: ${_friendlyErrorMessage(error)}`); btn.disabled = false; return; }
           const rep = _reports.find(r => String(r.id) === reportId);
           if (rep) rep.status = 'dismissed';
           await _logAdminAction('dismiss_report', { target_report_id: reportId });
@@ -1234,7 +1236,7 @@ function _wireReportsTab() {
           if (!ok) return;
           btn.disabled = true;
           const { error } = await _deleteRoomAndStorage(roomId);
-          if (error) { await showAlert(`Error: ${error.message}`); btn.disabled = false; return; }
+          if (error) { await showAlert(`Error: ${_friendlyErrorMessage(error)}`); btn.disabled = false; return; }
           _reports.forEach(r => { if (r.room_id === roomId) r.status = 'reviewed'; });
           await _logAdminAction('delete_room', { target_room_id: roomId });
           renderRows();
@@ -1415,11 +1417,11 @@ function _wireFilesTab() {
         // Delete from storage first, then DB
         const { error: se } = await _sb.storage.from(FILES_BUCKET).remove([filePath]);
         if (se) {
-          await showAlert(`Storage delete error: ${se.message}\nThe file may already be missing.`);
+          await showAlert(`Storage delete error: ${_friendlyErrorMessage(se)}\nThe file may already be missing.`);
           // Continue to remove DB row regardless
         }
         const { error: de } = await _sb.from('syncpad_files').delete().eq('id', fileId);
-        if (de) { await showAlert(`DB row delete error: ${de.message}`); btn.disabled = false; return; }
+        if (de) { await showAlert(`DB row delete error: ${_friendlyErrorMessage(de)}`); btn.disabled = false; return; }
 
         const idx = _files.findIndex(f => String(f.id) === fileId);
         if (idx !== -1) { _files.splice(idx, 1); allFiles = [..._files]; }
@@ -1615,7 +1617,7 @@ async function _renderCleanupTab(contentEl) {
     btn.disabled = false; btn.textContent = 'Run cleanup';
     if (error) {
       resultEl.classList.remove('hidden'); resultEl.classList.add('admin-cleanup-result--error');
-      resultEl.textContent = `Error: ${error.message}`;
+      resultEl.textContent = `Error: ${_friendlyErrorMessage(error)}`;
       return;
     }
     const row = Array.isArray(data) ? data[0] : data;
@@ -1638,7 +1640,7 @@ async function _renderCleanupTab(contentEl) {
     btn.disabled = false; btn.textContent = 'Delete all expired rooms now';
     if (error) {
       resultEl.classList.remove('hidden'); resultEl.classList.add('admin-cleanup-result--error');
-      resultEl.textContent = `Error: ${error.message}`; return;
+      resultEl.textContent = `Error: ${_friendlyErrorMessage(error)}`; return;
     }
     const deleted = count ?? '?';
     resultEl.classList.remove('hidden'); resultEl.classList.add('admin-cleanup-result--success');
@@ -1841,6 +1843,20 @@ async function _deleteExpiredRoomsAndStorage() {
     if (error) return { error, count: null };
     deleted += count || 0;
   }
+
+  // Mirrors _deleteRoomAndStorage()'s report cleanup, batched the same way as
+  // the rest of this function. syncpad_room_reports.room_id has no FK to
+  // syncpad_rooms, so report rows survive the room delete — best-effort, the
+  // room deletes already succeeded and must not be reported as failed because
+  // of this secondary write.
+  for (const batch of _chunks(roomIds, ADMIN_QUERY_BATCH_SIZE)) {
+    try {
+      await _sb.from('syncpad_room_reports').update({ status: 'reviewed' }).in('room_id', batch).eq('status', 'new');
+    } catch (e) {
+      console.error('[admin] failed to mark reports reviewed after expired-room cleanup', e);
+    }
+  }
+
   return { error: null, count: deleted };
 }
 
@@ -1872,13 +1888,25 @@ function _showToast(message, type = '') {
   setTimeout(() => { toast.classList.remove('visible'); setTimeout(() => toast.remove(), 300); }, 2800);
 }
 
+// Shared by every admin query/mutation error path — a session that expires
+// mid-action should read exactly the same as one that expired before the
+// page loaded, per docs/security.md ("You do not have admin access.",
+// not the raw Postgres/PostgREST error).
+function _isRlsError(error) {
+  return error?.code === 'PGRST301' || error?.message?.includes('permission') || error?.message?.includes('policy');
+}
+
+function _friendlyErrorMessage(error) {
+  return _isRlsError(error) ? 'You do not have admin access.' : (error?.message || 'Unknown error');
+}
+
 function _accessDeniedHtml(error) {
-  const isRls = error?.code === 'PGRST301' || error?.message?.includes('permission') || error?.message?.includes('policy');
+  const isRls = _isRlsError(error);
   return `
     <div class="admin-access-denied">
       <div class="admin-access-denied-icon">🚫</div>
       <div class="admin-access-denied-title">${isRls ? 'You do not have admin access.' : 'Failed to load data.'}</div>
-      <div class="admin-access-denied-detail">${escapeHtml(error?.message ?? 'Unknown error')}</div>
+      ${isRls ? '' : `<div class="admin-access-denied-detail">${escapeHtml(error?.message ?? 'Unknown error')}</div>`}
       <div style="margin-top:1rem">
         <button onclick="window.location.reload()" class="admin-action-btn admin-action-primary">Retry</button>
       </div>

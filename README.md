@@ -70,7 +70,7 @@
 - **Custom templates** — save, rename, delete, export/import as JSON (localStorage-backed, up to 50 000 chars each)
 - **Find & Replace** — case-insensitive search with Prev / Next navigation, Replace, and Replace All
 - **Keyboard shortcuts** — see [Keyboard Shortcuts](#keyboard-shortcuts) below
-- **Export** — download as `.txt`, `.md`, rendered `.html`, or PDF (browser print); copy as plain text or Markdown
+- **Export** — download as `.txt`, `.md`, rendered `.html`, or PDF (browser print); copy as plain text or rendered HTML
 - **Monospace toggle** — switch editor font with `Ctrl/⌘ + Shift + M`
 - **Timestamp insert** — add current date/time inline
 
@@ -284,7 +284,7 @@ See [`docs/architecture.md`](docs/architecture.md) for the full module-by-module
 | Markdown | Custom safe renderer (built from scratch) |
 | File preview | Fetch API + vanilla JS (no library) |
 | PWA | Service Worker + Web App Manifest |
-| Tests | Playwright (chromium, firefox, webkit, mobile) |
+| Tests | Playwright — chromium runs by default; firefox/webkit/mobile-chrome are configured but commented out so `npm test` doesn't require a full browser download |
 
 ---
 

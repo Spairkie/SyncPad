@@ -62,7 +62,9 @@
   position: fixed;
   inset: 68px 0 0 0;
   background: rgba(0,0,0,0.45);
-  z-index: 55; /* above side-panels (50) so the overlay can't be bypassed */
+  /* Must outrank .side-panel/.panel-backdrop (140/135, styles/panels.css) so an
+     already-open panel can never visually cover this blocking notice. */
+  z-index: 150;
   display: flex;
   align-items: center;
   justify-content: center;

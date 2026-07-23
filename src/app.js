@@ -57,7 +57,7 @@ import { renderMarkdown, renderMarkdownWithToc, renderTocHtml, toggleChecklistIt
 import {
   TEMPLATES, getTemplate, getCustomTemplates,
   saveCustomTemplate, renameCustomTemplate, deleteCustomTemplate,
-  exportCustomTemplates, importCustomTemplates,
+  exportCustomTemplates, importCustomTemplates, BODY_MAX,
 } from './templates.js';
 import { loadSavedTheme, applyTheme, THEMES, getSavedTheme }  from './theme.js';
 import { initShortcuts, destroyShortcuts }     from './shortcuts.js';
@@ -1352,7 +1352,7 @@ async function refreshFiles() {
     async (file) => {
       if (!canDeleteFiles()) { UI.showToast(editBlockedReason() || 'File deletion is disabled.', 'warning'); return; }
       const ok = await UI.showConfirm(
-        `Delete "${escapeHtml(file.filename)}"?`,
+        `Delete "${file.filename}"?`,
         { confirmLabel: 'Delete', danger: true },
       );
       if (!ok) return;
@@ -1546,12 +1546,7 @@ function _wireShortcuts() {
     onToggleSplit: () => {
       _applyMarkdownMode(_markdownMode === 'split' ? 'write' : 'split');
     },
-    onToggleMonospace: () => {
-      _monospace = !_monospace;
-      UI.setMonospace(_monospace);
-      try { localStorage.setItem('syncpad_monospace', _monospace ? '1' : '0'); } catch {}
-      UI.showToast(_monospace ? 'Monospace on.' : 'Monospace off.');
-    },
+    onToggleMonospace: () => _toggleMonospace(),
     onOpenSearch: () => {
       UI.openPanel('search-panel');
       document.getElementById('search-input')?.focus();
@@ -1583,11 +1578,27 @@ function _wireShortcuts() {
 
 }
 
+// Custom templates are already capped at BODY_MAX (templates.js), but nothing
+// stopped the editor itself from exceeding it — via typing past it, a native
+// paste, a large text-file import, or a template insert/append onto already-
+// substantial content. Enforced here, at the single 'input' listener every
+// one of those paths dispatches through (typing, paste, and every
+// programmatic edit in this file all end with `editor.dispatchEvent(new
+// Event('input'))`), rather than at each write site — one choke point that
+// can't be missed by a future write path, instead of a growing list of call
+// sites that each have to remember to opt in.
+function _enforceBodyMax() {
+  if (!UI.clampEditorValue(BODY_MAX)) return false;
+  UI.showToast(`Content trimmed to the ${BODY_MAX.toLocaleString()}-character limit.`, 'warning', 5000);
+  return true;
+}
+
 function _wireEditorCore() {
   const editor = document.getElementById('note-editor');
 
   editor?.addEventListener('input', () => {
     if (!canEdit()) return;
+    _enforceBodyMax();
     onLocalInput(); // returns a Promise — intentional fire-and-forget
     setTyping(true);
     UI.updateWordCount(UI.getEditorValue());
@@ -1632,15 +1643,11 @@ function _wireEditorCore() {
         const newBlock = e.shiftKey
           ? block.split('\n').map((l) => l.startsWith('  ') ? l.slice(2) : l.startsWith(' ') ? l.slice(1) : l).join('\n')
           : block.split('\n').map((l) => '  ' + l).join('\n');
-        editor.value = val.slice(0, lStart) + newBlock + val.slice(lEnd);
-        editor.selectionStart = lStart;
-        editor.selectionEnd   = lStart + newBlock.length;
+        UI.replaceEditorRange(lStart, lEnd, newBlock, lStart, lStart + newBlock.length);
       } else {
         // In a list: insert 2 spaces at caret
-        editor.value = val.slice(0, start) + '  ' + val.slice(end);
-        editor.selectionStart = editor.selectionEnd = start + 2;
+        UI.replaceEditorRange(start, end, '  ');
       }
-      editor.dispatchEvent(new Event('input', { bubbles: true }));
       return;
     }
 
@@ -1661,18 +1668,14 @@ function _wireEditorCore() {
       e.preventDefault();
       if (!content.trim()) {
         // Empty item — break out of the list
-        editor.value = val.slice(0, lineStart) + '\n' + val.slice(pos);
-        editor.selectionStart = editor.selectionEnd = lineStart + 1;
+        UI.replaceEditorRange(lineStart, pos, '\n', lineStart + 1);
       } else {
         // Continue the list with the next item
         const nextPrefix = olMatch
           ? `${olMatch[1]}${parseInt(olMatch[2], 10) + 1}. `
           : `${match[1]}${match[2]} `;
-        const insertion = '\n' + nextPrefix;
-        editor.value = val.slice(0, pos) + insertion + val.slice(editor.selectionEnd);
-        editor.selectionStart = editor.selectionEnd = pos + insertion.length;
+        UI.replaceEditorRange(pos, editor.selectionEnd, '\n' + nextPrefix);
       }
-      editor.dispatchEvent(new Event('input', { bubbles: true }));
       return;
     }
 
@@ -1689,15 +1692,13 @@ function _wireEditorCore() {
         e.preventDefault();
         // Close/skip over a quote (either style) already sitting at the cursor.
         if (editor.value[start] === '”' || editor.value[start] === '"') {
-          editor.selectionStart = editor.selectionEnd = start + 1;
+          UI.setEditorSelection(start + 1);
           return;
         }
         const before = editor.value[start - 1];
         const opening = before === undefined || OPENING_CONTEXT.test(before);
         const insert = opening ? '“”' : '”';
-        editor.value = editor.value.slice(0, start) + insert + editor.value.slice(start);
-        editor.selectionStart = editor.selectionEnd = start + 1; // right after the opening quote either way
-        editor.dispatchEvent(new Event('input', { bubbles: true }));
+        UI.replaceEditorRange(start, start, insert, start + 1); // right after the opening quote either way
         return;
       }
 
@@ -1708,9 +1709,7 @@ function _wireEditorCore() {
         e.preventDefault();
         const before = editor.value[start - 1];
         const opening = before === undefined || OPENING_CONTEXT.test(before);
-        editor.value = editor.value.slice(0, start) + (opening ? '‘' : '’') + editor.value.slice(start);
-        editor.selectionStart = editor.selectionEnd = start + 1;
-        editor.dispatchEvent(new Event('input', { bubbles: true }));
+        UI.replaceEditorRange(start, start, opening ? '‘' : '’');
         return;
       }
 
@@ -1718,9 +1717,7 @@ function _wireEditorCore() {
         const prev = editor.value[start - 1];
         if (prev === '–' || prev === '-') {
           e.preventDefault();
-          editor.value = editor.value.slice(0, start - 1) + (prev === '-' ? '–' : '—') + editor.value.slice(start);
-          editor.selectionStart = editor.selectionEnd = start;
-          editor.dispatchEvent(new Event('input', { bubbles: true }));
+          UI.replaceEditorRange(start - 1, start, prev === '-' ? '–' : '—');
           return;
         }
         // A single hyphen with nothing to combine with — let it type normally.
@@ -1728,9 +1725,7 @@ function _wireEditorCore() {
 
       if (e.key === '.' && start === end && editor.value.slice(start - 2, start) === '..') {
         e.preventDefault();
-        editor.value = editor.value.slice(0, start - 2) + '…' + editor.value.slice(start);
-        editor.selectionStart = editor.selectionEnd = start - 1;
-        editor.dispatchEvent(new Event('input', { bubbles: true }));
+        UI.replaceEditorRange(start - 2, start, '…');
         return;
       }
     }
@@ -1750,10 +1745,7 @@ function _wireEditorCore() {
         // text selected — matches the toolbar's bold/italic/link wrapping.
         e.preventDefault();
         const selected = editor.value.slice(start, end);
-        editor.value = editor.value.slice(0, start) + e.key + selected + closeChar + editor.value.slice(end);
-        editor.selectionStart = start + 1;
-        editor.selectionEnd   = start + 1 + selected.length;
-        editor.dispatchEvent(new Event('input', { bubbles: true }));
+        UI.replaceEditorRange(start, end, e.key + selected + closeChar, start + 1, start + 1 + selected.length);
         return;
       }
 
@@ -1762,14 +1754,12 @@ function _wireEditorCore() {
       // the cursor means "close/skip over", not "open a new nested pair".
       if ((e.key === '`' || e.key === '"') && editor.value[start] === e.key) {
         e.preventDefault();
-        editor.selectionStart = editor.selectionEnd = start + 1;
+        UI.setEditorSelection(start + 1);
         return;
       }
 
       e.preventDefault();
-      editor.value = editor.value.slice(0, start) + e.key + closeChar + editor.value.slice(start);
-      editor.selectionStart = editor.selectionEnd = start + 1;
-      editor.dispatchEvent(new Event('input', { bubbles: true }));
+      UI.replaceEditorRange(start, start, e.key + closeChar, start + 1);
       return;
     }
 
@@ -1777,7 +1767,7 @@ function _wireEditorCore() {
     // rather than typing a second, redundant one right next to it.
     if ((e.key === ')' || e.key === ']') && editor.selectionStart === editor.selectionEnd && editor.value[editor.selectionStart] === e.key) {
       e.preventDefault();
-      editor.selectionStart = editor.selectionEnd = editor.selectionStart + 1;
+      UI.setEditorSelection(editor.selectionStart + 1);
       return;
     }
 
@@ -1791,9 +1781,7 @@ function _wireEditorCore() {
       const next = editor.value[pos];
       if (AUTOPAIR_OPEN_TO_CLOSE[prev] === next) {
         e.preventDefault();
-        editor.value = editor.value.slice(0, pos - 1) + editor.value.slice(pos + 1);
-        editor.selectionStart = editor.selectionEnd = pos - 1;
-        editor.dispatchEvent(new Event('input', { bubbles: true }));
+        UI.replaceEditorRange(pos - 1, pos + 1, '', pos - 1);
         return;
       }
     }
@@ -2161,7 +2149,9 @@ function _wireTools() {
         r.onload = (e) => {
           UI.setEditorValue(String(e.target.result ?? ''));
           // Trigger the normal local-input pipeline: word count, draft save,
-          // debounced DB save, and live broadcast.
+          // debounced DB save, and live broadcast. The shared 'input' handler
+          // (_wireEditorCore) enforces BODY_MAX centrally, so an over-limit
+          // import is trimmed the same way any other over-limit edit is.
           editor?.dispatchEvent(new Event('input', { bubbles: true }));
           _refreshPreviewIfActive();
         };
@@ -2532,7 +2522,7 @@ blockquote{border-left:3px solid #ccc;margin:0;padding-left:1em;color:#666}table
     if (ok) UI.showToast('Copied plain text.', 'success');
     else    UI.showToast('Could not copy.', 'error');
   });
-  document.getElementById('export-copy-md')?.addEventListener('click', async () => {
+  document.getElementById('export-copy-html')?.addEventListener('click', async () => {
     if (!_requireContent()) return;
     // Copy rendered HTML so users can paste into rich-text editors, email, docs, etc.
     const resolvedHtml = await _resolveFileImageRefsForExport(renderMarkdown(UI.getEditorValue()));
@@ -2639,7 +2629,7 @@ function _wireFindReplacePanel() {
       if (searchCount) searchCount.textContent = '';
       // Collapse any selection left by the previous _jumpToMatch() call so the
       // editor doesn't keep showing a stale highlighted range.
-      if (editor) editor.setSelectionRange(editor.selectionEnd, editor.selectionEnd);
+      if (editor) UI.setEditorSelection(editor.selectionEnd, editor.selectionEnd);
       _syncReplaceButtons();
       return;
     }
@@ -2673,7 +2663,7 @@ function _wireFindReplacePanel() {
     const active = document.activeElement;
     const searchPanelFocused = active === searchInput || active === replaceInput;
     if (!searchPanelFocused && !keepFocus) editor.focus();
-    editor.setSelectionRange(m.start, m.end);
+    UI.setEditorSelection(m.start, m.end);
     // Scroll into view
     try {
       const before = editor.value.substring(0, m.start);
@@ -2725,8 +2715,7 @@ function _wireFindReplacePanel() {
     const m = _searchMatches[Math.max(0, _searchIndex)];
     if (!m) return;
     const replacement = replaceInput?.value ?? '';
-    editor.value = editor.value.slice(0, m.start) + replacement + editor.value.slice(m.end);
-    editor.dispatchEvent(new Event('input', { bubbles: true }));
+    UI.replaceEditorRange(m.start, m.end, replacement);
     UI.updateWordCount(editor.value);
     _refreshPreviewIfActive();
     // Re-index so positions reflect the changed content, then advance.
@@ -2750,7 +2739,10 @@ function _wireFindReplacePanel() {
     const rawTerm = searchInput?.value || '';
     const escaped = rawTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const flags   = _caseSensitive ? 'g' : 'gi';
-    editor.value = editor.value.replace(new RegExp(escaped, flags), replacement);
+    // A whole-document, potentially-multi-match transform — not a single
+    // contiguous range — so this goes through setEditorValue()'s
+    // similar-length cursor-preserve heuristic rather than replaceEditorRange().
+    UI.setEditorValue(editor.value.replace(new RegExp(escaped, flags), replacement));
     editor.dispatchEvent(new Event('input', { bubbles: true }));
     UI.updateWordCount(editor.value);
     _refreshPreviewIfActive();
@@ -2788,28 +2780,17 @@ function _wirePasteSanitization() {
     const plain = e.clipboardData?.getData('text/plain');
     if (plain === undefined) return;
     e.preventDefault();
-    const start   = editor.selectionStart;
-    const end     = editor.selectionEnd;
-    editor.value  = editor.value.slice(0, start) + plain + editor.value.slice(end);
-    editor.setSelectionRange(start + plain.length, start + plain.length);
-    editor.dispatchEvent(new Event('input', { bubbles: true }));
+    UI.replaceEditorRange(editor.selectionStart, editor.selectionEnd, plain);
   });
 
 }
 
 function _wireEditorPreferenceToggles() {
   // ── Monospace setting button (Settings panel) ──────────────────────────────
-  const _updateMonospaceSettingUI = () => {
-    const btn = document.getElementById('setting-monospace-btn');
-    if (!btn) return;
-    btn.textContent = _monospace ? 'On' : 'Off';
-    btn.setAttribute('aria-pressed', String(_monospace));
-  };
-  _updateMonospaceSettingUI();
+  _syncMonospaceSettingUI();
 
   document.getElementById('setting-monospace-btn')?.addEventListener('click', () => {
     _toggleMonospace();
-    _updateMonospaceSettingUI();
   });
 
   // ── Strip-paste setting button ─────────────────────────────────────────────
@@ -2942,11 +2923,24 @@ function wireEvents() {
 }
 
 // ── Editor preference helpers ─────────────────────────────────────────────────
+// The single toggle implementation for both the Settings panel button and the
+// Ctrl/Cmd+Shift+M keyboard shortcut — previously duplicated between the two,
+// which meant the settings button never reflected a shortcut-triggered toggle
+// (visibly stale until the panel was closed and reopened) and the two paths
+// could silently drift (e.g. a different toast type/duration each).
 function _toggleMonospace() {
   _monospace = !_monospace;
   UI.setMonospace(_monospace);
   try { localStorage.setItem('syncpad_monospace', _monospace ? '1' : '0'); } catch {}
   UI.showToast(_monospace ? 'Monospace on.' : 'Monospace off.', 'info', 1800);
+  _syncMonospaceSettingUI();
+}
+
+function _syncMonospaceSettingUI() {
+  const btn = document.getElementById('setting-monospace-btn');
+  if (!btn) return;
+  btn.textContent = _monospace ? 'On' : 'Off';
+  btn.setAttribute('aria-pressed', String(_monospace));
 }
 
 // ── Markdown format helpers ───────────────────────────────────────────────────
@@ -2970,16 +2964,11 @@ function _applyMarkdownFormat(action, editor) {
     // than prefix+suffix combined) so selecting exactly '``' or '**' doesn't delete content.
     if (sel.startsWith(prefix) && sel.endsWith(suffix) && sel.length > prefix.length + suffix.length) {
       const inner = sel.slice(prefix.length, sel.length - suffix.length);
-      editor.value = val.slice(0, start) + inner + val.slice(end);
-      editor.selectionStart = start;
-      editor.selectionEnd   = start + inner.length;
+      UI.replaceEditorRange(start, end, inner, start, start + inner.length);
     } else {
       const inner = sel || 'text';
-      editor.value = val.slice(0, start) + prefix + inner + suffix + val.slice(end);
-      editor.selectionStart = start + prefix.length;
-      editor.selectionEnd   = start + prefix.length + inner.length;
+      UI.replaceEditorRange(start, end, prefix + inner + suffix, start + prefix.length, start + prefix.length + inner.length);
     }
-    editor.dispatchEvent(new Event('input', { bubbles: true }));
   };
 
   // Toggle a line-level prefix on every line touched by the selection.
@@ -2993,10 +2982,7 @@ function _applyMarkdownFormat(action, editor) {
     const newBlock = allHave
       ? lines2.map((l) => l.slice(prefix.length)).join('\n')
       : lines2.map((l) => prefix + l).join('\n');
-    editor.value = val.slice(0, lStart) + newBlock + val.slice(lEnd);
-    editor.selectionStart = lStart;
-    editor.selectionEnd   = lStart + newBlock.length;
-    editor.dispatchEvent(new Event('input', { bubbles: true }));
+    UI.replaceEditorRange(lStart, lEnd, newBlock, lStart, lStart + newBlock.length);
   };
 
   // Toggle an ATX heading on the current line (strips any existing # prefix first).
@@ -3007,10 +2993,7 @@ function _applyMarkdownFormat(action, editor) {
     const line   = val.slice(lStart, lEnd);
     const stripped = line.replace(/^#{1,6} /, '');
     const newLine  = line.startsWith(prefix) ? stripped : prefix + stripped;
-    editor.value = val.slice(0, lStart) + newLine + val.slice(lEnd);
-    editor.selectionStart = lStart;
-    editor.selectionEnd   = lStart + newLine.length;
-    editor.dispatchEvent(new Event('input', { bubbles: true }));
+    UI.replaceEditorRange(lStart, lEnd, newLine, lStart, lStart + newLine.length);
   };
 
   switch (action) {
@@ -3027,11 +3010,8 @@ function _applyMarkdownFormat(action, editor) {
     case 'ol':            toggleLinePrefix('1. '); break;
     case 'link': {
       const insert = sel ? `[${sel}](url)` : '[link text](url)';
-      editor.value = val.slice(0, start) + insert + val.slice(end);
       const urlStart = start + insert.indexOf('url');
-      editor.selectionStart = urlStart;
-      editor.selectionEnd   = urlStart + 3;
-      editor.dispatchEvent(new Event('input', { bubbles: true }));
+      UI.replaceEditorRange(start, end, insert, urlStart, urlStart + 3);
       break;
     }
     case 'codeblock': {
@@ -3039,27 +3019,18 @@ function _applyMarkdownFormat(action, editor) {
       const after  = end < val.length && val[end] !== '\n' ? '\n' : '';
       const inner  = sel || 'code here';
       const insert = `${before}\`\`\`\n${inner}\n\`\`\`${after}`;
-      editor.value = val.slice(0, start) + insert + val.slice(end);
-      editor.selectionStart = start + before.length + 4;
-      editor.selectionEnd   = start + before.length + 4 + inner.length;
-      editor.dispatchEvent(new Event('input', { bubbles: true }));
+      UI.replaceEditorRange(start, end, insert, start + before.length + 4, start + before.length + 4 + inner.length);
       break;
     }
     case 'hr': {
       const before = start > 0 && val[start - 1] !== '\n' ? '\n' : '';
-      const ins = `${before}---\n`;
-      editor.value = val.slice(0, start) + ins + val.slice(end);
-      editor.selectionStart = editor.selectionEnd = start + ins.length;
-      editor.dispatchEvent(new Event('input', { bubbles: true }));
+      UI.replaceEditorRange(start, end, `${before}---\n`);
       break;
     }
     case 'toc': {
       const before = start > 0 && val[start - 1] !== '\n' ? '\n' : '';
       const after  = end < val.length && val[end] !== '\n' ? '\n' : '';
-      const ins = `${before}[TOC]\n${after}`;
-      editor.value = val.slice(0, start) + ins + val.slice(end);
-      editor.selectionStart = editor.selectionEnd = start + ins.length;
-      editor.dispatchEvent(new Event('input', { bubbles: true }));
+      UI.replaceEditorRange(start, end, `${before}[TOC]\n${after}`);
       break;
     }
   }
@@ -3076,6 +3047,9 @@ function teardownRealtimeSession() {
   destroyBroadcast();
   destroySync();
   UI.clearCursorChat();
+  // Clear any showing "X is typing…" banner and its auto-hide timer so it
+  // can never bleed into the next room's loading screen.
+  UI.hideTypingIndicator();
   _followedDeviceId = null;
   _lastComments = [];
   // Remove the keydown handler so wireEvents() can install fresh callbacks
@@ -3173,6 +3147,7 @@ async function _onTemplateChosen(key, mode) {
   if (mode === 'insert') {
     // Insert at the current cursor position; fall back to append if no editor focus.
     UI.insertAtCursor(body);
+    // The shared 'input' handler (_wireEditorCore) enforces BODY_MAX centrally.
     editor?.dispatchEvent(new Event('input', { bubbles: true }));
     UI.updateWordCount(UI.getEditorValue());
     _refreshPreviewIfActive();
@@ -3284,7 +3259,7 @@ function _currentSelectionRange() {
   return { from: editor.selectionStart, to: editor.selectionEnd };
 }
 
-function _openCommentsPanel() {
+async function _openCommentsPanel() {
   UI.openPanel('comments-panel');
   const range = canEdit() ? _currentSelectionRange() : null;
   const pendingAnchor = range && Number.isFinite(range.from) && Number.isFinite(range.to) ? range : null;
@@ -3294,7 +3269,17 @@ function _openCommentsPanel() {
     anchorPreviewText,
     onSubmit: (text, anchor) => _submitComment(text, anchor),
   });
-  _refreshComments();
+  // Only the panel-open fetch shows the loading state — _refreshComments()
+  // is also called from the realtime subscription and after submit/delete,
+  // where the panel already has content on screen and a loading flash would
+  // just be flicker, not useful signal (same reasoning as version history's
+  // setHistoryLoading, scoped to its own panel-open path for the same reason).
+  UI.setCommentLoading(true);
+  try {
+    await _refreshComments();
+  } finally {
+    UI.setCommentLoading(false);
+  }
 }
 
 async function _submitComment(text, anchor) {
@@ -3310,6 +3295,7 @@ async function _submitComment(text, anchor) {
 }
 
 async function _deleteCommentClick(c) {
+  if (!canEdit()) { UI.showToast(editBlockedReason() || 'Editing is disabled.', 'warning'); return; }
   const ok = await UI.showConfirm('Delete this comment?', { confirmLabel: 'Delete', danger: true });
   if (!ok) return;
   try {
@@ -3325,7 +3311,7 @@ function _jumpToComment(c) {
     LiveEditor.scrollToPos(c.anchor_from);
   } else {
     const editor = document.getElementById('note-editor');
-    if (editor) { editor.focus(); editor.setSelectionRange(c.anchor_from, c.anchor_to); }
+    if (editor) { editor.focus(); UI.setEditorSelection(c.anchor_from, c.anchor_to); }
   }
   UI.closeAllPanels();
 }
@@ -3421,7 +3407,7 @@ function _applyMarkdownMode(mode) {
 function _onLiveEditorChange(text) {
   const editor = document.getElementById('note-editor');
   if (!editor || !canEdit()) return;
-  editor.value = text;
+  UI.setEditorValue(text);
   editor.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
