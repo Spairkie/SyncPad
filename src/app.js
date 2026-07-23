@@ -1609,12 +1609,7 @@ function _wireShortcuts() {
       UI.insertAtCursor(insertTimestamp());
       UI.showToast('Timestamp inserted.', 'success');
     },
-    onCopyNote: () => {
-      copyToClipboard(UI.getEditorValue())
-        .then(ok => ok
-          ? UI.showToast('Copied to clipboard.', 'success')
-          : UI.showToast('Could not copy.', 'error'));
-    },
+    onCopyNote: () => _copyNoteToClipboard(),
     onCursorChat: () => _openCursorChatComposer(),
     onOpenCommandPalette: () => _openCommandPalette(),
   });
@@ -1642,7 +1637,7 @@ function _paletteCommands() {
     { id: 'mode-split',   label: 'Toggle Split view',                 group: 'View', shortcut: 'Ctrl Shift S', run: () => _applyMarkdownMode(_markdownMode === 'split' ? 'write' : 'split') },
     { id: 'monospace',    label: _monospace ? 'Turn off monospace font' : 'Turn on monospace font', group: 'View', shortcut: 'Ctrl Shift M', keywords: ['font'], run: () => _toggleMonospace() },
 
-    { id: 'panel-tools',    label: 'Open Tools panel',    group: 'Panels', keywords: ['clear', 'import', 'copy link', 'download'], run: () => UI.togglePanel('tools-panel') },
+    { id: 'panel-tools',    label: 'Open Tools panel',    group: 'Panels', keywords: ['clear', 'import', 'download'], run: () => UI.togglePanel('tools-panel') },
     { id: 'panel-files',    label: 'Open Files panel',    group: 'Panels', keywords: ['attachments', 'upload'], run: () => UI.togglePanel('files-panel') },
     { id: 'panel-devices',  label: 'Open Devices panel',  group: 'Panels', keywords: ['presence', 'collaborators'], run: () => UI.togglePanel('presence-panel') },
     { id: 'panel-settings', label: 'Open Settings panel', group: 'Panels', keywords: ['passcode', 'encryption', 'expiration', 'lock'], run: () => UI.togglePanel('settings-panel') },
@@ -1652,14 +1647,12 @@ function _paletteCommands() {
     { id: 'panel-templates', label: 'Insert a template',   group: 'Panels', run: _clickById('tool-templates') },
 
     { id: 'share',          label: 'Share this room',                 group: 'Room', shortcut: 'Ctrl Shift K', run: _clickById('btn-share') },
-    { id: 'copy-link',      label: 'Copy room link',                  group: 'Room', run: _clickById('tool-copy-link') },
     { id: 'lock',           label: _room?.editing_locked ? 'Unlock editing' : 'Lock editing', group: 'Room', run: _clickById('setting-lock-btn') },
     { id: 'clear-note',     label: 'Clear note for everyone…',        group: 'Room', keywords: ['delete', 'empty'], run: _clickById('tool-clear') },
     { id: 'report-room',    label: 'Report this room',                group: 'Room', run: _clickById('btn-report-room') },
 
     { id: 'insert-timestamp', label: 'Insert timestamp',              group: 'Edit', shortcut: 'Ctrl Shift T', run: _clickById('btn-insert-ts') },
-    { id: 'copy-note',        label: 'Copy note contents',            group: 'Edit', shortcut: 'Ctrl Shift C', run: _clickById('btn-copy-footer') },
-    { id: 'paste',             label: 'Paste at cursor',              group: 'Edit', run: _clickById('tool-paste') },
+    { id: 'copy-note',        label: 'Copy note contents',            group: 'Edit', shortcut: 'Ctrl Shift C', run: () => _copyNoteToClipboard() },
     { id: 'import-text',       label: 'Import a text/Markdown file',  group: 'Edit', run: _clickById('tool-import') },
     { id: 'download-md',       label: 'Download note as .md',         group: 'Edit', keywords: ['export'], run: _clickById('tool-download') },
     { id: 'export',            label: 'Export…',                      group: 'Edit', keywords: ['pdf', 'html', 'txt', 'print'], run: _clickById('btn-export') },
@@ -1757,6 +1750,7 @@ function _wireEditorCore() {
     LiveEditor.syncFromText(UI.getEditorValue());
     // Debounced so large documents don't re-render markdown on every keystroke.
     _debouncedRefreshPreview();
+    _debouncedRefreshCommentMargin();
   });
   editor?.addEventListener('blur', () => onEditorBlur());
 
@@ -1973,10 +1967,11 @@ function _wireEditorToolbarAndLifecycle() {
   // resizing (text re-wraps at a different width, changing the caret's line).
   // Typewriter mode only re-centers on resize, not on scroll — re-centering
   // on every scroll event would fight the user's own manual scrolling.
-  editor?.addEventListener('scroll', () => UI.refreshFocusMode());
+  editor?.addEventListener('scroll', () => { UI.refreshFocusMode(); _refreshCommentMargin(); });
   window.addEventListener('resize', () => {
     UI.refreshFocusMode();
     UI.refreshTypewriterMode();
+    _refreshCommentMargin();
   });
 
   // Block paste keystrokes when the editor is locked. The textarea readonly
@@ -2201,21 +2196,22 @@ function _wireMobileActionBar() {
 
 }
 
+function _copyNoteToClipboard() {
+  return copyToClipboard(UI.getEditorValue())
+    .then(ok => ok
+      ? UI.showToast('Copied to clipboard.', 'success')
+      : UI.showToast('Could not copy.', 'error'));
+}
+
 function _wireFooterQuickButtons() {
   // ── Footer quick buttons ───────────────────────────────────────────────────
-  document.getElementById('btn-copy-footer')?.addEventListener('click', () => {
-    copyToClipboard(UI.getEditorValue())
-      .then(ok => ok
-        ? UI.showToast('Copied to clipboard.', 'success')
-        : UI.showToast('Could not copy.', 'error'));
-  });
   document.getElementById('btn-insert-ts')?.addEventListener('click', () => {
     if (!canEdit()) { UI.showToast(editBlockedReason() || 'Editing is disabled.', 'warning'); return; }
     UI.insertAtCursor(insertTimestamp());
   });
   UI.initFooterClock();
 
-  document.getElementById('btn-cursor-chat')?.addEventListener('click', () => _openCursorChatComposer());
+  document.getElementById('btn-cursor-chat-fab')?.addEventListener('click', () => _openCursorChatComposer());
 
 }
 
@@ -2299,18 +2295,6 @@ function _wireTools() {
 
   // ── Tools ──────────────────────────────────────────────────────────────────
   const toolActions = {
-    'tool-copy-link': () =>
-      copyToClipboard(buildRoomUrl(BASE, _roomId))
-        .then(ok => ok
-          ? UI.showToast('Link copied.', 'success')
-          : UI.showToast('Could not copy link.', 'error')),
-
-    'tool-paste': async () => {
-      if (!canPaste()) { UI.showToast(editBlockedReason() || 'Paste is disabled.', 'warning'); return; }
-      try { UI.insertAtCursor(await navigator.clipboard.readText()); }
-      catch { UI.showToast('Clipboard access denied.', 'error'); }
-    },
-
     'tool-clear': async () => {
       if (!canClearNote()) { UI.showToast(editBlockedReason() || 'Clear is disabled.', 'warning'); return; }
       if (!await UI.showConfirm('Clear the note for everyone? This cannot be undone.', { confirmLabel: 'Clear', danger: true })) return;
@@ -3269,6 +3253,7 @@ function teardownRealtimeSession() {
   UI.hideTypingIndicator();
   _followedDeviceId = null;
   _lastComments = [];
+  UI.renderCommentMargin([]);
   // Remove the keydown handler so wireEvents() can install fresh callbacks
   // on the next room join. DOM element listeners (editor, buttons, etc.) are
   // protected by the _eventsWired guard and must NOT be reset here — resetting
@@ -3556,12 +3541,46 @@ async function _refreshComments() {
       onJump:   _jumpToComment,
       canDelete: canEdit(),
     });
-    _lastComments = comments;
-    LiveEditor.setCommentAnchors(comments.map((c) => ({ id: c.id, from: c.anchor_from, to: c.anchor_to })));
+    _lastComments = withPreviews;
+    LiveEditor.setCommentAnchors(withPreviews.map((c) => ({ id: c.id, from: c.anchor_from, to: c.anchor_to })));
+    _refreshCommentMargin();
   } catch {
     // Best-effort — a project that hasn't run supabase/migrations/0003_room_comments.sql
     // yet just never shows any comments. See the subscribeToComments() call site.
   }
+}
+
+// ── Comment margin dots ─────────────────────────────────────────────────────
+// Small markers in the editor's margin at each comment's anchor line, so
+// comments are visible while scrolling instead of only discoverable via the
+// side panel. Reuses the exact same offset-to-pixel machinery cursor chat
+// already needed: UI.getCaretViewportCoords() (mirror-div, Write mode) and
+// LiveEditor.coordsAtPos() (CM6, Preview/Split), both viewport-relative —
+// converted here to .editor-wrap-relative since that's what the dots are
+// positioned against (see .comment-margin-layer's CSS).
+
+function _refreshCommentMargin() {
+  const wrap = document.querySelector('.editor-wrap');
+  if (!wrap || !_lastComments.length) { UI.renderCommentMargin([]); return; }
+
+  const wrapTop = wrap.getBoundingClientRect().top;
+  const live = _markdownMode !== 'write' && LiveEditor.isMounted();
+
+  const dots = _lastComments
+    .map((c) => {
+      if (!Number.isFinite(c.anchor_from)) return null;
+      const coords = live ? LiveEditor.coordsAtPos(c.anchor_from) : UI.getCaretViewportCoords(c.anchor_from);
+      if (!coords) return null;
+      return { id: c.id, y: coords.y - wrapTop, preview: c._anchorPreview || '' };
+    })
+    .filter(Boolean);
+
+  UI.renderCommentMargin(dots, _jumpToCommentById);
+}
+
+function _jumpToCommentById(id) {
+  const c = _lastComments.find((x) => x.id === id);
+  if (c) _jumpToComment(c);
 }
 
 // ── Preview helpers ───────────────────────────────────────────────────────────
@@ -3591,6 +3610,10 @@ function _applyMarkdownMode(mode) {
             onCursorActivity: _onLiveCursorActivity,
             readOnly: !canEdit(),
           });
+          // CM6 persists across later mode switches (mount() is only called
+          // once, guarded above), so this scroll listener only needs wiring
+          // here, not on every switch into Preview/Split.
+          container.querySelector('.cm-scroller')?.addEventListener('scroll', () => _refreshCommentMargin());
         } else {
           LiveEditor.syncFromText(UI.getEditorValue());
           LiveEditor.setReadOnly(!canEdit());
@@ -3617,6 +3640,8 @@ function _applyMarkdownMode(mode) {
   } else {
     LiveEditor.unwireScrollSync();
   }
+
+  _refreshCommentMargin();
 }
 
 // User edits in the live surface flow back through the textarea's normal
@@ -3670,6 +3695,11 @@ function _refreshPreviewIfActive() {
 // Debounced variant — used on every keystroke so heavy markdown docs
 // (50 KB+) don't re-render on every character and cause frame drops.
 const _debouncedRefreshPreview = debounce(_refreshPreviewIfActive, 300);
+
+// Editing text above a comment's anchor shifts its offset downstream, so
+// margin dots need to be recomputed after edits too — debounced for the
+// same reason as preview refresh above.
+const _debouncedRefreshCommentMargin = debounce(_refreshCommentMargin, 300);
 
 function _wirePreviewClickOnce() {
   if (_previewObserverWired) return;

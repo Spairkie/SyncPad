@@ -32,15 +32,13 @@
 
 /* Floating card editor — fills height, centered with all-around margins.
    overflow:hidden clips textarea/preview to the card border-radius.
-   No position:relative — .remote-notice is now a sibling in .editor-area.
-
-   Mode classes set by setMarkdownMode() in ui.js:
-     .mode-write   — textarea only (default)
-     .mode-preview — preview pane only
-     .mode-split   — textarea + preview side-by-side
-   These classes drive grid-template-columns explicitly so the layout is
-   never ambiguous, regardless of which children are hidden. */
+   .remote-notice and the cursor-chat FAB are siblings in .editor-area
+   instead of children here, specifically so overflow:hidden doesn't clip
+   them. position:relative is only for .comment-margin-layer, a child that
+   deliberately DOES want to be clipped to the card (a comment scrolled out
+   of view should disappear, not float outside the card). */
 .editor-wrap {
+  position: relative;
   /* Flex child: fill remaining height inside .editor-area */
   flex: 1;
   min-height: 0;
@@ -421,6 +419,44 @@ body.lock-mode .md-toolbar { opacity: 0.4; pointer-events: none; }
 @keyframes slide-up {
   from { opacity:0; transform: translateX(-50%) translateY(8px); }
   to   { opacity:1; transform: translateX(-50%) translateY(0); }
+}
+
+/* Cursor-chat floating action button — anchored to the editor pane (see
+   .editor-area's position:relative) rather than the page footer, so it
+   stays close to whatever's on screen regardless of scroll position or
+   document length. */
+.cursor-chat-fab {
+  position: absolute; right: 16px; bottom: 16px; z-index: 19;
+  width: 40px; height: 40px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--accent); color: var(--text-inverse);
+  box-shadow: var(--shadow-md);
+  transition: transform var(--transition), box-shadow var(--transition);
+}
+.cursor-chat-fab:hover { transform: scale(1.06); box-shadow: var(--shadow-lg); }
+.cursor-chat-fab:active { transform: scale(0.96); }
+@media (max-width: 639px) {
+  .cursor-chat-fab { right: 12px; bottom: 12px; width: 36px; height: 36px; }
+}
+
+/* Comment margin dots — a small marker at each comment's anchor line,
+   positioned by app.js (converts LiveEditor.coordsAtPos()/textarea mirror-
+   div measurements to .editor-wrap-relative pixels) so comments are visible
+   while scrolling instead of only discoverable via the side panel list.
+   pointer-events:none on the layer, auto on the dots themselves, so the
+   layer never blocks clicks/selection on the editor beneath it. */
+.comment-margin-layer {
+  position: absolute; inset: 0; pointer-events: none; z-index: 5;
+}
+.comment-dot {
+  position: absolute; right: 6px; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--accent); border: 2px solid var(--bg-surface);
+  pointer-events: auto; cursor: pointer; transform: translateY(-50%);
+  transition: transform var(--transition), background var(--transition);
+}
+.comment-dot:hover { transform: translateY(-50%) scale(1.35); }
+@media (max-width: 639px) {
+  .comment-margin-layer { display: none; } /* no margin space on narrow viewports */
 }
 
 /* Typing Indicator */

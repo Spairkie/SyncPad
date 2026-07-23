@@ -49,4 +49,27 @@ test.describe('Comments', () => {
     await expect(page.locator('#comment-composer')).toBeHidden();
     await expect(page.locator('#comment-composer-hint')).toBeHidden();
   });
+
+  test('adding a comment shows a margin dot at its anchor, which jumps back to it on click', async ({ page }) => {
+    await createRoom(page);
+    await typeInEditor(page, 'Some text to comment on, right here.');
+    await page.locator('#note-editor').evaluate((el) => {
+      el.focus();
+      el.setSelectionRange(5, 9); // "text"
+    });
+    await openCommentsPanel(page);
+    await page.locator('#comment-composer-input').fill('margin dot test');
+    await page.locator('#comment-composer-btn').click();
+    await page.waitForTimeout(500); // _refreshComments() + margin recompute
+
+    await expect(page.locator('.comment-dot')).toHaveCount(1);
+
+    // Move the selection/caret elsewhere so a click on the dot is a
+    // detectable change, then click it and confirm it re-selects the anchor.
+    await page.locator('#note-editor').evaluate((el) => el.setSelectionRange(0, 0));
+    await page.locator('.comment-dot').first().click();
+    await page.waitForTimeout(200);
+    const sel = await page.locator('#note-editor').evaluate((el) => ({ start: el.selectionStart, end: el.selectionEnd }));
+    expect(sel).toEqual({ start: 5, end: 9 });
+  });
 });
