@@ -344,3 +344,28 @@ export function escapeHtml(str) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
+
+// ── Command palette filtering ────────────────────────────────────────────────
+
+/**
+ * Filter a list of `{ label, keywords? }` commands against a query.
+ * Every whitespace-separated query token must appear as a substring of
+ * `label + keywords` (case-insensitive) — not a scoring fuzzy-match, so
+ * results stay predictable for short, deliberate queries. Matches whose
+ * label starts with the full query are ranked first.
+ */
+export function filterCommands(commands, query) {
+  const q = String(query ?? '').trim().toLowerCase();
+  if (!q) return commands;
+  const tokens = q.split(/\s+/).filter(Boolean);
+  return commands
+    .map((cmd) => {
+      const haystack = `${cmd.label} ${(cmd.keywords || []).join(' ')}`.toLowerCase();
+      if (!tokens.every((t) => haystack.includes(t))) return null;
+      const rank = cmd.label.toLowerCase().startsWith(q) ? 0 : 1;
+      return { cmd, rank };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.rank - b.rank)
+    .map((x) => x.cmd);
+}

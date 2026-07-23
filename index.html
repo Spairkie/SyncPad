@@ -313,6 +313,12 @@
         </button>
 
         <div id="more-dropdown" role="menu" aria-label="More actions">
+          <button class="more-item" id="btn-command-palette" role="menuitem">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+            <span class="more-item-label">Command Palette</span>
+            <kbd class="more-item-kbd">Ctrl K</kbd>
+          </button>
+          <div class="more-separator"></div>
           <button class="more-item" id="btn-tools" role="menuitem">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
             <span class="more-item-label">Tools</span>
@@ -1097,33 +1103,33 @@
     <div class="export-options">
       <button class="export-btn" id="export-txt">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-        Download .txt
+        <span class="export-label">Download .txt</span>
         <span class="export-desc">Plain text file</span>
       </button>
       <button class="export-btn" id="export-md">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/></svg>
-        Download .md
+        <span class="export-label">Download .md</span>
         <span class="export-desc">Markdown file</span>
       </button>
       <button class="export-btn" id="export-html">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-        Download .html
+        <span class="export-label">Download .html</span>
         <span class="export-desc">Rendered HTML page</span>
       </button>
       <button class="export-btn" id="export-pdf">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-        Print / Save as PDF
+        <span class="export-label">Print / Save as PDF</span>
         <span class="export-desc">Browser print dialog</span>
       </button>
       <div class="export-separator"></div>
       <button class="export-btn" id="export-copy-text">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-        Copy as plain text
+        <span class="export-label">Copy as plain text</span>
         <span class="export-desc">Copy to clipboard</span>
       </button>
       <button class="export-btn" id="export-copy-html">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-        Copy as HTML
+        <span class="export-label">Copy as HTML</span>
         <span class="export-desc">Copy rendered HTML to clipboard</span>
       </button>
     </div>
@@ -1161,6 +1167,7 @@
       </div>
       <div class="shortcuts-group">
         <div class="shortcuts-group-title">Navigation</div>
+        <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>K</kbd> <span>Command palette (outside the editor)</span></div>
         <div class="shortcut-row"><kbd>Ctrl</kbd><kbd>/</kbd> <span>Keyboard shortcuts</span></div>
         <div class="shortcut-row"><kbd>Esc</kbd> <span>Close panel / modal</span></div>
       </div>
@@ -1200,6 +1207,20 @@
     <div class="modal-actions">
       <button class="modal-btn-cancel" id="about-modal-close">Close</button>
     </div>
+  </div>
+</div>
+
+<!-- Command palette -->
+<div class="modal-backdrop command-palette-backdrop" id="command-palette-modal">
+  <div class="modal command-palette-modal" role="dialog" aria-modal="true" aria-label="Command palette">
+    <div class="command-palette-search-row">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input id="command-palette-input" class="command-palette-input" type="text"
+             placeholder="Type a command…" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+             role="combobox" aria-expanded="true" aria-controls="command-palette-list" aria-autocomplete="list" />
+      <kbd class="command-palette-esc-hint">Esc</kbd>
+    </div>
+    <div id="command-palette-list" class="command-palette-list" role="listbox" aria-label="Commands"></div>
   </div>
 </div>
 

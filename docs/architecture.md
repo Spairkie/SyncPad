@@ -25,6 +25,11 @@ Browser (HTML + CSS + ES Modules)
             ├── templates.js     — built-in + custom templates
             ├── theme.js         — CSS variable theme system
             ├── shortcuts.js     — keyboard shortcut handler
+            ├── live-editor.js   — CodeMirror 6 "Live"/Split editing surface
+            ├── rooms.js         — room CRUD, share links, short codes (Supabase queries/RPCs)
+            ├── comments.js      — anchored inline comments (optional migration)
+            ├── revisions.js     — version history snapshots (optional migration)
+            ├── offline.js       — localStorage draft save/restore
             ├── admin.js         — admin dashboard (Supabase Auth)
             └── utils.js / icons.js / supabase.js — helpers
 
@@ -108,7 +113,7 @@ Collects small, stateless helper functions (string formatting, date utilities, d
 ## 4. Data Flow — Joining a Room
 
 1. The browser loads `index.html`; `app.js` reads `window.location`.
-2. The **router** in `app.js` parses the URL path to extract the room ID (e.g. `/r/<roomId>`).
+2. The **router** in `app.js` parses the URL path to extract the room ID — rooms live directly under the configured base path (e.g. `/SyncPad/<roomId>`, or `/SyncPad/share/<token>` for a read-only share link).
 3. `app.js` calls **`joinRoom(roomId)`**.
 4. `joinRoom()` issues a Supabase query against `syncpad_rooms` for the given ID.
 5. If the room has a passcode, `ui.js` renders the passcode prompt and verifies a PBKDF2 hash client-side. If the room has text encryption, the submitted passphrase is passed to `encryption.js` to derive `_encKey` and `_encSalt`, which are stored in `app.js` module-level state.
@@ -132,7 +137,7 @@ Collects small, stateless helper functions (string formatting, date utilities, d
 | `_room` | Full room row object fetched from Supabase |
 | `_encKey` | Derived AES-256-GCM CryptoKey (null if unencrypted) |
 | `_encSalt` | PBKDF2 salt for the current encryption passphrase |
-| `_markdownMode` | Boolean — whether Markdown rendering is enabled |
+| `_markdownMode` | `'write' \| 'preview' \| 'split'` — current editor view mode |
 | `_showPreview` | Boolean — whether the Markdown preview pane is visible |
 | `_expPreset` | Selected expiry preset string |
 | `_expTimer` | Handle for the expiry countdown interval |
@@ -219,10 +224,10 @@ The optional `supabase/functions/syncpad-cleanup` Edge Function runs with a serv
 
 `service-worker.js` implements a **network-first** caching strategy for all same-origin assets.
 
-- **Cache name**: `syncpad-v9`
+- **Cache name**: `CACHE_VERSION` in `service-worker.js`, bumped on every release that changes precached assets (see `CHANGELOG.md` for the current value)
 - **Strategy**: Every request is attempted over the network first. On success, the response is cloned and stored in the cache. On network failure, the cache is used as a fallback.
 - **Bypass**: All requests to Supabase endpoints (different origin) bypass the service worker entirely and go directly to the network.
-- **Cache invalidation**: Increment `CACHE_NAME` (e.g. `syncpad-v9`) to force all clients to discard the old cache on next activation.
+- **Cache invalidation**: Increment `CACHE_VERSION` to force all clients to discard the old cache on next activation.
 
 ---
 
@@ -243,6 +248,8 @@ Styles are split across several plain CSS files under `styles/`, loaded via orde
 | `forest-green` | Dark green palette |
 | `paper-light` | Light parchment — the only light theme |
 | `terminal` | High-contrast black with green monospace aesthetic |
+| `mocha-dark` | Warm dark brown palette |
+| `lavender-light` | Light lilac — the second light theme |
 
 ### Transitions
 Theme switches animate smoothly, but only on appropriate elements to avoid janky flashes on interactive controls:

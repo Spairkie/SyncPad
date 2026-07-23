@@ -336,7 +336,12 @@
   box-shadow: var(--shadow-lg);
   padding: 8px;
   min-width: 232px;
+  /* Wide enough that "Command Palette" + its Ctrl K hint fit on one line —
+     the longest label + shortcut-hint pairing in this menu. */
+  width: max-content;
+  max-width: 280px;
 }
+.more-item-kbd { flex-shrink: 0; }
 .more-item {
   border-radius: 10px;
   min-height: 40px;

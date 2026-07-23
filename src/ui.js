@@ -835,6 +835,41 @@ export function closeAllModals() {
   document.getElementById('file-preview-modal')?.classList.remove('open');
 }
 
+// ── Command palette ─────────────────────────────────────────────────────────
+
+/**
+ * Render the palette's filtered results. `items` is already filtered/sorted
+ * by the caller (see utils.js's filterCommands); this just draws the list
+ * and highlights `activeIndex` for keyboard navigation. `onRun` fires on
+ * click with the command's id.
+ */
+export function renderCommandPaletteResults(items, activeIndex, onRun) {
+  const list = document.getElementById('command-palette-list');
+  if (!list) return;
+  list.innerHTML = '';
+  if (!items.length) {
+    list.innerHTML = '<div class="command-palette-empty">No matching commands</div>';
+    return;
+  }
+  items.forEach((cmd, i) => {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = `command-palette-item${i === activeIndex ? ' active' : ''}`;
+    row.id = `command-palette-item-${i}`;
+    row.setAttribute('role', 'option');
+    row.setAttribute('aria-selected', String(i === activeIndex));
+    row.innerHTML = `
+      <span class="command-palette-item-label">${escapeHtml(cmd.label)}</span>
+      ${cmd.group ? `<span class="command-palette-item-group">${escapeHtml(cmd.group)}</span>` : ''}
+      ${cmd.shortcut ? `<kbd class="command-palette-item-shortcut">${escapeHtml(cmd.shortcut)}</kbd>` : ''}`;
+    row.addEventListener('click', () => onRun(cmd.id));
+    list.appendChild(row);
+  });
+  if (activeIndex >= 0) {
+    list.children[activeIndex]?.scrollIntoView({ block: 'nearest' });
+  }
+}
+
 // ── Share modal ───────────────────────────────────────────────────────────────
 
 export function populateShareModal({
@@ -876,7 +911,7 @@ export function populateShareModal({
   const codeSection = document.getElementById('share-code-section');
   if (codeSection) codeSection.classList.toggle('hidden', !showRoomCode);
   if (showRoomCode) {
-    const codeDisplay = roomCode || (roomCodeError ? 'Could not create a short code. Check Supabase setup.' : 'Generating short code…');
+    const codeDisplay = roomCode || (roomCodeError ? 'Short codes need one more setup step — see docs/migrations/short-room-codes.sql.' : 'Generating short code…');
     _wireShareRow({ fieldId: 'share-code-text', copyBtnId: 'share-code-copy', openId: null, nativeBtnId: null, errorId: 'share-code-error', url: roomCode, displayValue: codeDisplay });
   }
 }

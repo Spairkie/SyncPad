@@ -7,7 +7,7 @@ import {
   copyToClipboard, insertTimestamp,
   isMobile, isOnline, onOnlineChange,
   buildRoomUrl, buildReadOnlyUrl, getUrlMode, parseDuration,
-  escapeHtml, debounce, formatTimestamp,
+  escapeHtml, debounce, formatTimestamp, filterCommands,
 } from './utils.js';
 
 import { loadRoom, createRoom, clearRoomContent, subscribeToRoom, getOrCreateReadOnlyShareLink, resolveReadOnlyShareLink, getOrCreateRoomCode, resolveRoomCode, recordRoomDeviceView, setDeviceLimit, clearDeviceLimit, updateRoomDisplayName, normalizeRoomDisplayName, submitRoomReport, REPORT_REASONS } from './rooms.js';
@@ -1574,8 +1574,114 @@ function _wireShortcuts() {
           : UI.showToast('Could not copy.', 'error'));
     },
     onCursorChat: () => _openCursorChatComposer(),
+    onOpenCommandPalette: () => _openCommandPalette(),
   });
 
+}
+
+// ── Command palette ───────────────────────────────────────────────────────────
+// A searchable index of app-wide actions, opened with Ctrl/Cmd+K outside the
+// editor (see shortcuts.js) or the More menu's "Command Palette" item.
+// Actions that already have a guarded, wired button elsewhere (permission
+// checks, confirm dialogs, toasts) are run by clicking that button rather
+// than re-implementing the guard here — one source of truth per action.
+
+let _paletteFiltered    = [];
+let _paletteActiveIndex = 0;
+
+function _clickById(id) {
+  return () => document.getElementById(id)?.click();
+}
+
+function _paletteCommands() {
+  return [
+    { id: 'mode-write',   label: 'Source mode (hide preview)',        group: 'View', run: () => _applyMarkdownMode('write') },
+    { id: 'mode-preview', label: 'Toggle Live preview mode',          group: 'View', shortcut: 'Ctrl Shift P', keywords: ['preview'], run: () => _applyMarkdownMode(_markdownMode === 'preview' ? 'write' : 'preview') },
+    { id: 'mode-split',   label: 'Toggle Split view',                 group: 'View', shortcut: 'Ctrl Shift S', run: () => _applyMarkdownMode(_markdownMode === 'split' ? 'write' : 'split') },
+    { id: 'monospace',    label: _monospace ? 'Turn off monospace font' : 'Turn on monospace font', group: 'View', shortcut: 'Ctrl Shift M', keywords: ['font'], run: () => _toggleMonospace() },
+
+    { id: 'panel-tools',    label: 'Open Tools panel',    group: 'Panels', keywords: ['clear', 'import', 'copy link', 'download'], run: () => UI.togglePanel('tools-panel') },
+    { id: 'panel-files',    label: 'Open Files panel',    group: 'Panels', keywords: ['attachments', 'upload'], run: () => UI.togglePanel('files-panel') },
+    { id: 'panel-devices',  label: 'Open Devices panel',  group: 'Panels', keywords: ['presence', 'collaborators'], run: () => UI.togglePanel('presence-panel') },
+    { id: 'panel-settings', label: 'Open Settings panel', group: 'Panels', keywords: ['passcode', 'encryption', 'expiration', 'lock'], run: () => UI.togglePanel('settings-panel') },
+    { id: 'panel-find',     label: 'Find & Replace',      group: 'Panels', shortcut: 'Ctrl F', keywords: ['search'], run: () => { UI.openPanel('search-panel'); document.getElementById('search-input')?.focus(); } },
+    { id: 'panel-history',  label: 'Open Version History', group: 'Panels', keywords: ['revisions', 'restore'], run: () => _openHistoryPanel() },
+    { id: 'panel-comments', label: 'Open Comments',        group: 'Panels', run: () => _openCommentsPanel() },
+    { id: 'panel-templates', label: 'Insert a template',   group: 'Panels', run: _clickById('tool-templates') },
+
+    { id: 'share',          label: 'Share this room',                 group: 'Room', shortcut: 'Ctrl Shift K', run: _clickById('btn-share') },
+    { id: 'copy-link',      label: 'Copy room link',                  group: 'Room', run: _clickById('tool-copy-link') },
+    { id: 'lock',           label: _room?.editing_locked ? 'Unlock editing' : 'Lock editing', group: 'Room', run: _clickById('setting-lock-btn') },
+    { id: 'clear-note',     label: 'Clear note for everyone…',        group: 'Room', keywords: ['delete', 'empty'], run: _clickById('tool-clear') },
+    { id: 'report-room',    label: 'Report this room',                group: 'Room', run: _clickById('btn-report-room') },
+
+    { id: 'insert-timestamp', label: 'Insert timestamp',              group: 'Edit', shortcut: 'Ctrl Shift T', run: _clickById('btn-insert-ts') },
+    { id: 'copy-note',        label: 'Copy note contents',            group: 'Edit', shortcut: 'Ctrl Shift C', run: _clickById('btn-copy-footer') },
+    { id: 'paste',             label: 'Paste at cursor',              group: 'Edit', run: _clickById('tool-paste') },
+    { id: 'import-text',       label: 'Import a text/Markdown file',  group: 'Edit', run: _clickById('tool-import') },
+    { id: 'download-md',       label: 'Download note as .md',         group: 'Edit', keywords: ['export'], run: _clickById('tool-download') },
+    { id: 'export',            label: 'Export…',                      group: 'Edit', keywords: ['pdf', 'html', 'txt', 'print'], run: _clickById('btn-export') },
+
+    { id: 'about',      label: 'About SyncPad',       group: 'Help', run: _clickById('btn-about') },
+    { id: 'shortcuts',  label: 'Keyboard shortcuts',  group: 'Help', shortcut: 'Ctrl /', run: _clickById('btn-shortcuts') },
+
+    ...THEMES.map((t) => ({
+      id: `theme-${t.id}`, label: `Theme: ${t.label}`, group: 'Appearance', keywords: ['color', 'dark', 'light'],
+      run: () => applyTheme(t.id),
+    })),
+  ];
+}
+
+function _renderPaletteResults() {
+  UI.renderCommandPaletteResults(_paletteFiltered, _paletteActiveIndex, _runPaletteCommand);
+}
+
+function _runPaletteCommand(id) {
+  const cmd = _paletteFiltered.find((c) => c.id === id);
+  _closeCommandPalette();
+  cmd?.run();
+}
+
+function _openCommandPalette() {
+  const input = document.getElementById('command-palette-input');
+  _paletteFiltered = _paletteCommands();
+  _paletteActiveIndex = 0;
+  UI.openModal('command-palette-modal');
+  if (input) { input.value = ''; input.focus(); }
+  _renderPaletteResults();
+}
+
+function _closeCommandPalette() {
+  UI.closeModal('command-palette-modal');
+}
+
+function _wireCommandPalette() {
+  document.getElementById('btn-command-palette')?.addEventListener('click', () => {
+    closeMoreDropdown();
+    _openCommandPalette();
+  });
+
+  const input = document.getElementById('command-palette-input');
+  input?.addEventListener('input', () => {
+    _paletteFiltered = filterCommands(_paletteCommands(), input.value);
+    _paletteActiveIndex = 0;
+    _renderPaletteResults();
+  });
+  input?.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (_paletteFiltered.length) _paletteActiveIndex = (_paletteActiveIndex + 1) % _paletteFiltered.length;
+      _renderPaletteResults();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (_paletteFiltered.length) _paletteActiveIndex = (_paletteActiveIndex - 1 + _paletteFiltered.length) % _paletteFiltered.length;
+      _renderPaletteResults();
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const active = _paletteFiltered[_paletteActiveIndex];
+      if (active) _runPaletteCommand(active.id);
+    }
+  });
 }
 
 // Custom templates are already capped at BODY_MAX (templates.js), but nothing
@@ -2160,7 +2266,6 @@ function _wireTools() {
       inp.click();
     },
 
-    'tool-find':       () => { UI.openPanel('search-panel'); document.getElementById('search-input')?.focus(); },
     'tool-templates': () => {
       if (!canUseTemplates()) { UI.showToast(editBlockedReason() || 'Templates are disabled.', 'warning'); return; }
       _openTemplatesModalFresh();
@@ -2171,9 +2276,14 @@ function _wireTools() {
     document.getElementById(id)?.addEventListener('click', () => { fn(); UI.closeAllPanels(); });
   });
 
-  // Wired outside toolActions: it opens a side panel (like tool-find should),
-  // and toolActions' blanket closeAllPanels() after every action would close
-  // that panel again immediately.
+  // Wired outside toolActions: each of these opens a side panel, and
+  // toolActions' blanket closeAllPanels() after every action would close
+  // that panel again immediately (tool-find had exactly this bug — opened
+  // search-panel and then closeAllPanels() closed it again in the same tick).
+  document.getElementById('tool-find')?.addEventListener('click', () => {
+    UI.openPanel('search-panel');
+    document.getElementById('search-input')?.focus();
+  });
   document.getElementById('tool-history')?.addEventListener('click', () => { _openHistoryPanel(); });
   document.getElementById('tool-comments')?.addEventListener('click', () => { _openCommentsPanel(); });
 
@@ -2920,6 +3030,7 @@ function wireEvents() {
   _wireFindReplacePanel();
   _wirePasteSanitization();
   _wireEditorPreferenceToggles();
+  _wireCommandPalette();
 }
 
 // ── Editor preference helpers ─────────────────────────────────────────────────

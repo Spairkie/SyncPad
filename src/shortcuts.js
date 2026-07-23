@@ -9,7 +9,8 @@
 //   Ctrl/Cmd + F             Find in note
 //   Ctrl/Cmd + B             Bold selected text
 //   Ctrl/Cmd + I             Italic selected text
-//   Ctrl/Cmd + K             Insert markdown link
+//   Ctrl/Cmd + K             Insert markdown link (in the editor) / open the
+//                            command palette (everywhere else)
 //   Ctrl/Cmd + `             Inline code
 //   Ctrl/Cmd + Shift + K     Open share modal
 //   Ctrl/Cmd + Shift + T     Insert timestamp
@@ -20,6 +21,7 @@
 
 import { flushSave } from './sync.js';
 import { canEdit }   from './permissions.js';
+import * as UI       from './ui.js';
 
 // Provided by app.js at init time
 let _onTogglePreview  = null;
@@ -32,6 +34,7 @@ let _onOpenShare      = null;
 let _onInsertTimestamp = null;
 let _onCopyNote       = null;
 let _onCursorChat     = null;
+let _onOpenCommandPalette = null;
 
 /** @type {HTMLTextAreaElement|null} */
 let _editor = null;
@@ -57,6 +60,7 @@ export function initShortcuts(handlers) {
   _onInsertTimestamp = handlers.onInsertTimestamp;
   _onCopyNote        = handlers.onCopyNote;
   _onCursorChat      = handlers.onCursorChat;
+  _onOpenCommandPalette = handlers.onOpenCommandPalette;
   _editor = document.getElementById('note-editor');
 
   document.addEventListener('keydown', _handleKeyDown, { capture: false });
@@ -113,6 +117,15 @@ function _handleKeyDown(e) {
     return;
   }
 
+  // Ctrl+K outside the editor — command palette. Inside the editor, Ctrl+K
+  // stays "insert markdown link" (below) — same key, contextual like Ctrl+F
+  // above, so it never fights muscle memory for either use.
+  if (key === 'k' && !shift && !inEditor) {
+    e.preventDefault();
+    _onOpenCommandPalette?.();
+    return;
+  }
+
   // ── Shift combos ─────────────────────────────────────────────────────────
   if (shift) {
     if (key === 'P' || key === 'p') { e.preventDefault(); _onTogglePreview?.();   return; }
@@ -155,17 +168,12 @@ function _wrapSelection(editor, prefix, suffix) {
   // Guard against sel === prefix+suffix (no inner content) to avoid producing empty string.
   if (sel.startsWith(prefix) && sel.endsWith(suffix) && sel.length > prefix.length + suffix.length) {
     const inner = sel.slice(prefix.length, sel.length - suffix.length);
-    editor.value = editor.value.slice(0, start) + inner + editor.value.slice(end);
-    editor.selectionStart = start;
-    editor.selectionEnd   = start + inner.length;
+    UI.replaceEditorRange(start, end, inner, start, start + inner.length);
   } else {
     const replacement = prefix + (sel || 'text') + suffix;
-    editor.value = editor.value.slice(0, start) + replacement + editor.value.slice(end);
     const innerStart = start + prefix.length;
-    editor.selectionStart = innerStart;
-    editor.selectionEnd   = innerStart + (sel || 'text').length;
+    UI.replaceEditorRange(start, end, replacement, innerStart, innerStart + (sel || 'text').length);
   }
-  editor.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
 /** Insert a [text](url) markdown link at cursor. */
@@ -174,10 +182,7 @@ function _insertLink(editor) {
   const end   = editor.selectionEnd;
   const sel   = editor.value.slice(start, end).trim();
   const insert = sel ? `[${sel}](url)` : '[link text](url)';
-  editor.value = editor.value.slice(0, start) + insert + editor.value.slice(end);
   // Select the "url" part for easy replacement
   const urlStart = start + insert.indexOf('url');
-  editor.selectionStart = urlStart;
-  editor.selectionEnd   = urlStart + 3;
-  editor.dispatchEvent(new Event('input', { bubbles: true }));
+  UI.replaceEditorRange(start, end, insert, urlStart, urlStart + 3);
 }

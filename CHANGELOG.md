@@ -8,6 +8,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Phase 20 — Server-side lock enforcement, presence accuracy, Supabase setup docs, command palette
+
+Branch: `claude/codebase-review-testing-fjicqa`
+
+#### Fixed
+- **Room lock was frontend-only, despite being the one permission control that could actually be enforced server-side.** Every other write-permission control (read-only links, `?mode=read`) is necessarily UX-only, because an editable and a read-only link for the same room share the same `room_id` and anon key — there's no separate credential to check. `editing_locked` is different: it's server-stored room state, not a property of which link someone followed. Added `enforce_syncpad_rooms_lock()`, a `BEFORE UPDATE` trigger on `syncpad_rooms` (in `supabase-setup.sql`) that rejects any content change to a locked room regardless of what calls the API — exempting the backend expiry-cleanup job and signed-in admins, both of which need to override a lock. `docs/security.md`, `README.md`, and `DEPLOYMENT.md` updated to stop describing room lock as frontend-only.
+- **The connected-devices panel misattributed its own "editor"/"viewer" badge when the same device had two tabs open on a room** (e.g. testing by opening the main link in one tab and its read-only link in another) — `presence.js`'s device-merge logic picked whichever tab's presence entry tracked *most recently* to decide the merged device's `read_only` flag, so opening a read-only tab could flip your own editable tab's badge to "viewer" in the panel. Changed to an AND-reduce across a device's tabs (can edit if *any* tab can), verified with an isolated presence-state simulation covering single-tab, same-device-two-tabs, and multi-device scenarios.
+- **`tool-find` (Find in Tools panel) opened and then immediately closed the search panel in the same tick** — its handler ran through `toolActions`' blanket `closeAllPanels()` after every action, which undid the `openPanel('search-panel')` it had just called. The exact same bug the code's own comment already flagged as fixed for `tool-history`/`tool-comments`, just never applied to `tool-find` itself. Moved it out of `toolActions`, matching those two.
+- **`shortcuts.js` had two leftover direct `editor.value`/`selectionStart`/`selectionEnd` writes** (`_wrapSelection`, `_insertLink`) that the Phase 18 editor-DOM-boundary migration missed because it was scoped to `app.js` only. Migrated both to `UI.replaceEditorRange()`.
+- **DEPLOYMENT.md's setup steps never mentioned four of five optional feature migrations** (`short-room-codes.sql`, `room-comments.sql`, `version-history.sql`, `device-limit.sql`, `admin-dashboard-improvements.sql`) — a fresh Supabase project set up by following the docs literally would have short codes, comments, version history, device-limit rooms, and admin quarantine/audit-log all silently non-functional. Added a table listing every optional migration, what it enables, and the symptom if it's skipped. The Share modal's short-code error message now points directly at the migration file instead of a generic "check Supabase setup."
+- **Two UI label-wrapping inconsistencies**: the Export modal's "Copy as HTML" row wrapped to two lines while every other row (including longer labels) stayed on one line — its sibling description text ("Copy rendered HTML to clipboard", the longest in the list) was crowding the label column in that row only, with no per-row consistency. Labels are now `flex-shrink: 0` in their own `.export-label` span; descriptions wrap instead, since they're secondary text. The new Command Palette's More-menu entry had the same issue, fixed by letting `#more-dropdown` size to its widest row instead of a fixed `min-width`.
+
+#### Added
+- **Command palette** (`Ctrl/⌘+K` outside the editor, or More menu → Command Palette): a searchable, keyboard-navigable list of ~30 app-wide actions — view modes, every panel, sharing, room lock, clear/export/import, and all 7 themes. Filtering is a plain token-substring match (`filterCommands()` in `utils.js`, deliberately not fuzzy-scored, for predictable results); rendering lives in `ui.js` (`renderCommandPaletteResults()`); the action registry lives in `app.js` and, where a guarded button already exists for an action (permission checks, confirm dialogs, toasts), runs it via the same button rather than re-implementing the guard. `Ctrl/⌘+K` stays "insert markdown link" inside the editor — same key, contextual, mirroring how `Ctrl+F` already splits behavior on focus. Covered by `tests/command-palette.spec.js`.
+
+#### Changed
+- Re-verified all ~38 Markdown Guide features against the renderer directly (no changes needed — output matched the Phase 19 audit exactly, confirming no regressions).
+
 ### Phase 19 — Live/Split focus indicator, Markdown Guide compliance pass
 
 Branch: `claude/codebase-review-testing-fjicqa`
