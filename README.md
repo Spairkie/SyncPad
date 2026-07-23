@@ -9,7 +9,7 @@
 
 > ⚠️ **Personal / demo project.**  
 > SyncPad is a personal project built for learning and portfolio purposes.  
-> **Read-only links are a frontend/convenience control, not a backend-enforced security boundary** — anyone with the Supabase anon key can call the API directly and bypass them. (Room lock is the exception: it's enforced server-side by a database trigger, not just the frontend.)  
+> **Read-only links are now backend-enforced** (a separate edit token, not just `room_id`, is required to write — see `docs/security.md`), same as room lock. The trade-off: editable links are longer and, if lost, **unrecoverable** by design — there's no "regain edit access" flow.  
 > View-once is a convenience feature, not a secure destruction guarantee. A viewer may copy, screenshot, save, or otherwise preserve content before it clears.  
 > **Do not use SyncPad for passwords, HIPAA/PII, classified information, or any sensitive data.**
 
@@ -53,9 +53,9 @@
 - **Conflict notice** — Apply / Keep mine / Copy remote / Dismiss when two devices edit simultaneously
 
 ### Sharing
-- **Editable and read-only share links**
+- **Editable and read-only share links** — genuinely different access levels, not just a UI flag: the editable link carries a separate edit token that read-only links (and the plain room link) never do
 - **Redesigned share modal** with edit-access and read-only cards
-- **Short room codes** — a 6-character spoken/typed alternative to the full link (e.g. reading it aloud on a call); same access as the editable link, just a shorter spelling of it. Get one from the Share modal's "Short code" row; join with one by typing it straight into the landing page's join box. Requires the optional `docs/migrations/short-room-codes.sql` migration — see [Optional feature migrations](DEPLOYMENT.md#optional-feature-migrations)
+- **Short room codes** — a 6-character spoken/typed alternative to the full link (e.g. reading it aloud on a call), always read-only (a code resolves to the room, never to its edit token). Get one from the Share modal's "Short code" row; join with one by typing it straight into the landing page's join box. Requires the optional `supabase/migrations/0002_short_room_codes.sql` migration — see [Optional feature migrations](DEPLOYMENT.md#optional-feature-migrations)
 - **QR codes** with download button for each link type
 - **Room editing lock** — pause edits on all devices; enforced server-side by a database trigger, not just the frontend
 
@@ -69,6 +69,9 @@
 - **Templates Library v2** — 13 built-in templates (meeting, checklist, standup, bug report, code review, and more); searchable modal with two-column preview pane
 - **Custom templates** — save, rename, delete, export/import as JSON (localStorage-backed, up to 50 000 chars each)
 - **Find & Replace** — case-insensitive search with Prev / Next navigation, Replace, and Replace All
+- **Selection context menu** — right-click (or long-press) selected text for quick formatting (bold/italic/strikethrough/highlight/code/link) or to add a comment, without navigating to the toolbar or Comments panel first
+- **Inline comments** — anchor a comment to a text range from the Comments panel or the selection context menu above; requires the optional `supabase/migrations/0003_room_comments.sql` migration
+- **Version History** — browse and restore past snapshots of a room's content; requires the optional `supabase/migrations/0004_version_history.sql` migration
 - **Command palette** — `Ctrl/⌘ + K` (or the More menu) opens a searchable list of every app action — modes, panels, sharing, export, themes, and more — filter by typing, navigate with arrow keys, run with Enter
 - **Keyboard shortcuts** — see [Keyboard Shortcuts](#keyboard-shortcuts) below
 - **Export** — download as `.txt`, `.md`, rendered `.html`, or PDF (browser print); copy as plain text or rendered HTML
@@ -218,10 +221,10 @@ ORDER  BY room_id, uploaded_at;
 
 | Limitation | Notes |
 |---|---|
-| No backend-enforced permissions | All permission checks are client-side JavaScript |
-| No user accounts or authentication | Normal users do not log in; SyncPad is anonymous and link-based |
-| Read-only share links are bearer-token links | They hide the room path but are still possession-based access, not identity authorization |
-| Room lock IS backend-enforced | The one exception to the row above — a database trigger, not just frontend JS (see `docs/security.md`) |
+| No user accounts or authentication | Normal users do not log in; SyncPad is anonymous and link-based — "ownership" of a room means holding its edit-token link, not an identity |
+| Read-only vs. editable IS backend-enforced | Writing to a room requires a separate edit token, checked server-side (see `docs/security.md`) — not just a client-side flag |
+| Room lock IS backend-enforced | Same treatment — a database trigger, not just frontend JS |
+| Losing an editable link is unrecoverable | By design — there is no "regain edit access" flow, since building one would reopen the hole the edit-token system closes |
 | Admin access requires Supabase Auth | The `/admin` route is protected by `signInWithPassword` + `is_syncpad_admin()` RLS — not for end users |
 | View-once is convenience-only | Not a secure destruction guarantee; viewers can still copy or capture content before it clears |
 | Files are not end-to-end encrypted | Text encryption covers note content only unless file encryption is explicitly added |
@@ -322,6 +325,8 @@ See [`docs/playwright.md`](docs/playwright.md) for the full test guide.
 
 ### Recently completed
 
+- [x] Real server-side read-only enforcement — a separate edit token, not `room_id`, is now required to write; see `supabase/migrations/0007_room_edit_tokens.sql`
+- [x] Command palette — `Ctrl/⌘+K` opens a searchable list of every app action
 - [x] Multi-file upload — drag-and-drop and file-picker both accept multiple files at once, uploaded sequentially with per-file progress
 - [x] Correct download filenames — downloads now carry the original uploaded filename via a forced-download signed URL, instead of the sanitized/timestamped Storage path name
 - [x] PWA last-room resume — installed/standalone launches reopen the last room instead of the landing screen
@@ -352,8 +357,8 @@ See [`docs/playwright.md`](docs/playwright.md) for the full test guide.
 
 ### Outside current demo scope
 
-- Read-only link PIN
-- Production-grade backend authorization and rate limiting
+- Recovering a lost editable link (would reopen the hole the edit-token system closes — see Known Limitations)
+- Rate limiting (room creation, edit-token verification attempts, share-link resolution)
 - Live deployment verification after Supabase/GitHub Pages secrets are configured
 
 ---

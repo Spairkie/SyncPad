@@ -5,7 +5,7 @@
 -- so the script is fully idempotent.
 --
 -- Run this in your Supabase project → SQL Editor AFTER the
--- base supabase-setup.sql has been applied.
+-- base 0001_base_schema.sql has been applied.
 --
 -- What this migration adds
 -- ────────────────────────

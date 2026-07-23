@@ -121,7 +121,9 @@ Transitions for background-color (0.22 s ease) are applied to `body`, panels, an
 
 - **Bulk file delete requires `danger: true`.** Pass `{ danger: true }` to `showConfirm()` so that Cancel is focused by default, protecting users from accidental mass deletion.
 
-- **Read-only share links with passcode/encryption.** If a room has `passcode_hash` or `encryption_enabled` set and the user arrives via a read-only share link, show the info screen — not the authentication screen. Check the permission context before deciding which screen to render.
+- **Read-only share links with passcode/encryption.** A read-only visitor to a passcode-protected or encrypted room still sees the normal authentication screen (passcode/encryption prompt) and must pass it to view the room — the info screen is only shown when the room/share link itself doesn't exist. Passing the gate does not grant edit access; that's decided separately by whether a valid `?et=` edit token was also present (see `supabase/migrations/0007_room_edit_tokens.sql`).
+
+- **Editable links carry an edit token; nothing else does.** `?et=<token>` on a room URL is the only way to get write access — a plain room link, `?mode=read`, `/share/:token`, and short codes are all read-only by construction. `rooms.js` holds the current session's token as module-level state (`setEditToken()`/`getEditToken()`), mirroring `permissions.js`'s context pattern; `app.js` resets it via `setEditToken(null)` on every room navigation, same as `_encKey`.
 
 - **Admin route uses Supabase Auth.** The admin dashboard authenticates via `signInWithPassword` and relies on the `is_syncpad_admin()` RLS function. Anonymous users must not be able to reach admin data even if they manipulate the client.
 

@@ -1,6 +1,6 @@
 // SyncPad – revisions.js
 // Version history: saves/lists snapshots of a room's content
-// (syncpad_room_revisions, see docs/migrations/version-history.sql).
+// (syncpad_room_revisions, see supabase/migrations/0004_version_history.sql).
 //
 // `content` here is exactly what would be written to syncpad_rooms.content —
 // for encrypted rooms that means ciphertext, same as the live room row, so

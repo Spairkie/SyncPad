@@ -4,14 +4,14 @@ SyncPad's `/admin` screen uses Supabase Auth for sign-in and the `public.syncpad
 
 ## 1. Apply Database Setup
 
-Run `supabase-setup.sql` in the Supabase SQL Editor first. It creates:
+Run `supabase/migrations/0001_base_schema.sql` in the Supabase SQL Editor first. It creates:
 
 - `public.syncpad_admins`
 - `public.is_syncpad_admin()`
 - admin-only RLS policies for rooms, files, reports, and share links
 - authenticated baseline policies so normal app behavior still works after an admin signs in
 
-Optionally, also run [`docs/migrations/admin-dashboard-improvements.sql`](migrations/admin-dashboard-improvements.sql) for the admin audit log and room quarantine support — see [Optional feature migrations](../DEPLOYMENT.md#optional-feature-migrations) in `DEPLOYMENT.md` for the full list of opt-in migrations.
+Optionally, also run [`supabase/migrations/0006_admin_dashboard_improvements.sql`](migrations/admin-dashboard-improvements.sql) for the admin audit log and room quarantine support — see [Optional feature migrations](../DEPLOYMENT.md#optional-feature-migrations) in `DEPLOYMENT.md` for the full list of opt-in migrations.
 
 ## 2. Create an Auth User
 

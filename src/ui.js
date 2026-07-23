@@ -911,7 +911,7 @@ export function populateShareModal({
   const codeSection = document.getElementById('share-code-section');
   if (codeSection) codeSection.classList.toggle('hidden', !showRoomCode);
   if (showRoomCode) {
-    const codeDisplay = roomCode || (roomCodeError ? 'Short codes need one more setup step — see docs/migrations/short-room-codes.sql.' : 'Generating short code…');
+    const codeDisplay = roomCode || (roomCodeError ? 'Short codes need one more setup step — see supabase/migrations/0002_short_room_codes.sql.' : 'Generating short code…');
     _wireShareRow({ fieldId: 'share-code-text', copyBtnId: 'share-code-copy', openId: null, nativeBtnId: null, errorId: 'share-code-error', url: roomCode, displayValue: codeDisplay });
   }
 }
@@ -1618,6 +1618,16 @@ export function setMarkdownMode(mode, renderFn, { live = false } = {}) {
       _wireScrollSync(editor, preview);
     }
   }
+}
+
+/** Cursor chat needs a live caret with screen coordinates (Live/Split only) — see _applyMarkdownMode()'s call site. */
+export function setCursorChatButtonEnabled(enabled) {
+  const btn = document.getElementById('btn-cursor-chat');
+  if (!btn) return;
+  btn.disabled = !enabled;
+  btn.title = enabled
+    ? 'Send a quick note near your cursor (Ctrl+Shift+/) — Live/Split only'
+    : 'Switch to Live or Split mode to send a cursor chat';
 }
 
 // ── Pasted/dropped image resolution (preview mode) ─────────────────────────────

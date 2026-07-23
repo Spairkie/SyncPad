@@ -1,6 +1,6 @@
 // tests/comments.spec.js
 // Ephemeral comments anchored to a text range — opt-in, cascade away with
-// the room (see docs/migrations/room-comments.sql), no independent lifetime.
+// the room (see supabase/migrations/0003_room_comments.sql), no independent lifetime.
 
 import { test, expect } from '@playwright/test';
 import { createRoom, typeInEditor, getShareUrl } from './helpers.js';

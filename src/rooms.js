@@ -7,6 +7,29 @@ const TABLE = 'syncpad_rooms';
 export const REPORT_REASONS = new Set(['Spam', 'Abuse or harassment', 'Illegal or harmful content', 'Private information', 'Other']);
 const REPORTS_TABLE = 'syncpad_room_reports';
 
+// ── Edit token (session-scoped write credential) ────────────────────────────
+// Room content/settings writes are no longer possible with room_id alone —
+// see supabase/migrations/0007_room_edit_tokens.sql for why (a read-only
+// viewer necessarily learns room_id too, so room_id can't double as the
+// write credential). Every write function below reads this module-level
+// token rather than taking it as a parameter, so app.js/settings.js/sync.js
+// keep calling the same functions they always have — app.js just calls
+// setEditToken() once when a room loads (or right after creating one), and
+// resets it to null on navigation, exactly like permissions.js's context.
+let _editToken = null;
+export function setEditToken(token) { _editToken = token || null; }
+export function getEditToken() { return _editToken; }
+
+async function _rpcUpdateRoom(roomId, patch, label) {
+  const sb = getSupabaseClient();
+  const { error } = await sb.rpc('rpc_update_room', {
+    p_room_id: roomId,
+    p_edit_token: _editToken,
+    p_patch: patch,
+  });
+  if (error) { logSupabaseError(label, error, { room_id: roomId }); throw error; }
+}
+
 // ── Read ─────────────────────────────────────────────────────────────────────
 
 export async function loadRoom(roomId) {
@@ -16,44 +39,70 @@ export async function loadRoom(roomId) {
   return data;
 }
 
+/** Check whether a held edit token is actually valid for a room, before ever attempting a write. */
+export async function verifyEditToken(roomId, token) {
+  if (!token) return false;
+  const sb = getSupabaseClient();
+  const { data, error } = await sb.rpc('verify_edit_token', { p_room_id: roomId, p_edit_token: token });
+  if (error) { logSupabaseError('verifyEditToken', error, { room_id: roomId }); return false; }
+  return !!data;
+}
+
+/**
+ * Consume a view-once room server-side. Deliberately does NOT require an
+ * edit token — a view-once reader is, by definition, not the room's
+ * creator and never holds one. See rpc_consume_view_once() in
+ * supabase/migrations/0007_room_edit_tokens.sql.
+ * @returns {Promise<boolean>} true if this call consumed the note
+ */
+export async function consumeViewOnceRemote(roomId, replacementContent, requestingDevice) {
+  const sb = getSupabaseClient();
+  const { data, error } = await sb.rpc('rpc_consume_view_once', {
+    p_room_id: roomId,
+    p_replacement_content: replacementContent,
+    p_requesting_device: requestingDevice,
+  });
+  if (error) { logSupabaseError('consumeViewOnceRemote', error, { room_id: roomId }); throw error; }
+  return !!data;
+}
+
 // ── Create ───────────────────────────────────────────────────────────────────
+// Returns the new room row plus its edit_token (shown here once — there is
+// no "look up an existing room's token" path, by design). Caller is
+// responsible for calling setEditToken() with it and keeping it (in the URL)
+// or edit access is permanently lost.
 
 export async function createRoom(roomId) {
   const sb       = getSupabaseClient();
   const deviceId = getDeviceId();
-  const { data, error } = await sb.from(TABLE)
-    .insert({
-      room_id:            roomId,
-      room_name:          roomId,
-      content:            '',
-      created_by_device:  deviceId,
-      updated_by_device:  deviceId,
-      encryption_enabled: false,
-      view_once:          false,
-      viewed:             false,
-    })
-    .select()
-    .single();
+  const { data, error } = await sb.rpc('create_room_with_edit_token', {
+    p_room_id: roomId,
+    p_room_name: roomId,
+    p_created_by_device: deviceId,
+  });
 
   if (error) {
-    // Race condition: another client created it first
-    if (error.code === '23505') return loadRoom(roomId);
+    // Race/collision on room_id (vanishingly rare given generateRoomId()'s
+    // entropy): unlike the old insert-based flow, we can't fall back to
+    // loadRoom() here — that would silently hand the caller someone else's
+    // room read-only (no edit token for it). Callers should regenerate a
+    // fresh room_id and retry.
     logSupabaseError('createRoom', error, { room_id: roomId });
     throw error;
   }
-  return data;
+  const row = Array.isArray(data) ? data[0] : data;
+  if (row?.edit_token) setEditToken(row.edit_token);
+  return row;
 }
 
 // ── Content save (used by sync.js only) ──────────────────────────────────────
 
 export async function saveContent(roomId, content) {
-  const sb = getSupabaseClient();
-  const { error } = await sb.from(TABLE).update({
+  await _rpcUpdateRoom(roomId, {
     content,
     updated_by_device: getDeviceId(),
-    cleared_reason:    null,
-  }).eq('room_id', roomId);
-  if (error) { logSupabaseError('saveContent', error, { room_id: roomId }); throw error; }
+    cleared_reason: null,
+  }, 'saveContent');
 }
 
 export function normalizeRoomDisplayName(title) {
@@ -63,19 +112,16 @@ export function normalizeRoomDisplayName(title) {
 }
 
 export async function updateRoomDisplayName(roomId, title) {
-  const sb = getSupabaseClient();
   const roomName = normalizeRoomDisplayName(title);
-  const { error } = await sb.from(TABLE).update({
+  await _rpcUpdateRoom(roomId, {
     room_name: roomName,
     updated_by_device: getDeviceId(),
-  }).eq('room_id', roomId);
-  if (error) { logSupabaseError('updateRoomDisplayName', error, { room_id: roomId }); throw error; }
+  }, 'updateRoomDisplayName');
 }
 
 // ── Settings-only update (strips content to prevent accidental overwrites) ───
 
 export async function updateRoomSettings(roomId, settings) {
-  const sb   = getSupabaseClient();
   const safe = { ...settings };
   delete safe.content;
   delete safe.room_id;
@@ -83,30 +129,25 @@ export async function updateRoomSettings(roomId, settings) {
   // DB owns updated_at via trigger; client should not stamp it with local time.
   safe.updated_by_device = getDeviceId();
 
-  const { error } = await sb.from(TABLE).update(safe).eq('room_id', roomId);
-  if (error) { logSupabaseError('updateRoomSettings', error, { room_id: roomId }); throw error; }
+  await _rpcUpdateRoom(roomId, safe, 'updateRoomSettings');
 }
 
 // ── Full update (allows content — used by encryption/expiration/view-once) ───
 
 export async function updateRoom(roomId, data) {
-  const sb   = getSupabaseClient();
   const safe = { ...data };
   delete safe.room_id; // never allow overwriting the PK
-  const { error } = await sb.from(TABLE).update(safe).eq('room_id', roomId);
-  if (error) { logSupabaseError('updateRoom', error, { room_id: roomId }); throw error; }
+  await _rpcUpdateRoom(roomId, safe, 'updateRoom');
 }
 
 // ── Clear content ─────────────────────────────────────────────────────────────
 
 export async function clearRoomContent(roomId, reason, replacementContent = '') {
-  const sb = getSupabaseClient();
-  const { error } = await sb.from(TABLE).update({
-    content:           replacementContent,
+  await _rpcUpdateRoom(roomId, {
+    content: replacementContent,
     updated_by_device: getDeviceId(),
-    cleared_reason:    reason || 'manual',
-  }).eq('room_id', roomId);
-  if (error) { logSupabaseError('clearRoomContent', error, { room_id: roomId }); throw error; }
+    cleared_reason: reason || 'manual',
+  }, 'clearRoomContent');
 }
 
 
@@ -127,9 +168,11 @@ export async function resolveReadOnlyShareLink(token) {
 
 // ── Short room codes ─────────────────────────────────────────────────────────
 // A short (6-char), human-typeable/speakable alternate spelling of a room's
-// full id — same access level as the editable link, just shorter. See
-// docs/migrations/short-room-codes.sql for the generation/lookup RPCs and
-// the reasoning behind treating it as equivalent (not reduced) trust.
+// full id, for reading aloud or typing on another device. Since the edit
+// token redesign (0007_room_edit_tokens.sql), resolving a code only ever
+// yields room_id — never an edit token — so joining by code is always
+// read-only, the same as visiting the plain link. See
+// supabase/migrations/0002_short_room_codes.sql for the generation/lookup RPCs.
 
 export async function getOrCreateRoomCode(roomId) {
   const sb = getSupabaseClient();
@@ -148,7 +191,7 @@ export async function resolveRoomCode(code) {
 }
 
 // ── Device-limited rooms ("burn after N devices join") ───────────────────────
-// See docs/migrations/device-limit.sql. Call once per room load, mirroring
+// See supabase/migrations/0005_device_limit.sql. Call once per room load, mirroring
 // how consumeViewOnce() is called — the caller already has the content in
 // hand from loadRoom() and keeps showing it even when this call reports the
 // limit was just hit by this very view.

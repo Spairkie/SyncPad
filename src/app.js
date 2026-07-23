@@ -6,11 +6,11 @@ import {
   generateRoomId, sanitizeRoomId,
   copyToClipboard, insertTimestamp,
   isMobile, isOnline, onOnlineChange,
-  buildRoomUrl, buildReadOnlyUrl, getUrlMode, parseDuration,
+  buildRoomUrl, buildReadOnlyUrl, buildEditableRoomUrl, getUrlMode, getUrlEditToken, parseDuration,
   escapeHtml, debounce, formatTimestamp, filterCommands,
 } from './utils.js';
 
-import { loadRoom, createRoom, clearRoomContent, subscribeToRoom, getOrCreateReadOnlyShareLink, resolveReadOnlyShareLink, getOrCreateRoomCode, resolveRoomCode, recordRoomDeviceView, setDeviceLimit, clearDeviceLimit, updateRoomDisplayName, normalizeRoomDisplayName, submitRoomReport, REPORT_REASONS } from './rooms.js';
+import { loadRoom, createRoom, verifyEditToken, setEditToken, getEditToken, clearRoomContent, subscribeToRoom, getOrCreateReadOnlyShareLink, resolveReadOnlyShareLink, getOrCreateRoomCode, resolveRoomCode, recordRoomDeviceView, setDeviceLimit, clearDeviceLimit, updateRoomDisplayName, normalizeRoomDisplayName, submitRoomReport, REPORT_REASONS } from './rooms.js';
 import { listRevisions } from './revisions.js';
 import { listComments, addComment, deleteComment, subscribeToComments } from './comments.js';
 
@@ -81,7 +81,7 @@ let _monospace     = false;
 let _eventsWired   = false;  // v1: guard against double-wiring
 let _consumingViewOnce = false; // v1: short-circuit own view-once clear echo
 let _viewOnceConsumedByThisSession = false; // session-local allowlist for first consumer view
-let _isReadOnly    = false;  // v1: ?mode=read or /share/:token
+let _isReadOnly    = false;  // ?mode=read, /share/:token, or no valid ?et= edit token
 let _shareToken    = null;
 let _markdownMode  = 'write'; // 'write' | 'preview' | 'split'
 let _showPreview   = false;  // derived: _markdownMode !== 'write'
@@ -133,6 +133,7 @@ const EXPIRATION_TIMER_MAX_DELAY_MS = 2147483647;
 // always starts at "create or join". Regular browser tabs are unaffected — this
 // only applies when display-mode is standalone (or iOS's legacy navigator.standalone).
 const LAST_ROOM_KEY       = 'syncpad_last_room_id';
+const LAST_ROOM_TOKEN_KEY = 'syncpad_last_room_edit_token';
 const RESUME_SUPPRESS_KEY = 'syncpad_suppress_resume';
 
 function _isStandalonePwa() {
@@ -142,8 +143,15 @@ function _isStandalonePwa() {
   } catch { return false; }
 }
 
-function _rememberLastRoom(roomId) {
-  try { localStorage.setItem(LAST_ROOM_KEY, roomId); } catch {}
+// editToken is required — PWA resume without it would silently reopen the
+// last room read-only, defeating the entire point of "resume where you left
+// off". Only called for genuinely editable sessions (see its call site).
+function _rememberLastRoom(roomId, editToken) {
+  try {
+    localStorage.setItem(LAST_ROOM_KEY, roomId);
+    if (editToken) localStorage.setItem(LAST_ROOM_TOKEN_KEY, editToken);
+    else localStorage.removeItem(LAST_ROOM_TOKEN_KEY);
+  } catch {}
 }
 
 // Any control that deliberately navigates to the app root (header logo,
@@ -330,12 +338,16 @@ async function boot() {
     if (suppressResume) { try { sessionStorage.removeItem(RESUME_SUPPRESS_KEY); } catch {} }
 
     let lastRoom = null;
+    let lastRoomToken = null;
     if (!suppressResume && _isStandalonePwa()) {
-      try { lastRoom = localStorage.getItem(LAST_ROOM_KEY); } catch {}
+      try {
+        lastRoom = localStorage.getItem(LAST_ROOM_KEY);
+        lastRoomToken = localStorage.getItem(LAST_ROOM_TOKEN_KEY);
+      } catch {}
     }
 
     if (lastRoom) {
-      const qs = location.search || '';
+      const qs = lastRoomToken ? `?et=${encodeURIComponent(lastRoomToken)}` : '';
       history.replaceState(null, '', `${BASE}/${lastRoom}${qs}`);
       await joinRoom(lastRoom);
       return;
@@ -421,7 +433,7 @@ async function _openShareModal() {
     roomCodeError = true;
   }
   UI.populateShareModal({
-    editableUrl: buildRoomUrl(BASE, _roomId),
+    editableUrl: buildEditableRoomUrl(BASE, _roomId, getEditToken()),
     readOnlyUrl,
     readOnlyError,
     roomPath: `/${_roomId}` ,
@@ -445,14 +457,13 @@ function wireLandingEvents() {
 
   const handleCreateRoomClick = () => {
     const roomId = generateRoomId();
-    const qs     = location.search || '';
-    history.pushState(null, '', `${BASE}/${roomId}${qs}`);
+    history.pushState(null, '', `${BASE}/${roomId}`);
     UI.showScreen('loading');
-    joinRoom(roomId);
+    joinRoom(roomId, { isNewRoom: true });
   };
 
   // A bare 6-character code from the short-code alphabet (see
-  // docs/migrations/short-room-codes.sql) — distinct enough from
+  // supabase/migrations/0002_short_room_codes.sql) — distinct enough from
   // generateRoomId()'s "adjective-noun-suffix" shape and from any
   // sanitizeRoomId() output containing a URL/slash that a false-positive
   // match against a deliberately-chosen custom room id is very unlikely.
@@ -477,11 +488,13 @@ function wireLandingEvents() {
       } catch { /* fall through to the literal-room-id path below */ }
     }
 
-    // Accept full URL or bare ID
-    let id;
+    // Accept full URL (preserving ?et=/?mode= so a pasted editable or
+    // explicit read-only link keeps working) or a bare ID.
+    let id, qs = '';
     try {
       const url = new URL(raw);
       id = _stripBasePath(url.pathname).replace(/^\/+|\/+$/g, '');
+      qs = url.search || '';
     } catch {
       id = raw;
     }
@@ -492,7 +505,7 @@ function wireLandingEvents() {
       joinInput.focus();
       return;
     }
-    history.pushState(null, '', `${BASE}/${id}`);
+    history.pushState(null, '', `${BASE}/${id}${qs}`);
     UI.showScreen('loading');
     joinRoom(id);
   };
@@ -605,34 +618,62 @@ async function joinReadOnlyShareRoute(token) {
   }
 }
 
-async function joinRoom(roomId) {
+async function joinRoom(roomId, { isNewRoom = false } = {}) {
+  // Captured BEFORE teardownRealtimeSession(), which (defensively) resets
+  // _isReadOnly to false — read after that would silently lose ?mode=read
+  // and /share/:token's forced-read-only signal on every single navigation.
+  //
+  // Forced read-only routes (?mode=read, /share/:token — both already set
+  // _isReadOnly=true before joinRoom() is ever called) never consider an
+  // edit token even if one happens to be present in the URL: that's the
+  // point of a link handed to someone specifically to restrict them. Every
+  // other route derives editability from a verified ?et= — see
+  // supabase/migrations/0007_room_edit_tokens.sql for why room_id alone
+  // can no longer imply write access.
+  const forcedReadOnly = _isReadOnly;
+  const candidateToken = forcedReadOnly ? null : getUrlEditToken();
+
   teardownRealtimeSession();
   _roomId = roomId;
   _viewOnceConsumedByThisSession = false;
   UI.setLoadingMessage('Loading room…');
 
   try {
-    let room = await loadRoom(roomId);
-    if (!room) {
-      // Read-only clients should NOT auto-create rooms; the room must already exist.
-      if (_isReadOnly) {
-        UI.setInfoScreen({
+    if (isNewRoom) {
+      UI.setLoadingMessage('Creating room…');
+      _room = await createRoom(roomId); // also calls setEditToken() internally
+      _isReadOnly = false;
+      history.replaceState(null, '', buildEditableRoomUrl(BASE, roomId, getEditToken()));
+    } else {
+      const room = await loadRoom(roomId);
+      if (!room) {
+        UI.setInfoScreen(forcedReadOnly ? {
           title: 'Share link unavailable',
           message: 'This read-only link points to a room that does not exist.',
+        } : {
+          title: 'Room not found',
+          message: 'This room does not exist. Create a new room from the home screen.',
         });
         UI.showScreen('info');
         return;
       }
-      UI.setLoadingMessage('Creating room…');
-      room = await createRoom(roomId);
+      if (!forcedReadOnly && candidateToken) {
+        const ok = await verifyEditToken(roomId, candidateToken);
+        _isReadOnly = !ok;
+        setEditToken(ok ? candidateToken : null);
+        if (!ok) UI.showToast('This edit link is invalid or has expired — opening read-only.', 'warning', 6000);
+      } else {
+        _isReadOnly = true;
+        setEditToken(null);
+      }
+      _room = room;
     }
-    _room = room;
   } catch (err) {
     // Log the raw error so RLS / network failures are diagnosable in DevTools.
     console.error('[SyncPad] joinRoom failed for', roomId, err);
     UI.showLoadingError(
       'Could not load room — check your connection and try again.',
-      () => joinRoom(roomId),  // retry callback
+      () => joinRoom(roomId, { isNewRoom }),  // retry callback
     );
     return;
   }
@@ -732,8 +773,10 @@ async function startApp() {
 
   // Remember this room for PWA "resume last room" (see _isStandalonePwa()).
   // Only for genuine editable visits — not read-only share links or ?mode=read,
-  // which are bound to someone else's link rather than "my" room.
-  if (!_isReadOnly) _rememberLastRoom(_roomId);
+  // which are bound to someone else's link rather than "my" room. Stores the
+  // edit token too — without it, resuming would silently reopen the room
+  // read-only (see getEditToken()'s doc comment in rooms.js).
+  if (!_isReadOnly) _rememberLastRoom(_roomId, getEditToken());
 
   // ── Expiration check ───────────────────────────────────────────────────────
   if (_room.expires_at && new Date(_room.expires_at) <= new Date()) {
@@ -761,7 +804,7 @@ async function startApp() {
   // configured number of distinct devices has been reached ─────────────────
   // The creator's own devices don't consume a slot — same reasoning as
   // View-once's isCreator exclusion above. Best-effort: a Supabase project
-  // that hasn't run docs/migrations/device-limit.sql yet just has
+  // that hasn't run supabase/migrations/0005_device_limit.sql yet just has
   // device_limit stay null forever, so this never fires for it.
   if (_room.device_limit && !isCreator) {
     try {
@@ -947,7 +990,7 @@ async function startApp() {
   await refreshFiles();
 
   // Best-effort: a Supabase project that hasn't run
-  // docs/migrations/room-comments.sql yet just never shows any comments —
+  // supabase/migrations/0003_room_comments.sql yet just never shows any comments —
   // _refreshComments() swallows the failure rather than surfacing an error
   // toast for what is an entirely optional feature.
   _unsubComments = subscribeToComments(_roomId, () => _refreshComments());
@@ -1554,6 +1597,7 @@ function _wireShortcuts() {
     onForceClose: () => {
       document.getElementById('more-dropdown')?.classList.remove('open');
       document.getElementById('btn-more')?.setAttribute('aria-expanded', 'false');
+      _closeEditorContextMenu();
       UI.closeAllPanels();
       UI.closeAllModals();
     },
@@ -1904,16 +1948,7 @@ function _wireEditorToolbarAndLifecycle() {
     const btn = e.target.closest('[data-md-action]');
     if (!btn) return;
     e.preventDefault(); // keep editor focus
-    if (!canEdit()) return;
-    // Preview mode: the textarea is hidden, so the live surface is the only
-    // real target. Split mode: act on whichever pane currently has focus,
-    // textarea by default (matches the toolbar's pre-live-surface behaviour).
-    const useLive = LiveEditor.isMounted() && (_markdownMode === 'preview' || LiveEditor.hasFocus());
-    if (useLive) {
-      _applyMarkdownFormat(btn.dataset.mdAction, LiveEditor.asEditorProxy());
-    } else if (editor) {
-      _applyMarkdownFormat(btn.dataset.mdAction, editor);
-    }
+    _applyFormatToActiveSurface(btn.dataset.mdAction);
   });
 
   // Broadcast cursor line on selection/click (throttled in presence.js at 800ms).
@@ -2091,6 +2126,57 @@ function _wireHeader() {
     if (e.key === 'Escape') { e.preventDefault(); UI.setRoomTitleEditMode(false); }
   });
 
+}
+
+// ── Editor selection context menu ───────────────────────────────────────────
+// Right-click (or long-press, on touch) a text selection in either surface
+// (Source textarea or Live/Split's CM6 pane) for quick formatting/comment
+// actions, instead of always having to reach for the toolbar or open the
+// Comments panel first.
+
+function _closeEditorContextMenu() {
+  document.getElementById('editor-context-menu')?.classList.remove('visible');
+}
+
+function _openEditorContextMenu(x, y) {
+  const menu = document.getElementById('editor-context-menu');
+  if (!menu) return;
+  menu.classList.add('visible');
+  // Clamp so a right-click near the viewport edge doesn't render off-screen.
+  const rect = menu.getBoundingClientRect();
+  const left = Math.min(x, window.innerWidth  - rect.width  - 8);
+  const top  = Math.min(y, window.innerHeight - rect.height - 8);
+  menu.style.left = `${Math.max(8, left)}px`;
+  menu.style.top  = `${Math.max(8, top)}px`;
+}
+
+function _wireEditorContextMenu() {
+  const menu = document.getElementById('editor-context-menu');
+  const wrap = document.querySelector('.editor-wrap');
+  if (!menu || !wrap) return;
+
+  wrap.addEventListener('contextmenu', (e) => {
+    if (!canEdit()) return; // fall through to the native menu (still lets read-only visitors copy)
+    const range = _currentSelectionRange();
+    if (!range || range.to <= range.from) return; // no selection — native menu is more useful here
+    e.preventDefault();
+    _openEditorContextMenu(e.clientX, e.clientY);
+  });
+
+  menu.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-ctx-action]');
+    if (!btn) return;
+    const action = btn.dataset.ctxAction;
+    _closeEditorContextMenu();
+    if (action === 'comment') _openCommentsPanel();
+    else _applyFormatToActiveSurface(action);
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!menu.contains(e.target)) _closeEditorContextMenu();
+  });
+  document.addEventListener('scroll', _closeEditorContextMenu, true);
+  window.addEventListener('resize', _closeEditorContextMenu);
 }
 
 function _wireSegmentedMarkdownControl() {
@@ -2571,7 +2657,7 @@ function _wireSettings() {
       _renderRoomHeader();
       UI.renderSettingsPanel(_room);
       broadcastSettingsChange();
-    } catch { UI.showToast('Could not update device limit. Has docs/migrations/device-limit.sql been run?', 'error', 5000); }
+    } catch { UI.showToast('Could not update device limit. Has supabase/migrations/0005_device_limit.sql been run?', 'error', 5000); }
   });
 
   // Lock-editing toggle
@@ -3031,6 +3117,7 @@ function wireEvents() {
   _wirePasteSanitization();
   _wireEditorPreferenceToggles();
   _wireCommandPalette();
+  _wireEditorContextMenu();
 }
 
 // ── Editor preference helpers ─────────────────────────────────────────────────
@@ -3055,6 +3142,27 @@ function _syncMonospaceSettingUI() {
 }
 
 // ── Markdown format helpers ───────────────────────────────────────────────────
+
+/**
+ * Resolve which surface (plain textarea or CM6 live proxy) a formatting
+ * action should target, then apply it — shared by the toolbar and the
+ * selection context menu so both act on "whichever pane you're actually
+ * looking at/selected text in" identically.
+ */
+function _applyFormatToActiveSurface(action) {
+  if (!canEdit()) return;
+  const editor = document.getElementById('note-editor');
+  // Preview mode: the textarea is hidden, so the live surface is the only
+  // real target. Split mode: act on whichever pane currently has focus,
+  // textarea by default (matches the toolbar's pre-live-surface behaviour).
+  const useLive = LiveEditor.isMounted() && (_markdownMode === 'preview' || LiveEditor.hasFocus());
+  if (useLive) {
+    _applyMarkdownFormat(action, LiveEditor.asEditorProxy());
+  } else if (editor) {
+    _applyMarkdownFormat(action, editor);
+  }
+}
+
 /**
  * Apply a formatting action to the editor textarea.
  * Called by the toolbar (mousedown) and can be reused by other code.
@@ -3197,6 +3305,10 @@ function teardownRealtimeSession() {
   // silently encrypt saves in a subsequent non-encrypted room.
   _encKey  = null;
   _encSalt = null;
+  // Reset the edit token so a valid token for the previous room is never
+  // sent along with a write to the next one (joinRoom() re-derives and
+  // re-sets it, from the new room's ?et= if any, before any write can happen).
+  setEditToken(null);
   // Reset editor mode so the next room always starts in plain-write view
   // rather than inheriting preview / split mode from the previous room.
   // setMarkdownMode() cleans up DOM mode classes immediately (mode-split, etc.)
@@ -3401,7 +3513,7 @@ async function _submitComment(text, anchor) {
     await _refreshComments();
     UI.showToast('Comment added.', 'success');
   } catch {
-    UI.showToast('Could not add comment. Has docs/migrations/room-comments.sql been run?', 'error', 5000);
+    UI.showToast('Could not add comment. Has supabase/migrations/0003_room_comments.sql been run?', 'error', 5000);
   }
 }
 
@@ -3453,7 +3565,7 @@ async function _refreshComments() {
     _lastComments = comments;
     LiveEditor.setCommentAnchors(comments.map((c) => ({ id: c.id, from: c.anchor_from, to: c.anchor_to })));
   } catch {
-    // Best-effort — a project that hasn't run docs/migrations/room-comments.sql
+    // Best-effort — a project that hasn't run supabase/migrations/0003_room_comments.sql
     // yet just never shows any comments. See the subscribeToComments() call site.
   }
 }
@@ -3503,6 +3615,11 @@ function _applyMarkdownMode(mode) {
 
   UI.setMarkdownMode(mode, () => renderMarkdown(UI.getEditorValue()), { live });
   if (_showPreview && !live) _wirePreviewClickOnce();
+  // Cursor chat only makes sense where there's a live caret with screen
+  // coordinates to anchor a bubble to (Live/Split) — previously the footer
+  // button stayed fully active in Write mode too, and clicking it there
+  // only explained why nothing happened after the fact, via a toast.
+  UI.setCursorChatButtonEnabled(mode !== 'write');
 
   // Proportional scroll sync only makes sense when both panes are visible.
   if (mode === 'split' && live) {

@@ -148,7 +148,7 @@ Use this checklist before publishing a new version or sharing the demo link.
 
 ## 10. Deployment
 
-- [ ] `supabase-setup.sql` applied successfully in Supabase SQL Editor
+- [ ] `supabase/migrations/0001_base_schema.sql` applied successfully in Supabase SQL Editor
 - [ ] `syncpad-files` Storage bucket exists and is **private**
 - [ ] Storage policies applied (upload, read, delete for `anon`)
 - [ ] Storage cleanup warning acknowledged: SQL-only room deletion does not remove physical `syncpad-files` objects
