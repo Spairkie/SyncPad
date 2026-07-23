@@ -15,7 +15,7 @@
 //   Ctrl/Cmd + Shift + K     Open share modal
 //   Ctrl/Cmd + Shift + T     Insert timestamp
 //   Ctrl/Cmd + Shift + C     Copy note
-//   Ctrl/Cmd + Shift + /     Send a cursor chat message (Preview/Split only)
+//   Ctrl/Cmd + Shift + /     Send a cursor chat message
 //   Ctrl/Cmd + /             Open shortcuts modal
 //   Esc                      Close panel / modal / dropdown
 

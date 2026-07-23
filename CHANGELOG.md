@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Phase 23 — Cursor chat now works in Write mode too
+
+Branch: `claude/codebase-review-testing-fjicqa`
+
+#### Changed
+- **Cursor chat works on every editing surface, not just Preview/Split.** Phase 22 disabled the footer button outside Live/Split because Write mode's plain `<textarea>` has no native API for "give me the screen pixel position of character offset N" the way CM6's `coordsAtPos()` does for the live surface. That measurement already existed for a different feature, though: Focus Mode and Typewriter Mode both position themselves via a mirror-div technique in `ui.js` (`_measureCaretPixelY`) that clones the textarea's computed font/padding/border onto an offscreen div and reads a marker's offset. Generalized it to `_measureCaretOffset()` (returns `{x, y}`, not just `y`) and added `getCaretViewportCoords(pos)`, which converts that into real viewport coordinates via `getBoundingClientRect()` — the Write-mode counterpart to `LiveEditor.coordsAtPos()`. `_openCursorChatComposer()` and the remote `onRemoteCursorChat` handler both now branch on which surface is actually visible instead of assuming CM6; `broadcastCursorChat` already sent a plain text offset rather than surface-specific coordinates, so this fixes sending *and* receiving in Write mode from a single change, with no wire-format changes. The footer button's `disabled` state, `setCursorChatButtonEnabled()`, and the associated CSS are removed as dead code now that it's always usable. Mode switches still clear any open composer/bubble (now unconditionally, not just when switching *to* Write) since a position measured on one surface doesn't carry over to another.
+
 ### Phase 22 — Selection context menu, focus indicator refinement, admin dashboard overhaul
 
 Branch: `claude/codebase-review-testing-fjicqa`

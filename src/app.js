@@ -916,13 +916,11 @@ async function startApp() {
       UI.showToast('This note was view-once and has been cleared from the server.', 'warning', 6000);
     },
     onRemoteCursorChat: (payload) => {
-      // Only meaningful where there's a real caret to anchor to — the CM6
-      // live surface, the same place remote carets themselves render.
-      // Write mode has no per-character screen coordinates to place a
-      // bubble at (and LiveEditor stays mounted-but-hidden there), so the
-      // message is silently dropped rather than faked into a wrong position.
-      if (_markdownMode === 'write' || !LiveEditor.isMounted()) return;
-      const coords = LiveEditor.coordsAtPos(payload.pos);
+      // payload.pos is a plain text offset — mode-agnostic on the wire.
+      // Resolve it to screen coordinates on whichever surface is actually
+      // visible locally, independent of what mode the sender was in.
+      const live = _markdownMode !== 'write' && LiveEditor.isMounted();
+      const coords = live ? LiveEditor.coordsAtPos(payload.pos) : UI.getCaretViewportCoords(payload.pos);
       if (!coords) return;
       UI.showCursorChatBubble({
         deviceId:   payload.device_id,
@@ -3578,10 +3576,11 @@ async function _refreshComments() {
  * to mount for any reason the old rendered-HTML preview is the fallback.
  */
 function _applyMarkdownMode(mode) {
-  // Cursor-chat bubbles/composer are positioned in viewport coordinates from
-  // the live surface, which is about to be hidden (or was never shown) —
-  // leaving them up would float a stale bubble over whatever mode follows.
-  if (mode === 'write') UI.clearCursorChat();
+  // Cursor-chat bubbles/composer are positioned in viewport coordinates
+  // specific to whichever surface was visible when they opened (the Write
+  // textarea or the CM6 live view) — any mode switch invalidates that
+  // position, so clear before switching rather than float a stale bubble.
+  UI.clearCursorChat();
   _markdownMode = mode;
   _showPreview  = mode !== 'write';
 
@@ -3615,11 +3614,6 @@ function _applyMarkdownMode(mode) {
 
   UI.setMarkdownMode(mode, () => renderMarkdown(UI.getEditorValue()), { live });
   if (_showPreview && !live) _wirePreviewClickOnce();
-  // Cursor chat only makes sense where there's a live caret with screen
-  // coordinates to anchor a bubble to (Live/Split) — previously the footer
-  // button stayed fully active in Write mode too, and clicking it there
-  // only explained why nothing happened after the fact, via a toast.
-  UI.setCursorChatButtonEnabled(mode !== 'write');
 
   // Proportional scroll sync only makes sense when both panes are visible.
   if (mode === 'split' && live) {
@@ -3648,21 +3642,25 @@ function _onLiveCursorActivity(head, anchor) {
   setCursorLine(line, head, anchor);
 }
 
-// Cursor chat only makes sense where there's a real caret to anchor a bubble
-// to — the CM6 live surface (Preview/Split), the same place remote carets
-// themselves render. Write mode's plain textarea has no per-character
-// screen coordinates to place one at.
+// Anchors the composer to the current caret on whichever surface is
+// actually visible: the CM6 live surface (Preview/Split) via its own
+// coordsAtPos(), or the plain Write-mode textarea via the mirror-div
+// measurement in ui.js (LiveEditor stays mounted-but-hidden after
+// switching back to Write mode, so isMounted() alone isn't enough — the
+// surface has to actually be the visible one for its coordinates to mean
+// anything).
 function _openCursorChatComposer() {
-  // LiveEditor stays mounted (just hidden) after switching back to Write
-  // mode, so isMounted() alone isn't enough — the surface has to actually
-  // be the visible one for its screen coordinates to mean anything.
-  if (_markdownMode === 'write' || !LiveEditor.isMounted()) {
-    UI.showToast('Switch to Live or Split mode to send a cursor chat.', 'info', 3000);
-    return;
+  const live = _markdownMode !== 'write' && LiveEditor.isMounted();
+  let pos, coords;
+  if (live) {
+    pos = LiveEditor.getCaretPos();
+    coords = pos != null ? LiveEditor.coordsAtPos(pos) : null;
+  } else {
+    const editor = document.getElementById('note-editor');
+    pos = editor ? editor.selectionStart : null;
+    coords = pos != null ? UI.getCaretViewportCoords(pos) : null;
   }
-  const pos = LiveEditor.getCaretPos();
-  const coords = pos != null ? LiveEditor.coordsAtPos(pos) : null;
-  if (!coords) return;
+  if (pos == null || !coords) return;
   UI.openCursorChatComposer(coords, (text) => {
     broadcastCursorChat(text, pos);
     UI.showCursorChatBubble({ deviceId: getDeviceId(), deviceName: 'You', text, x: coords.x, y: coords.y });

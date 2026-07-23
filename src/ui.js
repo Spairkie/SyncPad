@@ -1206,10 +1206,11 @@ const _CARET_MIRROR_PROPS = [
   'boxSizing', 'width', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
   'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth',
   'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'lineHeight', 'letterSpacing',
-  'textIndent', 'wordSpacing',
+  'textIndent', 'wordSpacing', 'tabSize',
 ];
 
-function _measureCaretPixelY(editor) {
+/** {x, y} of `pos` within `editor`'s own box, via the mirror-div technique. */
+function _measureCaretOffset(editor, pos) {
   const mirror = document.createElement('div');
   const cs = getComputedStyle(editor);
   _CARET_MIRROR_PROPS.forEach((prop) => { mirror.style[prop] = cs[prop]; });
@@ -1219,14 +1220,36 @@ function _measureCaretPixelY(editor) {
   mirror.style.wordWrap   = 'break-word';
   mirror.style.top  = '0';
   mirror.style.left = '-9999px';
-  mirror.textContent = editor.value.slice(0, editor.selectionStart);
+  mirror.textContent = editor.value.slice(0, pos);
   const marker = document.createElement('span');
   marker.textContent = '.';
   mirror.appendChild(marker);
   document.body.appendChild(mirror);
-  const y = marker.offsetTop;
+  const coords = { x: marker.offsetLeft, y: marker.offsetTop };
   document.body.removeChild(mirror);
-  return y;
+  return coords;
+}
+
+function _measureCaretPixelY(editor) {
+  return _measureCaretOffset(editor, editor.selectionStart).y;
+}
+
+/**
+ * Viewport pixel coordinates for a character offset into the Write-mode
+ * textarea's value (cursor-chat composer/bubble placement — the Write-mode
+ * counterpart to LiveEditor.coordsAtPos()). Reuses the same mirror-div
+ * measurement as focus/typewriter mode, converted from editor-box-relative
+ * to viewport-relative by adding the editor's own on-screen position and
+ * subtracting its scroll offset (scrollLeft is always 0 in practice — the
+ * textarea soft-wraps rather than scrolling horizontally — but it's
+ * subtracted anyway for correctness if that ever changes).
+ */
+export function getCaretViewportCoords(pos) {
+  const editor = document.getElementById('note-editor');
+  if (!editor || !Number.isFinite(pos) || pos < 0 || pos > editor.value.length) return null;
+  const { x, y } = _measureCaretOffset(editor, pos);
+  const rect = editor.getBoundingClientRect();
+  return { x: rect.left + x - editor.scrollLeft, y: rect.top + y - editor.scrollTop };
 }
 
 // ── Typewriter mode ──────────────────────────────────────────────────────────
@@ -1620,15 +1643,6 @@ export function setMarkdownMode(mode, renderFn, { live = false } = {}) {
   }
 }
 
-/** Cursor chat needs a live caret with screen coordinates (Live/Split only) — see _applyMarkdownMode()'s call site. */
-export function setCursorChatButtonEnabled(enabled) {
-  const btn = document.getElementById('btn-cursor-chat');
-  if (!btn) return;
-  btn.disabled = !enabled;
-  btn.title = enabled
-    ? 'Send a quick note near your cursor (Ctrl+Shift+/) — Live/Split only'
-    : 'Switch to Live or Split mode to send a cursor chat';
-}
 
 // ── Pasted/dropped image resolution (preview mode) ─────────────────────────────
 
