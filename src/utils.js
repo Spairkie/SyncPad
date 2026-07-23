@@ -319,15 +319,6 @@ export function buildReadOnlyUrl(basePath, tokenOrRoomId) {
 }
 
 /**
- * Build the editable room URL — the plain room link plus the edit token
- * required to write to it (see supabase/migrations/0007_room_edit_tokens.sql).
- * Without a valid `?et=`, a room link is read-only by default.
- */
-export function buildEditableRoomUrl(basePath, roomId, editToken) {
-  return `${buildRoomUrl(basePath, roomId)}?et=${encodeURIComponent(editToken)}`;
-}
-
-/**
  * Read the `?mode=` query parameter. Returns 'read' if read-only mode is
  * requested via the URL, otherwise null.
  */
@@ -336,14 +327,6 @@ export function getUrlMode() {
     const sp = new URLSearchParams(location.search);
     const m  = (sp.get('mode') || '').toLowerCase();
     return m === 'read' ? 'read' : null;
-  } catch { return null; }
-}
-
-/** Read the `?et=` (edit token) query parameter, or null if absent. */
-export function getUrlEditToken() {
-  try {
-    const sp = new URLSearchParams(location.search);
-    return sp.get('et') || null;
   } catch { return null; }
 }
 

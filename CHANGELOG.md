@@ -8,6 +8,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Phase 26 — Revert edit-token write gating: room_id is a write credential again
+
+Branch: `claude/codebase-review-testing-fjicqa`
+
+#### Changed
+- **Reverted the Phase 21 edit-token model.** `room_id` + the anon key is sufficient to write to a room again — a plain link (typed, bookmarked, or shared) is directly editable, same as the app's original design, and matches the create-on-visit behavior restored in Phase 24. `?mode=read` and `/share/:token` remain read-only in the app's own UI, but that's a UI/UX convention again, not a server-enforced boundary: a read-only visitor necessarily learns `room_id` from viewing the room's content, so a technical visitor could still call the write path directly. Room lock (`editing_locked`) remains the one control that's genuinely server-enforced regardless of how the write is attempted, and is the right tool for a room that actually needs to be uneditable.
+  - The reasoning, in short: the edit-token model closed a real gap (a "read-only" link's read-only status wasn't previously enforced server-side), but its cost — permanent lockout on a lost token with no recovery path, no cross-device/cross-browser persistence, and a migration dependency that broke a live deployment on its first real use (`gen_random_bytes` schema issue, fixed and then reverted in the same day) — outweighed that benefit for a project that was never meant to hold sensitive data to begin with. Reported directly: "what happens if they lose the token… can we just have `/roomname` be editable without needing the token, and rely on locking to restrict it if needed."
+  - `src/rooms.js`: `createRoom()`, `saveContent()`, `updateRoomDisplayName()`, `updateRoomSettings()`, `updateRoom()`, and `clearRoomContent()` all revert to direct `.from('syncpad_rooms')` insert/update calls instead of routing through the `rpc_update_room()`/`create_room_with_edit_token()` RPCs. `settings.js`'s `consumeViewOnce()` reverts to a plain `updateRoom()` call too, since a view-once reader no longer needs a narrow RPC to bypass a token check that doesn't exist anymore.
+  - `src/app.js`: `joinRoom()` drops all edit-token verification — editability is now purely `forcedReadOnly` (whether the route was `?mode=read`/`/share/:token`), independent of any URL parameter. The Share modal's "editable" link is the room's plain URL again. PWA last-room resume no longer needs to persist a token alongside the room id.
+  - **`supabase/migrations/0009_revert_edit_token_write_gating.sql`** (new) restores the four anon/authenticated INSERT/UPDATE policies on `syncpad_rooms` that `0007` had dropped. Only needed by projects that already applied `0007`; a fresh project never needs to run `0007` or `0009` — `0001` alone is sufficient now. `0007`'s table and RPCs are left in place, inert, rather than dropped.
+  - **`supabase/migrations/0008_quarantine_enforcement.sql` rewritten** from an `rpc_update_room()` redefinition to an independent `BEFORE UPDATE` trigger (`enforce_syncpad_rooms_quarantine`), the same technique `0001`'s room-lock trigger already uses. It had to change: its original form only fired when the client called `rpc_update_room()`, which the client no longer does after this revert — the trigger form works regardless of which write path is used, and doesn't depend on `0007` at all anymore (only `0006`, for the `quarantined_at` column).
+  - Docs updated throughout (`README.md`, `CLAUDE.md`, `DEPLOYMENT.md`, `docs/security.md`) to move "read-only links" back to frontend-only/UX-convention framing, and room lock forward as the one real server-enforced guarantee.
+
 ### Phase 24 — Fix production RPC failure, restore create-on-visit for unclaimed room URLs
 
 Branch: `claude/codebase-review-testing-fjicqa`

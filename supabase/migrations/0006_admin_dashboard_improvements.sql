@@ -33,20 +33,13 @@
 --   6. admin_quarantine_room()   – RPC to quarantine a room.
 --   7. admin_unquarantine_room() – RPC to lift a quarantine.
 --
--- ⚠ FRONTEND-ONLY UNLESS YOU ALSO RUN 0007 + 0008 ⚠
+-- ⚠ FRONTEND-ONLY UNLESS YOU ALSO RUN 0008 ⚠
 -- ─────────────────────────────────────────────────────────────
--- The quarantine feature added here is FRONTEND-ENFORCED on its own —
--- this migration predates the edit-token system (0007_room_edit_tokens.sql)
--- and, at the time it was written, every write still went through the
--- base anon RLS policies that room_id alone was sufficient to satisfy.
--- A determined user could bypass quarantine by calling the Supabase REST
--- API directly with the anon key.
---
--- If you've also run 0007_room_edit_tokens.sql (which routes every non-
--- admin write through a single rpc_update_room() choke point instead of
--- direct anon UPDATE policies), run 0008_quarantine_enforcement.sql too —
--- it redefines rpc_update_room() to reject writes to a quarantined room
--- server-side, closing this gap without touching RLS at all.
+-- The quarantine feature added here is FRONTEND-ENFORCED on its own — a
+-- determined user could bypass it by calling the Supabase REST API
+-- directly with the anon key. Run 0008_quarantine_enforcement.sql too —
+-- it adds a database trigger that rejects writes to a quarantined room
+-- server-side, the same technique the room-lock feature already uses.
 --
 -- Similarly, downloads_disabled only blocks the frontend from
 -- generating signed-URL requests.  The Storage bucket itself

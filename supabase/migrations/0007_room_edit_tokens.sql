@@ -1,5 +1,15 @@
 -- ============================================================
 -- SyncPad – Room Edit Tokens Migration
+--
+-- ⚠ SUPERSEDED — OPTIONAL / HISTORICAL, NOT REQUIRED ⚠
+-- 0009_revert_edit_token_write_gating.sql reverts the write-gating this
+-- migration introduced (see that file for why) and the client no longer
+-- calls any of the four functions this creates. A brand-new project does
+-- not need to run this migration at all — 0001 alone is sufficient. It's
+-- left here, safe to run or skip, for anyone who already applied it to a
+-- live project (running 0009 afterward restores normal write access) or
+-- who wants to build on the edit-token table/functions for something else.
+--
 -- SAFE TO RERUN: all statements use CREATE IF NOT EXISTS,
 -- CREATE OR REPLACE, and DROP POLICY IF EXISTS / CREATE POLICY
 -- so the script is fully idempotent.
