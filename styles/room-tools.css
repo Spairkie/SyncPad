@@ -316,6 +316,19 @@
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+/* #note-editor and .note-live fill the exact same grid cell inside
+   .editor-wrap, whose overflow:hidden + rounded corners clip that 2px
+   offset outline down to the subtle accent sliver along the card's inner
+   edge — not a full ring. .note-live needs :focus-within instead of
+   :focus-visible: the actual focus target is CM6's nested contenteditable
+   .cm-content, not .note-live itself, so :focus-visible would never match
+   here the way it does on a native textarea. (CM6's own default focus
+   outline is separately suppressed in live-editor.js's theme, so only this
+   one outline shows — matching Source exactly instead of double-outlining.) */
+.note-live:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 #more-dropdown {
   border-radius: 14px;

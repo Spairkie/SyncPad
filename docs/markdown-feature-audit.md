@@ -11,23 +11,26 @@ renderer"). Most GFM features are pure text syntax; the handful of common
 implementation (`<center>`, inline `style=`, HTML comments, `<video>`) are
 listed below as out of scope for that reason.
 
-This audit checks the 33 features on the Markdown Guide's basic, extended,
-and hacks pages against SyncPad's actual behavior.
+This audit checks the ~38 features on the Markdown Guide's basic, extended,
+and hacks pages against SyncPad's actual behavior — verified by running
+`renderMarkdown()` directly against each page's own example syntax (not just
+inspecting the source), so this table reflects real output, not intent.
 
 ## Supported
 
 | Feature | Notes |
 |---|---|
-| Headings | `#` – `######`, auto-generates an anchor id |
+| Headings | `#` – `######`, auto-generates an anchor id (ATX style only — see Setext below) |
 | Paragraphs | blank-line separated |
 | Line Breaks | two trailing spaces → `<br>` |
 | Emphasis | `**bold**`, `*italic*`, `__bold__`, `_italic_` |
-| Blockquotes | `>` |
+| Blockquotes | `>`, including nesting and other block elements inside |
 | Lists | ordered/unordered, nested by indentation |
 | Code | inline `` `x` ``, fenced ` ``` ` blocks |
 | Horizontal Rules | `---`, `***`, `___` |
-| Links | `[text](url)` — http(s)/mailto only |
-| Images | `![alt](url)` — http(s) only, plus an internal `syncpad-file:` scheme for pasted attachments |
+| Links | `[text](url "title")` — http(s)/mailto only; title is optional |
+| Images | `![alt](url "title")` — http(s) only, plus an internal `syncpad-file:` scheme for pasted attachments; title is optional |
+| Reference-style Links | `[text][id]` / collapsed `[text][]` + `[id]: url "title"` — single-line definitions only. An id defined but never referenced renders nothing, which doubles as support for the common `[comment]: <> (text)` invisible-comment convention |
 | Escaping Characters | `\*`, `\_`, `\[`, etc. — standard CommonMark punctuation set |
 | Tables | GFM `| Col |` syntax |
 | Table Formatting (alignment) | `:---`, `---:`, `:---:` in the separator row |
@@ -38,6 +41,7 @@ and hacks pages against SyncPad's actual behavior.
 | Task Lists | `- [ ]` / `- [x]`, with a live "n/m done" progress badge |
 | Highlight | `==text==` — not core GFM, but common (Obsidian, Typora) and already shipped |
 | Automatic URL Linking | bare `https://…` autolinks |
+| Angle-bracket Autolinks | `<https://…>`, `<mailto:x@y.com>`, and bare `<x@y.com>` — CommonMark's explicit autolink syntax |
 | Disabling Automatic URL Linking | wrap in backtick code span — code spans are extracted before autolinking runs |
 | Admonitions | GFM alerts — `> [!NOTE]`/`[!TIP]`/`[!IMPORTANT]`/`[!WARNING]`/`[!CAUTION]` |
 | Table of Contents | Typora-style `[TOC]` marker |
@@ -50,12 +54,13 @@ and hacks pages against SyncPad's actual behavior.
 | HTML | `markdown.js` intentionally strips raw HTML for XSS safety (`CLAUDE.md`) — this is a hard constraint, not an oversight |
 | Center | every common implementation needs raw HTML (`<center>`/`align=`) to do this in plain Markdown |
 | Color | same — needs inline `style=` |
-| Comments | `<!-- -->` is raw HTML |
+| Comments (`<!-- -->`) | raw HTML — out of scope per the XSS policy above. The non-HTML `[comment]: <> (text)` reference-link convention *does* work (see Reference-style Links above) — it's a legitimate Markdown construct, not a raw-HTML pass-through |
 | Videos | needs an `<iframe>`/`<video>` embed; no text-only Markdown syntax covers this |
 | Definition Lists | a Markdown Extra/PHP Markdown Extra feature, not GFM |
 | Subscript / Superscript | Pandoc/kramdown extensions, not GFM |
 | Underline | no flavor has a clean non-HTML syntax for this (`__x__` is bold in GFM); introducing a non-standard marker would surprise anyone pasting content from elsewhere |
 | Custom Heading IDs (`{#id}`) | Pandoc/Markdown Extra syntax, not GFM — auto-generated ids already cover the actual use case (linkable headings) |
+| Setext Headings (`Text\n===`, `Text\n---`) | basic CommonMark, but a legacy alternate style to the `#`/`##` ATX form SyncPad already implements (and the toolbar's H1/H2/H3 buttons insert). The `---` underline form is also genuinely ambiguous with horizontal rules — CommonMark itself resolves this with a lookback rule this renderer's single-pass block scanner doesn't have. Low real-world value for a quick-notepad tool given ATX already covers headings; revisit only if requested |
 | Emoji shortcodes (`:smile:`) | popular on GitHub's UI but not part of the GFM spec itself; would need a sizeable shortcode→Unicode data table for a large win. Genuine Unicode emoji (😀) already renders fine as plain text with no special handling needed |
 | Symbols (typographic replacement) | SyncPad already does this at typing time via the opt-in Smart Punctuation editor feature; doing it again at render time would double-process already-converted text |
 | Indent (Tab) → code block | CommonMark's 4-space-indent rule is ambiguous against this renderer's indent-based list-nesting logic; fenced code blocks already cover the same need unambiguously |

@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Phase 19 — Live/Split focus indicator, Markdown Guide compliance pass
+
+Branch: `claude/codebase-review-testing-fjicqa`
+
+#### Fixed
+- **The Live/Split editing surface had no focus indicator at all.** The Source textarea's subtle accent-line-on-focus (a `2px` `outline` that `.editor-wrap`'s `overflow:hidden` + rounded corners clip down to a thin sliver along the card's inner edge, not a full ring) only applied to `#note-editor`. `.note-live` — CodeMirror's mount point, occupying the identical grid cell — had no equivalent, and CM6's own default focus outline was separately suppressed in `live-editor.js`'s theme, so focusing Live or the right pane of Split showed no visual feedback whatsoever. Added `.note-live:focus-within` (not `:focus-visible` — the real focus target is CM6's nested contenteditable `.cm-content`, not `.note-live` itself) to the same shared rule `#note-editor:focus-visible` uses. Verified via cropped pixel-region screenshots that the line now appears correctly scoped to whichever pane has focus.
+- **Titled links and images were completely broken, not just missing title support**: `[text](url "title")` and `![alt](url "title")` — standard CommonMark syntax — failed to match the link/image regex at all (which required the URL capture to contain no whitespace) and fell through as raw, partially-mangled literal text. Now parses and renders the optional title as a `title` attribute.
+- **Reference-style links (`[text][id]` / collapsed `[text][]` + `[id]: url "title"`) were entirely unimplemented** — core CommonMark/basic-syntax, silently missing. Added a definition-collection pre-pass mirroring the existing footnote-definition pattern (single-line definitions only, pulled out of the normal block stream, resolved at first use). An id that's defined but never referenced renders nothing, which doubles as support for the common `[comment]: <> (text)` invisible-comment convention — verified working for both the `<>` -style and `[//]:` -style variants.
+- **Angle-bracket autolinks (`<https://…>`, `<mailto:…>`, bare `<user@host>`) were unsupported** — CommonMark's explicit autolink syntax fell through as escaped literal text (`&lt;https://…&gt;`) since nothing recognized the wrapped form. Bare `https://…` autolinking already covered most real usage; this closes the gap for the explicit-bracket form.
+
+All four fixes verified against SyncPad's actual renderer output (not just inspecting the source) for every feature on the Markdown Guide's basic, extended, and hacks pages, plus every existing regression test in `tests/markdown.spec.js` re-checked directly against the modified renderer — zero regressions across ~38 feature checks + 12 existing regression cases. `docs/markdown-feature-audit.md` updated to match, including a newly-identified (and deliberately deferred) gap: Setext-style headings (`Text\n===`) aren't supported — ATX (`#`) already covers headings and is what the toolbar inserts, and the `---` underline form is genuinely ambiguous with horizontal rules in a single-pass block scanner.
+
 ### Phase 18 — Full-repo review: test infra, editor DOM boundary, admin error handling
 
 Branch: `claude/codebase-review-testing-fjicqa`
