@@ -1,6 +1,6 @@
 // SyncPad – comments.js
 // Ephemeral comments anchored to a text range in a room's note
-// (syncpad_room_comments, see docs/migrations/room-comments.sql).
+// (syncpad_room_comments, see supabase/migrations/0003_room_comments.sql).
 //
 // `text` here is exactly what would be written for an encrypted room's
 // content — ciphertext, encrypted by the caller with the same room key —

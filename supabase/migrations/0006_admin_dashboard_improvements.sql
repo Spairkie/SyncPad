@@ -6,7 +6,7 @@
 -- idempotent.
 --
 -- Run this in your Supabase project → SQL Editor AFTER the
--- base supabase-setup.sql has been applied.
+-- base 0001_base_schema.sql has been applied.
 --
 -- What this migration adds
 -- ────────────────────────
@@ -33,35 +33,20 @@
 --   6. admin_quarantine_room()   – RPC to quarantine a room.
 --   7. admin_unquarantine_room() – RPC to lift a quarantine.
 --
--- ⚠ FRONTEND-ONLY SECURITY WARNING ⚠
+-- ⚠ FRONTEND-ONLY UNLESS YOU ALSO RUN 0007 + 0008 ⚠
 -- ─────────────────────────────────────────────────────────────
--- The quarantine feature added here is FRONTEND-ENFORCED by
--- default.  The existing "anon read rooms" and "anon update
--- rooms" RLS policies (see supabase-setup.sql) allow any
--- anonymous user to read and update ANY room, regardless of
--- quarantine status.  That means a determined user can bypass
--- the quarantine by:
---   • calling the Supabase REST API directly with the anon key
---   • using the Supabase JS client without loading the app UI
+-- The quarantine feature added here is FRONTEND-ENFORCED on its own —
+-- this migration predates the edit-token system (0007_room_edit_tokens.sql)
+-- and, at the time it was written, every write still went through the
+-- base anon RLS policies that room_id alone was sufficient to satisfy.
+-- A determined user could bypass quarantine by calling the Supabase REST
+-- API directly with the anon key.
 --
--- To make quarantine TRULY server-enforced you must tighten
--- the anon RLS policies on syncpad_rooms.  Example:
---
---   drop policy if exists "anon read rooms" on syncpad_rooms;
---   create policy "anon read rooms"
---     on syncpad_rooms for select to anon
---     using (quarantined_at is null);         -- block quarantined rooms from anon reads
---
---   drop policy if exists "anon update rooms" on syncpad_rooms;
---   create policy "anon update rooms"
---     on syncpad_rooms for update to anon
---     using  (quarantined_at is null)         -- block writes to quarantined rooms
---     with check (quarantined_at is null);
---
--- Those drops + recreates are NOT included in this migration
--- because changing the base anon policies is an intentional
--- breaking change that may affect other parts of the app.  An
--- operator must review and apply them explicitly.
+-- If you've also run 0007_room_edit_tokens.sql (which routes every non-
+-- admin write through a single rpc_update_room() choke point instead of
+-- direct anon UPDATE policies), run 0008_quarantine_enforcement.sql too —
+-- it redefines rpc_update_room() to reject writes to a quarantined room
+-- server-side, closing this gap without touching RLS at all.
 --
 -- Similarly, downloads_disabled only blocks the frontend from
 -- generating signed-URL requests.  The Storage bucket itself
@@ -246,7 +231,7 @@ create index if not exists idx_syncpad_rooms_downloads_disabled
 --     readable or writable by unauthenticated requests.
 --
 --   • Authenticated non-admin users: read the policies below.
---     The baseline policies in supabase-setup.sql do NOT grant
+--     The baseline policies in 0001_base_schema.sql do NOT grant
 --     baseline access to this table, so the default deny applies
 --     to non-admin authenticated users.
 --
@@ -594,7 +579,7 @@ revoke execute on function public.admin_unquarantine_room(text)
 --
 -- 5. SERVER-SIDE QUARANTINE ENFORCEMENT (OPTIONAL)
 --    To block anonymous API access to quarantined rooms, replace
---    the base anon read/update policies in supabase-setup.sql
+--    the base anon read/update policies in 0001_base_schema.sql (superseded for update by 0007_room_edit_tokens.sql)
 --    with the tightened versions shown in the FRONTEND-ONLY
 --    SECURITY WARNING at the top of this file.  Do this only
 --    after verifying that no other app behaviour depends on

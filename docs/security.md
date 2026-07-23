@@ -27,7 +27,6 @@ These features exist as UX conveniences. They do not constitute security boundar
 
 | Feature | How It Works | Bypass |
 |---|---|---|
-| Read-only share links | Bearer token embedded in `/share/:token`; token resolves to a room and the frontend enters read-only mode | Anyone with the anon key can call the Supabase REST API directly and write to the room — the editable and read-only links for a room both resolve to the same `room_id`, so there is no separate credential to check against server-side. Closing this fully would require a distinct server-verified edit credential (see "Before Going to Production" below), not just tightening RLS |
 | Passcode protection | PBKDF2 hash of the passcode is stored in `syncpad_rooms`; the client computes and compares the hash | The hash is readable by anyone with the anon key; the passcode itself is not stored, but a determined attacker can attempt offline brute-force against the hash |
 | View-once rooms | Server clears content after the first non-creator editable view | A viewer can still copy or screenshot content before the server clears it; the clearing is not atomic with the act of viewing |
 
@@ -41,7 +40,8 @@ These controls are implemented as Supabase Row Level Security (RLS) policies and
 | Room reports | Anon users can INSERT only; no SELECT, UPDATE, or DELETE |
 | Admin access | `is_syncpad_admin()` database function checked by Supabase Auth and RLS on every admin query |
 | Share token resolution | Exposed via RPC only for anon users — no direct table SELECT on `syncpad_share_links` |
-| Room lock | `syncpad_rooms_enforce_lock` trigger (`enforce_syncpad_rooms_lock()` in `supabase-setup.sql`) rejects any content change to a room while `editing_locked = true`, at the database level — not just in the frontend. Exempt: the backend expiry-cleanup job and signed-in admins, both of which need to be able to override a lock |
+| Room lock | `syncpad_rooms_enforce_lock` trigger (`enforce_syncpad_rooms_lock()` in `supabase/migrations/0001_base_schema.sql`) rejects any content change to a room while `editing_locked = true`, at the database level — not just in the frontend. Exempt: the backend expiry-cleanup job and signed-in admins, both of which need to be able to override a lock |
+| Read-only links | Since `supabase/migrations/0007_room_edit_tokens.sql`: writing to a room requires a separate edit token, checked by `rpc_update_room()` — a `SECURITY DEFINER` RPC that is now the *only* way to write to `syncpad_rooms` as anon/authenticated (direct `UPDATE`/`INSERT` is revoked). A read-only visitor necessarily learns `room_id` (to view content), but never receives the edit token, so they cannot construct a valid write request no matter how they call the API. Losing the edit token (i.e. the editable link) means permanently losing edit access — there is no recovery path, by design |
 
 ---
 
@@ -129,7 +129,7 @@ Row Level Security is enabled on all SyncPad tables. The policies are the author
 
 | Table | Anon SELECT | Anon INSERT | Anon UPDATE | Anon DELETE | Notes |
 |---|---|---|---|---|---|
-| `syncpad_rooms` | Policy-gated | Yes (room creation) | Policy-gated + lock trigger | No | Any anon/authenticated client can UPDATE a room row (RLS is intentionally broad here — see Known Limitations), but the `syncpad_rooms_enforce_lock` trigger independently rejects content changes while `editing_locked = true`, regardless of RLS |
+| `syncpad_rooms` | Policy-gated (open — content itself isn't secret to holders of `room_id`) | No (direct) | No (direct) | No | Direct anon/authenticated `INSERT`/`UPDATE` is revoked as of `0007_room_edit_tokens.sql`. Room creation and every write go through `SECURITY DEFINER` RPCs (`create_room_with_edit_token()`, `rpc_update_room()`) that check a separate edit token, plus the `syncpad_rooms_enforce_lock` trigger (independent of RLS) that rejects content changes while `editing_locked = true`. Admins write directly via their own `is_syncpad_admin()`-gated policy, untouched by this |
 | `syncpad_files` | Policy-gated | Policy-gated | No | No | Access tied to room access |
 | `syncpad_share_links` | No direct access | Policy-gated | No | No | Resolution via RPC only |
 | `syncpad_room_reports` | No | Yes (insert only) | No | No | Reports are write-only for anon users |
@@ -148,7 +148,9 @@ Admin queries are additionally gated by the `is_syncpad_admin()` function, which
 
 SyncPad uses a single shared Supabase client for both the normal app and the admin dashboard. After a user signs in via Supabase Auth at `/admin`, the client's effective role changes from `anon` to `authenticated`. Supabase RLS policies are role-specific — policies written for `to anon` do not apply to `authenticated` requests, and vice versa.
 
-Without a matching set of baseline policies for the `authenticated` role, normal app operations (loading rooms, uploading files, etc.) fail with RLS permission errors after admin login. The `supabase-setup.sql` script includes **authenticated baseline** policies that mirror the anon policies for `syncpad_rooms`, `syncpad_files`, and the `syncpad-files` storage bucket. These do not grant additional privileges — they simply ensure normal app features continue to work during an authenticated session. Elevated admin actions (delete rooms, bulk manage files) are still gated by `is_syncpad_admin()` in separate policies.
+Without a matching set of baseline policies for the `authenticated` role, normal app operations (uploading files, etc.) fail with RLS permission errors after admin login. The `supabase/migrations/0001_base_schema.sql` script includes **authenticated baseline** policies that mirror the anon policies for `syncpad_files` and the `syncpad-files` storage bucket. These do not grant additional privileges — they simply ensure normal app features continue to work during an authenticated session. Elevated admin actions (delete rooms, bulk manage files) are still gated by `is_syncpad_admin()` in separate policies.
+
+`syncpad_rooms` doesn't need this treatment: since `0007_room_edit_tokens.sql`, normal room writes go through the `rpc_update_room()` RPC, which works the same regardless of the caller's role.
 
 ---
 
@@ -158,7 +160,9 @@ SyncPad is a personal/demo project. The following are known weaknesses that shou
 
 **Anonymous by design.** SyncPad has no backend-enforced user identity system. There are no user accounts tied to rooms at the database level. "Ownership" of a room is a frontend concept only.
 
-**Anon key is public.** The Supabase anon key is embedded in the frontend bundle and is not secret. Anyone who reads the page source has the anon key and can call the Supabase REST API directly, bypassing all frontend-only controls (read-only links, passcode, view-once). Room lock is the one exception — it's independently enforced by a database trigger (see Supabase RLS Summary above), so calling the API directly does not bypass it.
+**Anon key is public.** The Supabase anon key is embedded in the frontend bundle and is not secret. Anyone who reads the page source has the anon key and can call the Supabase REST API directly. This bypasses the passcode check specifically (see below) — it does not bypass read-only links or room lock, both of which are independently enforced server-side regardless of how the request is made (see Supabase RLS Summary above).
+
+**Losing an editable link is unrecoverable.** The flip side of read-only links being real: there is no "recover my edit access" flow. If the URL containing the room's edit token (`?et=…`) is lost — not bookmarked, browser history cleared, device lost — nobody, including the room's own creator, can regain write access to that room through the app. This is intentional (a recovery path would just reopen the same hole the edit-token system closes), but it's a real usability cost worth knowing before relying on a room for anything you can't afford to lose write access to.
 
 **Room IDs are short random strings.** If the character space and length of room IDs are known, an attacker with enough requests can enumerate rooms. There is no rate limiting described in this document — evaluate Supabase's built-in rate limiting and consider whether it is sufficient.
 
@@ -180,7 +184,7 @@ If SyncPad is ever deployed for broader use, the following items should be addre
 
 **Web3Forms allowed domain.** The contact/report form uses Web3Forms. Configure the allowed domain in the Web3Forms dashboard to restrict form submissions to your production domain. Without this, anyone can submit forms using your Web3Forms key from any origin.
 
-**RLS audit.** SyncPad intentionally keeps room and file RLS broad for a transparent demo project; the room-lock trigger (above) is the one piece of write access currently enforced server-side. If the project ever changes direction toward real backend-enforced read-only sharing, that requires a distinct server-verified edit credential — e.g. a separate `edit_token` issued alongside `room_id`, checked by a `write_room_content()` RPC, with direct anon UPDATE on `syncpad_rooms` revoked — not just tightening the existing RLS policies, since editable and read-only links currently share the same `room_id` as their only credential.
+**RLS audit.** SyncPad intentionally keeps file RLS broad for a transparent demo project. Room writes are no longer broad — see the room lock trigger and `0007_room_edit_tokens.sql` above. What's left broad and by design: `syncpad_rooms` SELECT (anyone with `room_id` can read the room, which is what "read-only" means) and all of `syncpad_files`' policies (file access is tied to room access, not a separate credential — a determined user with a room's `room_id` and a file's path can already read/write file metadata the same way a read-only viewer legitimately can browse the Files panel).
 
 **Storage bucket review.** Confirm the `syncpad-files` bucket has no public access enabled. Review the storage policies to ensure that file SELECT and INSERT are tied to room membership in a way that RLS enforces, not just frontend logic.
 
