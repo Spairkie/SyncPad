@@ -106,7 +106,11 @@ create or replace function public.create_room_with_edit_token(
 )
 language plpgsql
 security definer
-set search_path = public
+-- pgcrypto (gen_random_bytes) lives in Supabase's "extensions" schema by
+-- default, not public — only privileged roles can create objects there, so
+-- adding it here doesn't reopen the search-path-hijack risk that pinning
+-- search_path is otherwise guarding against for a SECURITY DEFINER function.
+set search_path = public, extensions
 as $$
 declare
   v_token text;
