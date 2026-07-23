@@ -267,6 +267,15 @@ function _resetReportRoomModal() {
 
 const RESERVED_ROOM_PATHS = new Set(['admin', 'contact', 'privacy', 'terms', 'share', 'assets', 'src', 'styles', 'docs']);
 
+// A bare 6-character code from the short-code alphabet (see
+// supabase/migrations/0002_short_room_codes.sql) — distinct enough from
+// generateRoomId()'s "adjective-noun-suffix" shape and from any
+// sanitizeRoomId() output containing a URL/slash that a false-positive
+// match against a deliberately-chosen custom room id is very unlikely.
+// Resolution failure just falls through to the literal-room-id path,
+// so this can never make a previously working join stop working.
+const SHORT_CODE_RE = /^[23456789ABCDEFGHJKMNPQRSTVWXYZ]{6}$/i;
+
 function _parseRoute() {
   const cleaned = _stripBasePath(location.pathname).replace(/^\/+|\/+$/g, '');
   if (!cleaned) return { type: 'landing' };
@@ -462,16 +471,6 @@ function wireLandingEvents() {
     joinRoom(roomId, { isNewRoom: true });
   };
 
-  // A bare 6-character code from the short-code alphabet (see
-  // supabase/migrations/0002_short_room_codes.sql) — distinct enough from
-  // generateRoomId()'s "adjective-noun-suffix" shape and from any
-  // sanitizeRoomId() output containing a URL/slash that a false-positive
-  // match against a deliberately-chosen custom room id is very unlikely.
-  // Resolution failure just falls through to the existing room-id path
-  // below rather than erroring, so this can never make a previously
-  // working join input stop working.
-  const SHORT_CODE_RE = /^[23456789ABCDEFGHJKMNPQRSTVWXYZ]{6}$/i;
-
   const joinRoom_ = async () => {
     const raw = joinInput?.value?.trim();
     if (!raw) return;
@@ -646,27 +645,52 @@ async function joinRoom(roomId, { isNewRoom = false } = {}) {
       history.replaceState(null, '', buildEditableRoomUrl(BASE, roomId, getEditToken()));
     } else {
       const room = await loadRoom(roomId);
-      if (!room) {
-        UI.setInfoScreen(forcedReadOnly ? {
+
+      if (!room && !forcedReadOnly && SHORT_CODE_RE.test(roomId)) {
+        // A short code typed/pasted directly into the URL bar, not just the
+        // landing page's join box — resolve it before falling through to
+        // "create a room literally named after the code", which a code is
+        // never meant to become.
+        const resolvedId = await resolveRoomCode(roomId).catch(() => null);
+        if (resolvedId) {
+          history.replaceState(null, '', `${BASE}/${resolvedId}${location.search}`);
+          return joinRoom(resolvedId);
+        }
+      }
+
+      if (!room && !forcedReadOnly) {
+        // Neither an existing room nor a resolvable code: visiting a URL
+        // (typed, bookmarked, or a link shared before the room existed) for
+        // a name nobody has taken yet creates it and opens it editable,
+        // same as the landing page's Create Room button — this is the
+        // original "join by name" behavior. Whoever's browser gets here
+        // first becomes the room's editor and receives its edit token; a
+        // forced-read-only route (?mode=read, /share/:token) never reaches
+        // this branch, so a stale/expired read-only link can't be used to
+        // claim a fresh room this way.
+        UI.setLoadingMessage('Creating room…');
+        _room = await createRoom(roomId);
+        _isReadOnly = false;
+        history.replaceState(null, '', buildEditableRoomUrl(BASE, roomId, getEditToken()));
+      } else if (!room) {
+        UI.setInfoScreen({
           title: 'Share link unavailable',
           message: 'This read-only link points to a room that does not exist.',
-        } : {
-          title: 'Room not found',
-          message: 'This room does not exist. Create a new room from the home screen.',
         });
         UI.showScreen('info');
         return;
-      }
-      if (!forcedReadOnly && candidateToken) {
-        const ok = await verifyEditToken(roomId, candidateToken);
-        _isReadOnly = !ok;
-        setEditToken(ok ? candidateToken : null);
-        if (!ok) UI.showToast('This edit link is invalid or has expired — opening read-only.', 'warning', 6000);
       } else {
-        _isReadOnly = true;
-        setEditToken(null);
+        if (!forcedReadOnly && candidateToken) {
+          const ok = await verifyEditToken(roomId, candidateToken);
+          _isReadOnly = !ok;
+          setEditToken(ok ? candidateToken : null);
+          if (!ok) UI.showToast('This edit link is invalid or has expired — opening read-only.', 'warning', 6000);
+        } else {
+          _isReadOnly = true;
+          setEditToken(null);
+        }
+        _room = room;
       }
-      _room = room;
     }
   } catch (err) {
     // Log the raw error so RLS / network failures are diagnosable in DevTools.
