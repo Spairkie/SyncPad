@@ -5,6 +5,7 @@
 import { getSupabaseClient } from './supabase.js';
 import { escapeHtml, formatFileSize, formatTimestamp } from './utils.js';
 import { showConfirm, showPrompt, showAlert } from './ui.js';
+import { getIcon } from './icons.js';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -186,21 +187,43 @@ async function _renderDashboard(sb, session) {
 
       <div class="admin-stats-row" id="admin-stats-row">
         <div class="admin-stat-card admin-stat-card--clickable" id="stat-card-rooms" data-target-tab="rooms" role="button" tabindex="0" title="Go to Rooms tab">
+          <div class="admin-stat-icon">${getIcon('edit', 16)}</div>
           <div class="admin-stat-value admin-skeleton" id="stat-rooms">—</div>
           <div class="admin-stat-label">Total rooms</div>
         </div>
+        <div class="admin-stat-card admin-stat-card--clickable" id="stat-card-active" data-target-tab="rooms" data-filter="active-today" role="button" tabindex="0" title="Show rooms active in the last 24h">
+          <div class="admin-stat-icon">${getIcon('users', 16)}</div>
+          <div class="admin-stat-value admin-skeleton" id="stat-active">—</div>
+          <div class="admin-stat-label">Active today</div>
+        </div>
         <div class="admin-stat-card admin-stat-card--clickable" id="stat-card-files" data-target-tab="files" role="button" tabindex="0" title="Go to Files tab">
+          <div class="admin-stat-icon">${getIcon('files', 16)}</div>
           <div class="admin-stat-value admin-skeleton" id="stat-files">—</div>
           <div class="admin-stat-label">Files</div>
         </div>
+        <div class="admin-stat-card" id="stat-card-storage" title="Total size of all uploaded files">
+          <div class="admin-stat-icon">${getIcon('upload', 16)}</div>
+          <div class="admin-stat-value admin-skeleton" id="stat-storage">—</div>
+          <div class="admin-stat-label">Storage used</div>
+        </div>
         <div class="admin-stat-card admin-stat-card--alert admin-stat-card--clickable" id="stat-card-reports" data-target-tab="reports" role="button" tabindex="0" title="Go to Reports tab">
+          <div class="admin-stat-icon">${getIcon('warning', 16)}</div>
           <div class="admin-stat-value admin-skeleton" id="stat-reports">—</div>
           <div class="admin-stat-label">Open reports</div>
         </div>
         <div class="admin-stat-card admin-stat-card--clickable" id="stat-card-expired" data-target-tab="rooms" data-filter="expired" role="button" tabindex="0" title="Show expired rooms">
+          <div class="admin-stat-icon">${getIcon('clock', 16)}</div>
           <div class="admin-stat-value admin-skeleton" id="stat-expired">—</div>
           <div class="admin-stat-label">Expired rooms</div>
         </div>
+      </div>
+
+      <div class="admin-activity" id="admin-activity">
+        <div class="admin-activity-header">
+          <h3>Room creation — last 14 days</h3>
+          <span class="admin-activity-total" id="admin-activity-total"></span>
+        </div>
+        <div class="admin-activity-chart" id="admin-activity-chart"><div class="admin-skeleton-bar" style="height:64px"></div></div>
       </div>
 
       <div class="admin-tabs" id="admin-tabs" role="tablist">
@@ -337,18 +360,28 @@ function _updateRefreshedLabel() {
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
 
+const ACTIVITY_DAYS = 14;
+
 async function _loadStats() {
-  ['stat-rooms', 'stat-files', 'stat-reports', 'stat-expired'].forEach(id => {
+  ['stat-rooms', 'stat-active', 'stat-files', 'stat-storage', 'stat-reports', 'stat-expired'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.classList.add('admin-skeleton');
   });
 
-  const [roomsRes, filesRes, reportsRes, expiredRes] = await Promise.allSettled([
+  const dayAgoIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const activitySinceIso = new Date(Date.now() - ACTIVITY_DAYS * 24 * 60 * 60 * 1000).toISOString();
+
+  const [roomsRes, filesRes, reportsRes, expiredRes, activeRes, storageRes, activityRes] = await Promise.allSettled([
     _sb.from('syncpad_rooms').select('*', { count: 'exact', head: true }),
     _sb.from('syncpad_files').select('*', { count: 'exact', head: true }),
     _sb.from('syncpad_room_reports').select('*', { count: 'exact', head: true }).eq('status', 'new'),
     _sb.from('syncpad_rooms').select('*', { count: 'exact', head: true })
       .lt('expires_at', new Date().toISOString()).not('expires_at', 'is', null),
+    _sb.from('syncpad_rooms').select('*', { count: 'exact', head: true }).gte('updated_at', dayAgoIso),
+    // No SUM() over PostgREST without a DB function — for a personal-project-scale
+    // table this is a small enough row set to sum client-side.
+    _sb.from('syncpad_files').select('file_size'),
+    _sb.from('syncpad_rooms').select('created_at').gte('created_at', activitySinceIso),
   ]);
 
   const get = (res) => res.status === 'fulfilled' ? (res.value.count ?? '—') : '—';
@@ -358,13 +391,74 @@ async function _loadStats() {
     if (el) { el.textContent = val; el.classList.remove('admin-skeleton'); }
   };
   update('stat-rooms',   get(roomsRes));
+  update('stat-active',  get(activeRes));
   update('stat-files',   get(filesRes));
   update('stat-reports', get(reportsRes));
   update('stat-expired', get(expiredRes));
 
+  const totalBytes = storageRes.status === 'fulfilled'
+    ? (storageRes.value.data || []).reduce((sum, r) => sum + (r.file_size || 0), 0)
+    : null;
+  update('stat-storage', totalBytes == null ? '—' : formatFileSize(totalBytes));
+
   const reportCount = reportsRes.status === 'fulfilled' ? (reportsRes.value.count ?? 0) : 0;
   const card = document.getElementById('stat-card-reports');
   if (card) card.classList.toggle('admin-stat-card--has-alerts', reportCount > 0);
+
+  const createdAts = activityRes.status === 'fulfilled' ? (activityRes.value.data || []).map(r => r.created_at) : [];
+  _renderActivityChart(createdAts);
+}
+
+// ── Activity chart (rooms created per day, last N days) ────────────────────
+// Dependency-free inline SVG — no charting library, matching the rest of the
+// app's "no build step" approach. Single series (room creations), so per the
+// project's chart conventions this needs no legend, just the title above it
+// and a hover tooltip per bar.
+
+function _renderActivityChart(createdAtIsoStrings) {
+  const container = document.getElementById('admin-activity-chart');
+  const totalEl = document.getElementById('admin-activity-total');
+  if (!container) return;
+
+  // Bucket by local calendar day, oldest first.
+  const days = [];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  for (let i = ACTIVITY_DAYS - 1; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    days.push({ date: d, count: 0 });
+  }
+  const dayIndex = new Map(days.map((d, i) => [d.date.toDateString(), i]));
+  for (const iso of createdAtIsoStrings) {
+    const d = new Date(iso);
+    d.setHours(0, 0, 0, 0);
+    const idx = dayIndex.get(d.toDateString());
+    if (idx != null) days[idx].count++;
+  }
+
+  const total = days.reduce((s, d) => s + d.count, 0);
+  if (totalEl) totalEl.textContent = `${total} new room${total === 1 ? '' : 's'}`;
+
+  if (total === 0) {
+    container.innerHTML = `<div class="admin-activity-empty">No rooms created in the last ${ACTIVITY_DAYS} days.</div>`;
+    return;
+  }
+
+  const max = Math.max(...days.map(d => d.count), 1);
+  const barWidth = 100 / days.length;
+  const bars = days.map((d, i) => {
+    const heightPct = (d.count / max) * 100;
+    const label = d.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    return `
+      <div class="admin-activity-bar-wrap" style="width:${barWidth}%" tabindex="0"
+           title="${escapeHtml(label)}: ${d.count} room${d.count === 1 ? '' : 's'}">
+        <div class="admin-activity-bar" style="height:${Math.max(heightPct, d.count > 0 ? 4 : 0)}%"></div>
+        <span class="admin-activity-bar-label">${i % 2 === 0 || days.length <= 7 ? escapeHtml(d.date.getDate().toString()) : ''}</span>
+      </div>`;
+  }).join('');
+
+  container.innerHTML = `<div class="admin-activity-bars">${bars}</div>`;
 }
 
 // ── Schema probing ────────────────────────────────────────────────────────────
@@ -453,6 +547,7 @@ function _roomFilterChips() {
   const filters = [
     { id: 'all',         label: 'All' },
     { id: 'active',      label: 'Active' },
+    { id: 'active-today', label: 'Active today' },
     { id: 'expired',     label: 'Expired' },
     { id: 'encrypted',   label: 'Encrypted' },
     { id: 'passcode',    label: 'Passcode' },
@@ -473,6 +568,7 @@ async function _fetchRooms(selectCols, offset) {
   // Apply server-side filter
   const now = new Date().toISOString();
   if (_roomsFilter === 'active')      q = q.or(`expires_at.is.null,expires_at.gt.${now}`);
+  else if (_roomsFilter === 'active-today') q = q.gte('updated_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
   else if (_roomsFilter === 'expired') q = q.lt('expires_at', now).not('expires_at', 'is', null);
   else if (_roomsFilter === 'encrypted') q = q.eq('encryption_enabled', true);
   else if (_roomsFilter === 'passcode')  q = q.not('passcode_hash', 'is', null);
@@ -1453,7 +1549,7 @@ async function _renderAuditTab(contentEl) {
             Run the migration to enable audit logging for all admin actions.
           </div>
           <div class="admin-audit-empty-actions">
-            <a class="admin-action-btn admin-action-primary" href="https://github.com/Spairkie/SyncPad/blob/main/docs/migrations/admin-dashboard-improvements.sql" target="_blank" rel="noopener">View migration SQL</a>
+            <a class="admin-action-btn admin-action-primary" href="https://github.com/Spairkie/SyncPad/blob/main/supabase/migrations/0006_admin_dashboard_improvements.sql" target="_blank" rel="noopener">View migration SQL</a>
           </div>
         </div>
       </div>`;
