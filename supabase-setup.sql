@@ -189,6 +189,54 @@ $$;
 
 grant execute on function public.is_syncpad_admin() to authenticated;
 
+-- Server-side enforcement of the room lock. Everything else that gates
+-- writes (read-only share links, ?mode=read, encryption-without-key) is a
+-- UX-only frontend control by design — see docs/security.md — because
+-- there is no per-visitor identity to check against; a room's editable and
+-- read-only links both resolve to the same room_id with the same anon key.
+-- editing_locked is different: it's server-stored room state, not a
+-- property of which link someone followed, so it CAN be enforced here.
+-- This trigger is a defense-in-depth backstop for anyone bypassing the
+-- frontend and calling the REST API directly — the normal UI already
+-- blocks locked-room edits via permissions.js / canEdit() before a request
+-- is ever sent.
+--
+-- 'backend-cleanup' (see cleanup_expired_syncpad_rooms below) and admins
+-- (is_syncpad_admin()) are exempt so expiry cleanup and admin moderation
+-- can still clear a locked room's content.
+create or replace function public.enforce_syncpad_rooms_lock()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if OLD.editing_locked
+     and NEW.editing_locked
+     and NEW.content is distinct from OLD.content
+     and coalesce(NEW.updated_by_device, '') <> 'backend-cleanup'
+     and not public.is_syncpad_admin()
+  then
+    raise exception 'This room is locked for editing.' using errcode = '42501';
+  end if;
+  return NEW;
+end;
+$$;
+
+do $$
+begin
+  if not exists (
+    select 1
+      from pg_trigger
+     where tgname = 'syncpad_rooms_enforce_lock'
+       and tgrelid = 'public.syncpad_rooms'::regclass
+  ) then
+    create trigger syncpad_rooms_enforce_lock
+      before update on public.syncpad_rooms
+      for each row
+      execute function public.enforce_syncpad_rooms_lock();
+  end if;
+end $$;
+
 create table if not exists public.syncpad_share_links (
   id uuid primary key default gen_random_uuid(),
   room_id text not null references public.syncpad_rooms(room_id) on delete cascade,

@@ -11,6 +11,8 @@ Run `supabase-setup.sql` in the Supabase SQL Editor first. It creates:
 - admin-only RLS policies for rooms, files, reports, and share links
 - authenticated baseline policies so normal app behavior still works after an admin signs in
 
+Optionally, also run [`docs/migrations/admin-dashboard-improvements.sql`](migrations/admin-dashboard-improvements.sql) for the admin audit log and room quarantine support — see [Optional feature migrations](../DEPLOYMENT.md#optional-feature-migrations) in `DEPLOYMENT.md` for the full list of opt-in migrations.
+
 ## 2. Create an Auth User
 
 In Supabase Dashboard:

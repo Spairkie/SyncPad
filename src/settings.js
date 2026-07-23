@@ -125,12 +125,21 @@ export async function handleExpiration(roomId, room, replacementContent = '') {
   if (!room.expires_at)                  return false;
   if (new Date(room.expires_at) > new Date()) return false;
 
-  await updateRoom(roomId, {
-    content:           replacementContent,
-    updated_by_device: getDeviceId(),
-    cleared_reason:    'expired',
-    expires_at:        null,
-  });
+  try {
+    await updateRoom(roomId, {
+      content:           replacementContent,
+      updated_by_device: getDeviceId(),
+      cleared_reason:    'expired',
+      expires_at:        null,
+    });
+  } catch {
+    // A locked room's content is protected server-side even from its own
+    // expiration clearing (see syncpad_rooms_enforce_lock in
+    // supabase-setup.sql) — the backend cleanup job or an admin will clear
+    // it instead. Any other failure here (network, RLS) is equally
+    // non-fatal: the room just stays visibly expired until the next visit.
+    return false;
+  }
   return true;
 }
 

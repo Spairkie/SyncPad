@@ -146,7 +146,7 @@ Work through this list for every new feature or non-trivial change:
 
 ## 7. Testing Guidance
 
-Tests live in `tests/` and run with `npm test`. Playwright is configured with four browser projects: `chromium`, `firefox`, `webkit`, and `mobile-chrome` (`playwright.config.js`).
+Tests live in `tests/` and run with `npm test`. `playwright.config.js` defines four browser projects — `chromium`, `firefox`, `webkit`, and `mobile-chrome` — but only `chromium` is active by default so `npm test` works without a full Playwright browser download; the other three are present but commented out. Uncomment them locally if you have the full browser set installed (`npx playwright install`).
 
 ### Test Helpers (`tests/helpers.js`)
 

@@ -8,9 +8,13 @@
 //   - strikethrough (~~x~~) and ==highlight==
 //   - inline code `x`
 //   - fenced code blocks ```lang\n…\n```
-//   - links [text](https://…)   (http(s)/mailto only)
-//   - images ![alt](https://…)  (http(s) only)
+//   - links [text](https://… "title")   (http(s)/mailto only; optional title)
+//   - images ![alt](https://… "title")  (http(s) only; optional title)
+//   - reference-style links  [text][id] / [text][]  +  [id]: url "title"
+//     (single-line definitions only; an unreferenced definition renders
+//     nothing, which doubles as the "[comment]: <> (text)" hack)
 //   - bare URL autolinking (https://example.com)
+//   - angle-bracket autolinks  <https://example.com>  <mailto:x@y.com>  <x@y.com>
 //   - unordered lists (- / * / +), including nested sub-lists by indentation
 //   - ordered lists  (1. 2. …), including nested sub-lists by indentation
 //   - GFM-style checklists  - [ ] item   - [x] item
@@ -67,6 +71,7 @@ export function renderMarkdown(src, _parentCtx) {
   const ctx = _parentCtx || {
     cbCounter: 0, headingIds: new Set(),
     footnoteDefs: new Map(), footnoteOrder: [],
+    linkRefs: new Map(),
   };
   const isTopLevel = !ctx._isRecursiveCall;
   let blocks = _splitBlocks(String(src));
@@ -99,6 +104,23 @@ export function renderMarkdown(src, _parentCtx) {
     blocks = blocks.filter((b) => {
       if (b.type !== 'footnoteDef') return true;
       if (!ctx.footnoteDefs.has(b.id)) ctx.footnoteDefs.set(b.id, b.text);
+      return false;
+    });
+  }
+  // Reference-link definitions ([label]: url "title") never render at their
+  // own source position — pulled into a lookup map the same way footnote
+  // defs are, resolved by [text][label]/[text][] elsewhere in the document.
+  // Key/url/title are escapeHtml()'d here (raw source, pre-escape) so a
+  // lookup against the already-escaped label text inside _renderInline (the
+  // whole document is escaped as one string before any inline rule runs)
+  // compares like-for-like instead of raw vs. escaped.
+  if (isTopLevel && ctx.linkRefs) {
+    blocks = blocks.filter((b) => {
+      if (b.type !== 'linkRefDef') return true;
+      const key = escapeHtml(b.id.trim().toLowerCase());
+      if (!ctx.linkRefs.has(key)) {
+        ctx.linkRefs.set(key, { url: escapeHtml(b.url), title: b.title != null ? escapeHtml(b.title) : null });
+      }
       return false;
     });
   }
@@ -137,6 +159,7 @@ export function renderMarkdownWithToc(src) {
   const ctx = {
     cbCounter: 0, headingIds: new Set(), headings: [],
     footnoteDefs: new Map(), footnoteOrder: [],
+    linkRefs: new Map(),
   };
   const html = renderMarkdown(src, ctx);
   return { html, headings: ctx.headings };
@@ -277,6 +300,22 @@ function _splitBlocks(src) {
       i++; continue;
     }
 
+    // Reference-link definition — [label]: url "title". Checked after the
+    // footnote-definition case above (whose id always starts with ^, so the
+    // two patterns never overlap) so a footnote def is never mis-read as a
+    // reference def. Pulled out of normal flow the same way footnote defs
+    // are, resolved by [text][label]/[text][] elsewhere in the document (see
+    // renderMarkdown's reference-link pre-pass). Single-line only — matches
+    // this renderer's existing footnote-definition scope decision; covers
+    // the overwhelming majority of real-world usage. A definition that's
+    // never referenced simply vanishes, which doubles as support for the
+    // common "[comment]: <> (text)" invisible-comment convention.
+    const ref = line.match(/^\[([^\]]+)\]:[ \t]*(\S+)(?:[ \t]+(?:"([^"]*)"|'([^']*)'|\(([^)]*)\)))?[ \t]*$/);
+    if (ref) {
+      blocks.push({ type: 'linkRefDef', id: ref[1], url: ref[2], title: ref[3] ?? ref[4] ?? ref[5] ?? null });
+      i++; continue;
+    }
+
     // List (unordered, ordered, or checklist)
     if (/^[ \t]*(?:[-*+]|\d+\.)[ \t]+/.test(line)) {
       const items = [];
@@ -397,6 +436,7 @@ function _renderBlock(block, ctx) {
       const childCtx = {
         cbCounter: 0, headingIds: ctx.headingIds, headings: ctx.headings, _tocIdQueue: ctx._tocIdQueue,
         footnoteDefs: ctx.footnoteDefs, footnoteOrder: ctx.footnoteOrder,
+        linkRefs: ctx.linkRefs,
         _isRecursiveCall: true,
       };
       // GitHub-style alerts: a blockquote whose first line is exactly
@@ -554,14 +594,19 @@ function _renderInline(raw, ctx) {
   // (a data-syncpad-file attribute holding the path), left for the caller to
   // resolve to a live signed URL asynchronously (see ui.js's image resolver).
   const imgSlots = [];
-  text = text.replace(/!\[([^\]\n]*)\]\(([^)\s]+)\)/g, (full, alt, url) => {
+  // Optional "title" (double- or single-quoted) after the URL, standard
+  // CommonMark image syntax — matched as &quot;/&#39; since step 2 already
+  // escaped the whole string, not as raw quote characters.
+  text = text.replace(/!\[([^\]\n]*)\]\(([^)\s]+?)(?:\s+(?:&quot;(.*?)&quot;|&#39;(.*?)&#39;))?\)/g, (full, alt, url, dTitle, sTitle) => {
+    const title = dTitle ?? sTitle;
+    const titleAttr = title != null ? ` title="${title}"` : '';
     if (/^https?:/i.test(url)) {
-      imgSlots.push(`<img src="${url}" alt="${alt}" loading="lazy">`);
+      imgSlots.push(`<img src="${url}" alt="${alt}"${titleAttr} loading="lazy">`);
       return `I${imgSlots.length - 1}`;
     }
     const fileMatch = /^syncpad-file:(.+)$/i.exec(url);
     if (fileMatch) {
-      imgSlots.push(`<img data-syncpad-file="${fileMatch[1]}" alt="${alt}" loading="lazy">`);
+      imgSlots.push(`<img data-syncpad-file="${fileMatch[1]}" alt="${alt}"${titleAttr} loading="lazy">`);
       return `I${imgSlots.length - 1}`;
     }
     return full;
@@ -599,14 +644,49 @@ function _renderInline(raw, ctx) {
     });
   }
 
-  // 5. Links — http/https/mailto only.
+  // 4.7. Reference-style links — [text][id] and the collapsed [text][].
+  // Only for an id with a real matching [id]: url definition (collected by
+  // renderMarkdown before the render loop reaches any inline text, same
+  // pre-pass shape as footnotes above); an unmatched reference is left as
+  // plain literal text. Deliberately does NOT support the CommonMark
+  // "shortcut reference" form (bare [text] with no second bracket) — that
+  // would make any bracketed text that happens to share a defined label's
+  // name silently turn into a link, which is a worse false-positive risk
+  // than requiring the explicit (if collapsed) second `[]`.
+  if (ctx?.linkRefs?.size) {
+    text = text.replace(/\[([^\]\n]+)\]\[([^\]\n]*)\]/g, (full, label, idRaw) => {
+      const key = (idRaw || label).trim().toLowerCase();
+      const ref = ctx.linkRefs.get(key);
+      if (!ref) return full;
+      const titleAttr = ref.title != null ? ` title="${ref.title}"` : '';
+      return `<a href="${ref.url}"${titleAttr} target="_blank" rel="noopener noreferrer">${label}</a>`;
+    });
+  }
+
+  // 5. Links — http/https/mailto only. Optional "title" (double- or
+  // single-quoted) after the URL, standard CommonMark link syntax — matched
+  // as &quot;/&#39; since step 2 already escaped the whole string, not as
+  // raw quote characters.
   // NOTE: `url` here comes from step-2-escaped text, so special chars like &
   // are already encoded as &amp;. Do NOT call escapeHtml() again — that would
   // produce double-encoded hrefs like &amp;amp; for URLs with query params.
-  text = text.replace(/\[([^\]\n]+)\]\(([^)\s]+)\)/g, (full, label, url) => {
+  text = text.replace(/\[([^\]\n]+)\]\(([^)\s]+?)(?:\s+(?:&quot;(.*?)&quot;|&#39;(.*?)&#39;))?\)/g, (full, label, url, dTitle, sTitle) => {
     if (!/^(?:https?:|mailto:)/i.test(url)) return full;
-    return `<a href="${url}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+    const title = dTitle ?? sTitle;
+    const titleAttr = title != null ? ` title="${title}"` : '';
+    return `<a href="${url}"${titleAttr} target="_blank" rel="noopener noreferrer">${label}</a>`;
   });
+
+  // 5.5. Angle-bracket autolinks — <https://url>, <mailto:...>, and bare
+  // email autolinks <user@host> — CommonMark's explicit autolink syntax.
+  // Matched as &lt;...&gt; since step 2 already escaped the raw < / >.
+  // Runs before the anchorSlots-hiding step below so these newly-created
+  // <a> tags are protected from the bare-URL autolinker the same way
+  // Markdown-link-syntax anchors already are.
+  text = text.replace(/&lt;(https?:\/\/[^\s&<>]+|mailto:[^\s&<>]+)&gt;/gi, (full, url) =>
+    `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`);
+  text = text.replace(/&lt;([^\s&<>@]+@[^\s&<>]+\.[^\s&<>]+)&gt;/g, (full, addr) =>
+    `<a href="mailto:${addr}" target="_blank" rel="noopener noreferrer">${addr}</a>`);
 
   // 6. Autolink bare http(s) URLs. The "pre" capture requires the URL to
   // start at the beginning of the string, after whitespace, or after '(' —

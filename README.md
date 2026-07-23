@@ -9,8 +9,7 @@
 
 > ⚠️ **Personal / demo project.**  
 > SyncPad is a personal project built for learning and portfolio purposes.  
-> **Read-only links and room locks are frontend/convenience controls, not backend-enforced security boundaries.**  
-> Anyone with the Supabase anon key can call the API directly.  
+> **Read-only links are a frontend/convenience control, not a backend-enforced security boundary** — anyone with the Supabase anon key can call the API directly and bypass them. (Room lock is the exception: it's enforced server-side by a database trigger, not just the frontend.)  
 > View-once is a convenience feature, not a secure destruction guarantee. A viewer may copy, screenshot, save, or otherwise preserve content before it clears.  
 > **Do not use SyncPad for passwords, HIPAA/PII, classified information, or any sensitive data.**
 
@@ -56,8 +55,9 @@
 ### Sharing
 - **Editable and read-only share links**
 - **Redesigned share modal** with edit-access and read-only cards
+- **Short room codes** — a 6-character spoken/typed alternative to the full link (e.g. reading it aloud on a call); same access as the editable link, just a shorter spelling of it. Get one from the Share modal's "Short code" row; join with one by typing it straight into the landing page's join box. Requires the optional `docs/migrations/short-room-codes.sql` migration — see [Optional feature migrations](DEPLOYMENT.md#optional-feature-migrations)
 - **QR codes** with download button for each link type
-- **Room editing lock** — pause edits on all devices (frontend only)
+- **Room editing lock** — pause edits on all devices; enforced server-side by a database trigger, not just the frontend
 
 ### Content & Editing
 - **Markdown** — Write, Preview, and Split view modes
@@ -69,8 +69,9 @@
 - **Templates Library v2** — 13 built-in templates (meeting, checklist, standup, bug report, code review, and more); searchable modal with two-column preview pane
 - **Custom templates** — save, rename, delete, export/import as JSON (localStorage-backed, up to 50 000 chars each)
 - **Find & Replace** — case-insensitive search with Prev / Next navigation, Replace, and Replace All
+- **Command palette** — `Ctrl/⌘ + K` (or the More menu) opens a searchable list of every app action — modes, panels, sharing, export, themes, and more — filter by typing, navigate with arrow keys, run with Enter
 - **Keyboard shortcuts** — see [Keyboard Shortcuts](#keyboard-shortcuts) below
-- **Export** — download as `.txt`, `.md`, rendered `.html`, or PDF (browser print); copy as plain text or Markdown
+- **Export** — download as `.txt`, `.md`, rendered `.html`, or PDF (browser print); copy as plain text or rendered HTML
 - **Monospace toggle** — switch editor font with `Ctrl/⌘ + Shift + M`
 - **Timestamp insert** — add current date/time inline
 
@@ -112,11 +113,11 @@
 | `Ctrl/⌘ + F` | Open Find & Replace panel |
 | `Ctrl/⌘ + B` | Bold selected text |
 | `Ctrl/⌘ + I` | Italic selected text |
-| `Ctrl/⌘ + K` | Insert Markdown link |
+| `Ctrl/⌘ + K` | Insert Markdown link (in the editor) — or open the **command palette** everywhere else, to search and run any app action by name |
 | `Ctrl/⌘ + /` | Open keyboard shortcuts help |
 | `Esc` | Close panel / modal / dropdown |
 
-Formatting shortcuts (`B`, `I`, `K`) do nothing in read-only or locked mode.
+Formatting shortcuts (`B`, `I`, `K` for links) do nothing in read-only or locked mode.
 
 ---
 
@@ -220,7 +221,7 @@ ORDER  BY room_id, uploaded_at;
 | No backend-enforced permissions | All permission checks are client-side JavaScript |
 | No user accounts or authentication | Normal users do not log in; SyncPad is anonymous and link-based |
 | Read-only share links are bearer-token links | They hide the room path but are still possession-based access, not identity authorization |
-| Room lock is frontend-only | Not a security boundary |
+| Room lock IS backend-enforced | The one exception to the row above — a database trigger, not just frontend JS (see `docs/security.md`) |
 | Admin access requires Supabase Auth | The `/admin` route is protected by `signInWithPassword` + `is_syncpad_admin()` RLS — not for end users |
 | View-once is convenience-only | Not a secure destruction guarantee; viewers can still copy or capture content before it clears |
 | Files are not end-to-end encrypted | Text encryption covers note content only unless file encryption is explicitly added |
@@ -284,7 +285,7 @@ See [`docs/architecture.md`](docs/architecture.md) for the full module-by-module
 | Markdown | Custom safe renderer (built from scratch) |
 | File preview | Fetch API + vanilla JS (no library) |
 | PWA | Service Worker + Web App Manifest |
-| Tests | Playwright (chromium, firefox, webkit, mobile) |
+| Tests | Playwright — chromium runs by default; firefox/webkit/mobile-chrome are configured but commented out so `npm test` doesn't require a full browser download |
 
 ---
 
@@ -292,7 +293,7 @@ See [`docs/architecture.md`](docs/architecture.md) for the full module-by-module
 
 | Document | Description |
 |---|---|
-| [`DEPLOYMENT.md`](DEPLOYMENT.md) | Step-by-step deploy guide (Supabase, GitHub Pages, custom domain) |
+| [`DEPLOYMENT.md`](DEPLOYMENT.md) | Step-by-step deploy guide — Supabase project setup, **all SQL (base schema + every optional feature migration)**, GitHub Pages, custom domain |
 | [`docs/architecture.md`](docs/architecture.md) | Module responsibilities, data flow, state management |
 | [`docs/security.md`](docs/security.md) | Security model, encryption, XSS mitigations, known limitations |
 | [`docs/playwright.md`](docs/playwright.md) | Running and writing Playwright tests |

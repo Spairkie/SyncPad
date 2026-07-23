@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 // Minimal SPA static server for Playwright tests.
 // Serves the SyncPad project at /SyncPad/ with SPA fallback to index.html.
-// Usage: node tests/spa-server.js [port=5555]
-const http = require('http');
-const fs = require('fs');
-const path = require('path');
+// Usage: node tests/spa-server.js (reads PORT from the environment, defaults to 5555)
+import http from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 5555;
 const APP_ROOT = path.resolve(__dirname, '..');
 const BASE = '/SyncPad';

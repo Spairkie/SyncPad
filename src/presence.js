@@ -187,7 +187,11 @@ export function getConnectedDevices() {
         device_id:   id,
         device_name: useCurrent ? (e.device_name || prev?.device_name || 'Unknown') : (prev?.device_name || 'Unknown'),
         typing:      Boolean(prev?.typing || e.typing),
-        read_only:   useCurrent ? !!e.read_only : !!prev.read_only,
+        // AND across a device's tabs, not "whichever tab tracked most
+        // recently" — a device can edit if ANY of its tabs can, so opening
+        // a read-only link in a second tab on the same browser doesn't
+        // flip your own editable tab's badge to "viewer".
+        read_only:   (prev ? prev.read_only : true) && !!e.read_only,
         hidden:      useCurrent ? !!e.hidden : !!prev.hidden,
         cursor_line:   useCurrent ? (e.cursor_line   ?? null) : (prev.cursor_line   ?? null),
         cursor_pos:    useCurrent ? (e.cursor_pos    ?? null) : (prev.cursor_pos    ?? null),

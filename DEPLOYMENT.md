@@ -1,7 +1,7 @@
 # SyncPad — Deployment Guide
 
 > ⚠️ **Personal / demo project.**  
-> Read-only links, room locks, and view-once are frontend/convenience controls, not backend-enforced security boundaries.  
+> Read-only links and view-once are frontend/convenience controls, not backend-enforced security boundaries. (Room lock is the exception — see [Security reminder](#security-reminder) below.)  
 > View-once is a convenience feature, not a secure destruction guarantee. A viewer may copy, screenshot, save, or otherwise preserve content before it clears.  
 > Do **not** deploy SyncPad for use with passwords, HIPAA/PII, classified data, or anything sensitive.
 
@@ -45,7 +45,7 @@ window.SYNCPAD_CONFIG = {
 
 ## Step 2 — Database and storage setup
 
-In the Supabase **SQL Editor**, paste and run the full contents of `supabase-setup.sql`.
+In the Supabase **SQL Editor**, paste and run the full contents of `supabase-setup.sql` first. It is the base schema — every other migration in this step depends on it.
 
 The script is **idempotent** — safe to rerun on an existing project. It creates:
 
@@ -54,6 +54,7 @@ The script is **idempotent** — safe to rerun on an existing project. It create
 - All required indexes
 - Row Level Security (RLS) policies for the `anon` role
 - `cleanup_expired_syncpad_rooms()` function
+- A server-side trigger that enforces the room editing lock (`editing_locked`) at the database level — the one write-permission control in SyncPad that RLS alone can't express (see `docs/security.md`)
 - Optional `pg_cron` schedule (every 10 minutes) — skipped gracefully if pg_cron is not enabled
 - Realtime publication entries for both tables
 - `syncpad-files` Storage bucket (private)
@@ -62,6 +63,20 @@ The script is **idempotent** — safe to rerun on an existing project. It create
 The optional Storage cleanup Edge Function lives at `supabase/functions/syncpad-cleanup` and is deployed separately with the Supabase CLI. It is not installed by the SQL script.
 
 > **Important:** The bucket is private. SyncPad always accesses files via signed URLs. Do not make the bucket public.
+
+### Optional feature migrations
+
+`supabase-setup.sql` covers the core app (rooms, files, sharing, admin login). Several shipped features are **opt-in** and live in their own file under `docs/migrations/` — the app works without them, but each feature silently no-ops (or shows a "check Supabase setup" error) until its migration is run. All are idempotent and safe to rerun; run `supabase-setup.sql` first, then any of these you want, in any order:
+
+| Migration | Enables | Symptom if skipped |
+|---|---|---|
+| [`docs/migrations/short-room-codes.sql`](docs/migrations/short-room-codes.sql) | Short (6-character) spoken/typed room codes — the "Short code" row in the Share modal, and typing a code into the landing page's join box | Share modal shows "Short codes need one more setup step…"; typing a code on the landing page falls through to treating it as a literal room id instead of resolving it |
+| [`docs/migrations/room-comments.sql`](docs/migrations/room-comments.sql) | Anchored inline comments on a text range (Comments panel) | Comments panel loads with no comments and no error — the feature is silently unavailable |
+| [`docs/migrations/version-history.sql`](docs/migrations/version-history.sql) | Version History panel — browse and restore past snapshots of a room | History panel shows no snapshots |
+| [`docs/migrations/device-limit.sql`](docs/migrations/device-limit.sql) | "Burn after N devices join" room setting | The device-limit setting has no effect; `device_limit` stays `null` |
+| [`docs/migrations/admin-dashboard-improvements.sql`](docs/migrations/admin-dashboard-improvements.sql) | Admin audit log, room quarantine, and disabled-downloads support in `/admin` | Those admin actions are unavailable; the rest of `/admin` still works |
+
+If a feature you expect to see doesn't work, re-check that its migration was actually run — the Supabase SQL Editor's query history shows past runs.
 
 ---
 
@@ -216,14 +231,14 @@ Current value at the time of this update: `syncpad-v10`.
 
 | Control | Enforcement |
 |---|---|
-| Read-only links | Frontend JS only |
-| Room lock | Frontend JS only |
+| Read-only links | Frontend JS only — see `docs/security.md` for why this one specifically can't be closed without a bigger redesign |
+| Room lock | **Backend-enforced** — a database trigger (`syncpad_rooms_enforce_lock`, installed by `supabase-setup.sql`) rejects content changes to a locked room regardless of what calls the API |
 | `/admin` route | Supabase Auth (`signInWithPassword`) + `is_syncpad_admin()` RLS — not a public-facing feature |
 | Passcode | Client-side hash check |
 | Text encryption | In-browser (AES-256-GCM) |
 | File access | Signed URLs (1 h TTL) — no end-to-end encryption |
 
-A determined user with the anon key can bypass all frontend controls. Do not use SyncPad for sensitive data.
+A determined user with the anon key can bypass every frontend-only control listed above (all except Room lock, `/admin`, and encryption, which don't rely on the frontend for their protection). Do not use SyncPad for sensitive data.
 
 ### Admin session and RLS roles
 
