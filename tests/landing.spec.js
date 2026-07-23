@@ -80,6 +80,23 @@ test.describe('Landing page', () => {
     expect(page.url().toLowerCase()).toContain('k7x9bq');
   });
 
+  test('navigating directly to a URL for a room that does not exist creates and opens it', { timeout: 60_000 }, async ({ page }) => {
+    if (!(await supabaseAvailable(page))) {
+      test.skip(true, 'Supabase JS CDN blocked');
+      return;
+    }
+    // Typing/following a URL for a name nobody has taken yet must behave
+    // like the Create Room button (this is the "join by name" behavior the
+    // landing join-box tests above exercise via the input; this test
+    // exercises the same fallback via direct navigation, which goes
+    // through boot()'s route handling instead of the join box).
+    const roomId = `test-direct-nav-${Date.now()}`;
+    await page.goto(`/SyncPad/${roomId}`);
+    await page.waitForSelector('#app-screen:not(.hidden)', { timeout: 25_000 });
+    expect(page.url()).toContain(roomId);
+    expect(page.url()).toMatch(/[?&]et=/);
+  });
+
   test('feature chips are visible on landing', async ({ page }) => {
     await goToLanding(page);
     const chips = page.locator('.landing-chip');
