@@ -28,5 +28,6 @@
     "@lezer/highlight": "^1.2.3",
     "@playwright/test": "^1.56.0",
     "esbuild": "^0.28.1"
-  }
+  },
+  "type": "module"
 }
