@@ -70,7 +70,7 @@
 - **Custom templates** — save, rename, delete, export/import as JSON (localStorage-backed, up to 50 000 chars each)
 - **Find & Replace** — case-insensitive search with Prev / Next navigation, Replace, and Replace All
 - **Selection context menu** — right-click (or long-press) selected text for quick formatting (bold/italic/strikethrough/highlight/code/link) or to add a comment, without navigating to the toolbar or Comments panel first
-- **Inline comments** — anchor a comment to a text range from the Comments panel or the selection context menu above; requires the optional `supabase/migrations/0003_room_comments.sql` migration
+- **Inline comments** — anchor a comment to a text range from the Comments panel or the selection context menu above; a small dot in the editor's margin marks each comment's anchor line (click to jump back to it), so comments stay visible while scrolling instead of only living in the panel list; requires the optional `supabase/migrations/0003_room_comments.sql` migration
 - **Version History** — browse and restore past snapshots of a room's content; requires the optional `supabase/migrations/0004_version_history.sql` migration
 - **Command palette** — `Ctrl/⌘ + K` (or the More menu) opens a searchable list of every app action — modes, panels, sharing, export, themes, and more — filter by typing, navigate with arrow keys, run with Enter
 - **Keyboard shortcuts** — see [Keyboard Shortcuts](#keyboard-shortcuts) below

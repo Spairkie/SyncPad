@@ -763,6 +763,33 @@ export function renderCommentsList(comments, { onDelete, onJump, canDelete = tru
   });
 }
 
+/**
+ * Render small dot markers in the editor's margin, one per comment, so
+ * comments are visible while scrolling instead of only discoverable by
+ * opening the side panel. `dots` are already positioned (editor-wrap-
+ * relative pixel Y) by the caller — app.js owns converting an anchor
+ * offset to a Y coordinate, since that requires reaching into whichever
+ * surface (textarea or LiveEditor) is currently visible, which this
+ * module intentionally doesn't know about.
+ * @param {{id: string, y: number, preview: string}[]} dots
+ * @param {(id: string) => void} onJump
+ */
+export function renderCommentMargin(dots, onJump) {
+  const layer = document.getElementById('comment-margin-layer');
+  if (!layer) return;
+  layer.innerHTML = '';
+  (dots || []).forEach((d) => {
+    const dot = document.createElement('button');
+    dot.className = 'comment-dot';
+    dot.style.top = `${d.y}px`;
+    dot.type = 'button';
+    dot.title = d.preview ? `Comment: "${d.preview}"` : 'Jump to comment';
+    dot.setAttribute('aria-label', 'Jump to comment');
+    dot.addEventListener('click', () => onJump?.(d.id));
+    layer.appendChild(dot);
+  });
+}
+
 // ── Panels ────────────────────────────────────────────────────────────────────
 
 const PANEL_IDS = ['tools-panel', 'files-panel', 'presence-panel', 'settings-panel', 'search-panel', 'history-panel', 'comments-panel'];

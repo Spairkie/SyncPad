@@ -429,7 +429,19 @@
       <!-- Typora-style editable live-preview surface (CodeMirror 6). Shown in
            Preview mode and Split's right pane in place of #note-preview. -->
       <div id="note-live" class="note-live hidden" aria-label="Live markdown editor"></div>
+
+      <!-- Comment margin dots — positions set inline by app.js/ui.js,
+           tracking whichever surface (textarea or CM6) is visible. -->
+      <div class="comment-margin-layer" id="comment-margin-layer" aria-hidden="true"></div>
     </div>
+
+    <!-- Cursor-chat trigger — sibling of .editor-wrap so it floats over the
+         card without being clipped by overflow:hidden, same reasoning as
+         .remote-notice below. Anchored to the editor pane (not the page
+         footer) so it stays close to whatever you're reading/writing. -->
+    <button class="cursor-chat-fab" id="btn-cursor-chat-fab" title="Send a quick note near your cursor (Ctrl+Shift+/)" aria-label="Send a cursor chat message">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+    </button>
 
     <!-- Remote update notice — sibling of .editor-wrap so it isn't clipped
          by overflow:hidden on the card; positioned relative to .editor-area -->
@@ -462,17 +474,9 @@
   <footer class="app-footer">
     <span class="word-count" id="word-count">0 words · 0 chars</span>
     <div class="footer-tools">
-      <button class="footer-tool-btn" id="btn-copy-footer" title="Copy note contents to clipboard" aria-label="Copy note contents to clipboard">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-        Copy Note
-      </button>
       <button class="footer-tool-btn" id="btn-insert-ts" data-readonly-hide title="Insert timestamp" aria-label="Insert timestamp">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
         <span id="footer-current-time">Time</span>
-      </button>
-      <button class="footer-tool-btn" id="btn-cursor-chat" title="Send a quick note near your cursor (Ctrl+Shift+/)" aria-label="Send a cursor chat message">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
-        Chat
       </button>
     </div>
     <div class="footer-links"><a href="/SyncPad/contact">Contact</a><a href="/SyncPad/privacy">Privacy</a><a href="/SyncPad/terms">Terms</a></div>
@@ -519,21 +523,6 @@
     </button>
   </div>
   <div class="panel-body">
-
-    <!-- Clipboard -->
-    <div class="tools-section">
-      <div class="tools-section-title">Clipboard</div>
-      <div class="tools-grid">
-        <button class="tool-btn" id="tool-copy-link">
-          <span class="tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></span>
-          <span class="tool-label">Copy Link</span>
-        </button>
-        <button class="tool-btn" id="tool-paste" data-readonly-hide>
-          <span class="tool-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg></span>
-          <span class="tool-label">Paste</span>
-        </button>
-      </div>
-    </div>
 
     <!-- Content -->
     <div class="tools-section">

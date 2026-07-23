@@ -8,6 +8,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Phase 27 — Floating cursor chat, inline comment margin dots, footer/tools decluttering
+
+Branch: `claude/codebase-review-testing-fjicqa`
+
+#### Added
+- **Comment margin dots.** A small marker now appears in the editor's margin at each comment's anchor line, so comments are visible while scrolling instead of only discoverable by opening the side panel. Reuses the exact offset-to-pixel machinery already built for cursor chat — `UI.getCaretViewportCoords()` (mirror-div, Write mode) and `LiveEditor.coordsAtPos()` (CM6, Preview/Split) — converted to `.editor-wrap`-relative coordinates so the dots live inside the card and get naturally clipped when their anchor scrolls out of view. Recomputed on comment load, mode switch, editor scroll/input (debounced), CM6 scroller scroll, and window resize. Clicking a dot reuses the existing `_jumpToComment()` jump-to-anchor logic the side panel's own "jump" button already had.
+- **Cursor chat is now a floating action button** anchored to the bottom-right of the editor pane (`#btn-cursor-chat-fab`) instead of a footer button — spatially close to whatever's on screen regardless of scroll position, and visually distinct as a live-collaboration action rather than a generic utility button. `Ctrl+Shift+/` is unaffected.
+
+#### Removed
+- **"Copy Note" removed from the footer.** The action itself is unchanged and still reachable via the command palette and `Ctrl+Shift+C` — `_copyNoteToClipboard()` extracted as a shared function so both call sites use the same logic instead of one delegating to a footer button click.
+- **"Copy Link" and "Paste" removed from the Tools panel.** Paste mostly duplicated native Ctrl+V/long-press paste, which already works the moment the editor is focused, and `navigator.clipboard.readText()`'s permission prompt could be more friction than just pasting normally. Copy Link is redundant now that the Share modal and clicking the room title in the header both already copy the same URL. Removed their command-palette entries too (`copy-link`, `paste`).
+
+The footer now holds a single utility button (Insert Timestamp); the Tools panel's Clipboard section is gone entirely (its remaining content moved up).
+
 ### Phase 26 — Revert edit-token write gating: room_id is a write credential again
 
 Branch: `claude/codebase-review-testing-fjicqa`

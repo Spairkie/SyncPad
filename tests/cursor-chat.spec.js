@@ -11,14 +11,14 @@ test.describe('Cursor chat', () => {
   test('clicking the trigger in Write mode opens a composer input', async ({ page }) => {
     await createRoom(page);
     await typeInEditor(page, 'Some text to place a caret in.');
-    await page.locator('#btn-cursor-chat').click();
+    await page.locator('#btn-cursor-chat-fab').click();
     await expect(page.locator('.cursor-chat-composer input')).toBeVisible();
   });
 
   test('sending a message in Write mode shows a positioned local bubble', async ({ page }) => {
     await createRoom(page);
     await typeInEditor(page, 'Some text to place a caret in.');
-    await page.locator('#btn-cursor-chat').click();
+    await page.locator('#btn-cursor-chat-fab').click();
     const input = page.locator('.cursor-chat-composer input');
     await input.fill('hello from write mode');
     await input.press('Enter');
@@ -34,7 +34,7 @@ test.describe('Cursor chat', () => {
   test('switching mode clears any open composer', async ({ page }) => {
     await createRoom(page);
     await typeInEditor(page, 'Some text.');
-    await page.locator('#btn-cursor-chat').click();
+    await page.locator('#btn-cursor-chat-fab').click();
     await expect(page.locator('.cursor-chat-composer')).toHaveCount(1);
 
     await setEditorMode(page, 'preview');
@@ -45,7 +45,7 @@ test.describe('Cursor chat', () => {
     await createRoom(page);
     await typeInEditor(page, '# Title\n\nSome text to place a caret in.');
     await setEditorMode(page, 'preview');
-    await page.locator('#btn-cursor-chat').click();
+    await page.locator('#btn-cursor-chat-fab').click();
     await expect(page.locator('.cursor-chat-composer input')).toBeVisible();
   });
 
@@ -53,7 +53,7 @@ test.describe('Cursor chat', () => {
     await createRoom(page);
     await typeInEditor(page, '# Title\n\nSome text.');
     await setEditorMode(page, 'preview');
-    await page.locator('#btn-cursor-chat').click();
+    await page.locator('#btn-cursor-chat-fab').click();
     const input = page.locator('.cursor-chat-composer input');
     await input.fill('never sent');
     await input.press('Escape');
@@ -65,7 +65,7 @@ test.describe('Cursor chat', () => {
     await createRoom(page);
     await typeInEditor(page, '# Title\n\nSome text to place a caret in.');
     await setEditorMode(page, 'preview');
-    await page.locator('#btn-cursor-chat').click();
+    await page.locator('#btn-cursor-chat-fab').click();
     const input = page.locator('.cursor-chat-composer input');
     await input.fill('hello room');
     await input.press('Enter');
@@ -80,7 +80,7 @@ test.describe('Cursor chat', () => {
     await createRoom(page);
     await typeInEditor(page, '# Title\n\nSome text.');
     await setEditorMode(page, 'preview');
-    await page.locator('#btn-cursor-chat').click();
+    await page.locator('#btn-cursor-chat-fab').click();
     await expect(page.locator('.cursor-chat-composer')).toHaveCount(1);
 
     await setEditorMode(page, 'write');
