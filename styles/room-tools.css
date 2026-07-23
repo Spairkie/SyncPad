@@ -309,7 +309,6 @@
 .room-title-edit-btn:focus-visible,
 .more-item:focus-visible,
 .md-seg-btn:focus-visible,
-#note-editor:focus-visible,
 .modal-actions button:focus-visible,
 .report-room-input:focus-visible,
 .report-room-textarea:focus-visible {
@@ -317,17 +316,20 @@
   outline-offset: 2px;
 }
 /* #note-editor and .note-live fill the exact same grid cell inside
-   .editor-wrap, whose overflow:hidden + rounded corners clip that 2px
-   offset outline down to the subtle accent sliver along the card's inner
-   edge — not a full ring. .note-live needs :focus-within instead of
-   :focus-visible: the actual focus target is CM6's nested contenteditable
-   .cm-content, not .note-live itself, so :focus-visible would never match
-   here the way it does on a native textarea. (CM6's own default focus
-   outline is separately suppressed in live-editor.js's theme, so only this
-   one outline shows — matching Source exactly instead of double-outlining.) */
+   .editor-wrap. A full outline ring reads as visual noise around a large
+   text area you're about to spend minutes in — an inset top-edge bar is
+   the same "you're focused here" signal without boxing in the content.
+   outline: none suppresses the browser's own default focus ring so only
+   this bar shows. .note-live needs :focus-within instead of :focus-visible:
+   the actual focus target is CM6's nested contenteditable .cm-content, not
+   .note-live itself, so :focus-visible would never match here the way it
+   does on a native textarea. (CM6's own default focus outline is
+   separately suppressed in live-editor.js's theme, so only this bar shows
+   — matching Source exactly instead of double-outlining.) */
+#note-editor:focus-visible,
 .note-live:focus-within {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: inset 0 2px 0 0 var(--accent);
 }
 
 #more-dropdown {

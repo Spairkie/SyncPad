@@ -654,6 +654,33 @@ kbd {
 
 
 /* ══════════════════════════════════════════════════════════════
+   EDITOR SELECTION CONTEXT MENU
+══════════════════════════════════════════════════════════════ */
+.editor-context-menu {
+  position: fixed; z-index: 1300; /* above modals (1200) — a right-click while a modal is open should still win */
+  background: var(--bg-surface); border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+  border-radius: 10px; box-shadow: var(--shadow-lg);
+  padding: 6px; min-width: 168px;
+  opacity: 0; transform: scale(0.96); pointer-events: none;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+.editor-context-menu.visible { opacity: 1; transform: scale(1); pointer-events: auto; }
+.editor-context-item {
+  display: flex; align-items: center; gap: 9px; width: 100%;
+  padding: 7px 9px; border-radius: 7px;
+  font-size: 13px; color: var(--text-primary); text-align: left;
+}
+.editor-context-item:hover { background: var(--bg-elevated); }
+.editor-context-item svg { flex-shrink: 0; color: var(--text-secondary); }
+.editor-context-item b, .editor-context-item i, .editor-context-item s, .editor-context-item mark, .editor-context-item code {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; flex-shrink: 0; font-size: 12px;
+}
+.editor-context-item code { background: none; border: none; padding: 0; font-family: var(--font-mono); }
+.editor-context-sep { height: 1px; background: var(--border); margin: 4px 2px; }
+
+
+/* ══════════════════════════════════════════════════════════════
    PWA INSTALL BAR — push mobile action bar up when visible
 ══════════════════════════════════════════════════════════════ */
 @media (max-width: 639px) {
