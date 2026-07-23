@@ -10,17 +10,22 @@
 // right message before ever sending a request, but a determined user can
 // still call Supabase directly with the anon key and skip this module
 // entirely. What actually stops them differs by flag:
-//   - isReadOnlyUrl and isEditingLocked ARE independently enforced
-//     server-side too (a missing/invalid edit token, or a locked room's
-//     content-change trigger — see supabase/migrations/0007 and 0001) —
-//     bypassing this module doesn't bypass those.
+//   - isEditingLocked IS independently enforced server-side too (a locked
+//     room's content-change trigger — see supabase/migrations/0001) —
+//     bypassing this module doesn't bypass that.
+//   - isReadOnlyUrl is a UI/UX convention, not server-enforced: room_id
+//     alone is sufficient to write (see supabase/migrations/
+//     0009_revert_edit_token_write_gating.sql), so ?mode=read and
+//     /share/:token discourage editing in the app's own UI but don't stop a
+//     technical visitor from writing directly. Lock a room (isEditingLocked)
+//     for an actual guarantee that nobody — owner included — can edit it.
 //   - isEncryptedNoKey and isViewOnceConsumed are enforced by what data is
 //     actually available (ciphertext without the key is useless; a
 //     view-once room's content is really gone server-side after
 //     consumption) rather than by a permission check as such.
 
 let _ctx = {
-  isReadOnlyUrl:       false, // no valid ?et= edit token (or ?mode=read, or /share/:token)
+  isReadOnlyUrl:       false, // ?mode=read or /share/:token — UX only, see note above
   isEditingLocked:     false, // room.editing_locked
   isEncryptedNoKey:    false, // room.encryption_enabled && we have no key
   isEncryptionEnabled: false, // room.encryption_enabled (files are not text-encrypted)
@@ -117,7 +122,7 @@ export function canPaste() {
 
 /** Reasoned, human-readable explanation of why editing is blocked. */
 export function editBlockedReason() {
-  if (_ctx.isReadOnlyUrl)    return 'This link is read-only. Ask the room’s creator for the editable link to make changes.';
+  if (_ctx.isReadOnlyUrl)    return 'This link is read-only. Visit the room’s plain URL to make changes.';
   if (_ctx.isEditingLocked)  return 'Editing is locked for this room.';
   if (_ctx.isEncryptedNoKey) return 'Encryption is enabled but you do not have the passphrase yet.';
   if (_ctx.isViewOnceConsumed) return 'This view-once note has already been consumed.';

@@ -6,11 +6,11 @@ import {
   generateRoomId, sanitizeRoomId,
   copyToClipboard, insertTimestamp,
   isMobile, isOnline, onOnlineChange,
-  buildRoomUrl, buildReadOnlyUrl, buildEditableRoomUrl, getUrlMode, getUrlEditToken, parseDuration,
+  buildRoomUrl, buildReadOnlyUrl, getUrlMode, parseDuration,
   escapeHtml, debounce, formatTimestamp, filterCommands,
 } from './utils.js';
 
-import { loadRoom, createRoom, verifyEditToken, setEditToken, getEditToken, clearRoomContent, subscribeToRoom, getOrCreateReadOnlyShareLink, resolveReadOnlyShareLink, getOrCreateRoomCode, resolveRoomCode, recordRoomDeviceView, setDeviceLimit, clearDeviceLimit, updateRoomDisplayName, normalizeRoomDisplayName, submitRoomReport, REPORT_REASONS } from './rooms.js';
+import { loadRoom, createRoom, clearRoomContent, subscribeToRoom, getOrCreateReadOnlyShareLink, resolveReadOnlyShareLink, getOrCreateRoomCode, resolveRoomCode, recordRoomDeviceView, setDeviceLimit, clearDeviceLimit, updateRoomDisplayName, normalizeRoomDisplayName, submitRoomReport, REPORT_REASONS } from './rooms.js';
 import { listRevisions } from './revisions.js';
 import { listComments, addComment, deleteComment, subscribeToComments } from './comments.js';
 
@@ -81,7 +81,7 @@ let _monospace     = false;
 let _eventsWired   = false;  // v1: guard against double-wiring
 let _consumingViewOnce = false; // v1: short-circuit own view-once clear echo
 let _viewOnceConsumedByThisSession = false; // session-local allowlist for first consumer view
-let _isReadOnly    = false;  // ?mode=read, /share/:token, or no valid ?et= edit token
+let _isReadOnly    = false;  // ?mode=read or /share/:token (UI/UX convention, not server-enforced — see joinRoom())
 let _shareToken    = null;
 let _markdownMode  = 'write'; // 'write' | 'preview' | 'split'
 let _showPreview   = false;  // derived: _markdownMode !== 'write'
@@ -133,7 +133,6 @@ const EXPIRATION_TIMER_MAX_DELAY_MS = 2147483647;
 // always starts at "create or join". Regular browser tabs are unaffected — this
 // only applies when display-mode is standalone (or iOS's legacy navigator.standalone).
 const LAST_ROOM_KEY       = 'syncpad_last_room_id';
-const LAST_ROOM_TOKEN_KEY = 'syncpad_last_room_edit_token';
 const RESUME_SUPPRESS_KEY = 'syncpad_suppress_resume';
 
 function _isStandalonePwa() {
@@ -143,15 +142,8 @@ function _isStandalonePwa() {
   } catch { return false; }
 }
 
-// editToken is required — PWA resume without it would silently reopen the
-// last room read-only, defeating the entire point of "resume where you left
-// off". Only called for genuinely editable sessions (see its call site).
-function _rememberLastRoom(roomId, editToken) {
-  try {
-    localStorage.setItem(LAST_ROOM_KEY, roomId);
-    if (editToken) localStorage.setItem(LAST_ROOM_TOKEN_KEY, editToken);
-    else localStorage.removeItem(LAST_ROOM_TOKEN_KEY);
-  } catch {}
+function _rememberLastRoom(roomId) {
+  try { localStorage.setItem(LAST_ROOM_KEY, roomId); } catch {}
 }
 
 // Any control that deliberately navigates to the app root (header logo,
@@ -347,17 +339,12 @@ async function boot() {
     if (suppressResume) { try { sessionStorage.removeItem(RESUME_SUPPRESS_KEY); } catch {} }
 
     let lastRoom = null;
-    let lastRoomToken = null;
     if (!suppressResume && _isStandalonePwa()) {
-      try {
-        lastRoom = localStorage.getItem(LAST_ROOM_KEY);
-        lastRoomToken = localStorage.getItem(LAST_ROOM_TOKEN_KEY);
-      } catch {}
+      try { lastRoom = localStorage.getItem(LAST_ROOM_KEY); } catch {}
     }
 
     if (lastRoom) {
-      const qs = lastRoomToken ? `?et=${encodeURIComponent(lastRoomToken)}` : '';
-      history.replaceState(null, '', `${BASE}/${lastRoom}${qs}`);
+      history.replaceState(null, '', `${BASE}/${lastRoom}`);
       await joinRoom(lastRoom);
       return;
     }
@@ -442,7 +429,7 @@ async function _openShareModal() {
     roomCodeError = true;
   }
   UI.populateShareModal({
-    editableUrl: buildEditableRoomUrl(BASE, _roomId, getEditToken()),
+    editableUrl: buildRoomUrl(BASE, _roomId),
     readOnlyUrl,
     readOnlyError,
     roomPath: `/${_roomId}` ,
@@ -487,8 +474,8 @@ function wireLandingEvents() {
       } catch { /* fall through to the literal-room-id path below */ }
     }
 
-    // Accept full URL (preserving ?et=/?mode= so a pasted editable or
-    // explicit read-only link keeps working) or a bare ID.
+    // Accept full URL (preserving ?mode= so a pasted read-only link keeps
+    // working) or a bare ID.
     let id, qs = '';
     try {
       const url = new URL(raw);
@@ -622,15 +609,16 @@ async function joinRoom(roomId, { isNewRoom = false } = {}) {
   // _isReadOnly to false — read after that would silently lose ?mode=read
   // and /share/:token's forced-read-only signal on every single navigation.
   //
-  // Forced read-only routes (?mode=read, /share/:token — both already set
-  // _isReadOnly=true before joinRoom() is ever called) never consider an
-  // edit token even if one happens to be present in the URL: that's the
-  // point of a link handed to someone specifically to restrict them. Every
-  // other route derives editability from a verified ?et= — see
-  // supabase/migrations/0007_room_edit_tokens.sql for why room_id alone
-  // can no longer imply write access.
+  // Forced read-only routes (?mode=read, /share/:token) are a UI/UX
+  // convention, not a server-enforced boundary: room_id alone is sufficient
+  // to write (see supabase/migrations/0009_revert_edit_token_write_gating.sql
+  // for why — the edit-token model this replaced had a real cost in lost-
+  // token lockouts and deployment fragility that outweighed its benefit for
+  // a personal/demo project not meant to hold anything sensitive). A room
+  // owner who needs a link that genuinely can't be used to edit should Lock
+  // the room first — editing_locked is enforced server-side regardless of
+  // how the write is attempted, unlike this route-based flag.
   const forcedReadOnly = _isReadOnly;
-  const candidateToken = forcedReadOnly ? null : getUrlEditToken();
 
   teardownRealtimeSession();
   _roomId = roomId;
@@ -640,9 +628,9 @@ async function joinRoom(roomId, { isNewRoom = false } = {}) {
   try {
     if (isNewRoom) {
       UI.setLoadingMessage('Creating room…');
-      _room = await createRoom(roomId); // also calls setEditToken() internally
+      _room = await createRoom(roomId);
       _isReadOnly = false;
-      history.replaceState(null, '', buildEditableRoomUrl(BASE, roomId, getEditToken()));
+      history.replaceState(null, '', `${BASE}/${roomId}`);
     } else {
       const room = await loadRoom(roomId);
 
@@ -663,15 +651,13 @@ async function joinRoom(roomId, { isNewRoom = false } = {}) {
         // (typed, bookmarked, or a link shared before the room existed) for
         // a name nobody has taken yet creates it and opens it editable,
         // same as the landing page's Create Room button — this is the
-        // original "join by name" behavior. Whoever's browser gets here
-        // first becomes the room's editor and receives its edit token; a
-        // forced-read-only route (?mode=read, /share/:token) never reaches
-        // this branch, so a stale/expired read-only link can't be used to
-        // claim a fresh room this way.
+        // original "join by name" behavior. A forced-read-only route
+        // (?mode=read, /share/:token) never reaches this branch, so a
+        // stale/expired read-only link can't be used to claim a fresh room.
         UI.setLoadingMessage('Creating room…');
         _room = await createRoom(roomId);
         _isReadOnly = false;
-        history.replaceState(null, '', buildEditableRoomUrl(BASE, roomId, getEditToken()));
+        history.replaceState(null, '', `${BASE}/${roomId}`);
       } else if (!room) {
         UI.setInfoScreen({
           title: 'Share link unavailable',
@@ -680,15 +666,7 @@ async function joinRoom(roomId, { isNewRoom = false } = {}) {
         UI.showScreen('info');
         return;
       } else {
-        if (!forcedReadOnly && candidateToken) {
-          const ok = await verifyEditToken(roomId, candidateToken);
-          _isReadOnly = !ok;
-          setEditToken(ok ? candidateToken : null);
-          if (!ok) UI.showToast('This edit link is invalid or has expired — opening read-only.', 'warning', 6000);
-        } else {
-          _isReadOnly = true;
-          setEditToken(null);
-        }
+        _isReadOnly = forcedReadOnly;
         _room = room;
       }
     }
@@ -796,11 +774,9 @@ async function startApp() {
   UI.showScreen('loading');
 
   // Remember this room for PWA "resume last room" (see _isStandalonePwa()).
-  // Only for genuine editable visits — not read-only share links or ?mode=read,
-  // which are bound to someone else's link rather than "my" room. Stores the
-  // edit token too — without it, resuming would silently reopen the room
-  // read-only (see getEditToken()'s doc comment in rooms.js).
-  if (!_isReadOnly) _rememberLastRoom(_roomId, getEditToken());
+  // Only for genuine editable visits — not read-only share links or
+  // ?mode=read, which are bound to someone else's link rather than "my" room.
+  if (!_isReadOnly) _rememberLastRoom(_roomId);
 
   // ── Expiration check ───────────────────────────────────────────────────────
   if (_room.expires_at && new Date(_room.expires_at) <= new Date()) {
@@ -3327,10 +3303,6 @@ function teardownRealtimeSession() {
   // silently encrypt saves in a subsequent non-encrypted room.
   _encKey  = null;
   _encSalt = null;
-  // Reset the edit token so a valid token for the previous room is never
-  // sent along with a write to the next one (joinRoom() re-derives and
-  // re-sets it, from the new room's ?et= if any, before any write can happen).
-  setEditToken(null);
   // Reset editor mode so the next room always starts in plain-write view
   // rather than inheriting preview / split mode from the previous room.
   // setMarkdownMode() cleans up DOM mode classes immediately (mode-split, etc.)

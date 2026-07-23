@@ -94,7 +94,6 @@ test.describe('Landing page', () => {
     await page.goto(`/SyncPad/${roomId}`);
     await page.waitForSelector('#app-screen:not(.hidden)', { timeout: 25_000 });
     expect(page.url()).toContain(roomId);
-    expect(page.url()).toMatch(/[?&]et=/);
   });
 
   test('feature chips are visible on landing', async ({ page }) => {

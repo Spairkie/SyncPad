@@ -1,7 +1,7 @@
 # SyncPad — Deployment Guide
 
 > ⚠️ **Personal / demo project.**  
-> Read-only links are now backend-enforced (see [`0007_room_edit_tokens.sql`](supabase/migrations/0007_room_edit_tokens.sql) and [Security reminder](#security-reminder) below) — but that comes with a real trade-off: editable links are longer (they carry a separate edit token) and, if lost, **unrecoverable** by design. Keep your editable link somewhere safe.  
+> Room links are frontend-restricted, not backend-secret — anyone who knows or guesses a room's URL can view **and edit** it. `?mode=read` and `/share/:token` read-only links are a UI convention, not a hard server-side boundary (see [Security reminder](#security-reminder) below). The room lock feature is the one control that's actually server-enforced.  
 > View-once is still a convenience feature, not a secure destruction guarantee. A viewer may copy, screenshot, save, or otherwise preserve content before it clears.  
 > Do **not** deploy SyncPad for use with passwords, HIPAA/PII, classified data, or anything sensitive.
 
@@ -47,15 +47,16 @@ window.SYNCPAD_CONFIG = {
 
 SyncPad's SQL lives in `supabase/migrations/`, one file per migration, numbered in the order they must be run — the standard layout for a project without a migration-tracking tool (and the same path the Supabase CLI would use, if this project ever adopts it). Numbered files, not one merged file: each one stays independently reviewable and keeps its own git history, and the number makes run-order unambiguous without needing a tracking table. All of them are **idempotent** — safe to rerun on an existing project.
 
-In the Supabase **SQL Editor**, run these two **in order** — both are required, not optional. The app's frontend code calls RPCs that only `0007` creates (room creation and every content/settings write go through it), so skipping it doesn't degrade a feature, it breaks the app entirely:
+In the Supabase **SQL Editor**, run:
 
-1. **[`supabase/migrations/0001_base_schema.sql`](supabase/migrations/0001_base_schema.sql)** — the base schema. Creates:
+1. **[`supabase/migrations/0001_base_schema.sql`](supabase/migrations/0001_base_schema.sql)** — the base schema, and the only migration a brand-new project actually needs. Creates:
    - `syncpad_rooms` and `syncpad_files` tables, indexes, Realtime publication entries
-   - Row Level Security (RLS) policies
+   - Row Level Security (RLS) policies — `room_id` + the anon key is sufficient to read and write a room
    - `cleanup_expired_syncpad_rooms()` and an optional `pg_cron` schedule (every 10 minutes, skipped gracefully if pg_cron isn't enabled)
-   - A trigger enforcing the room editing lock (`editing_locked`) at the database level
+   - A trigger enforcing the room editing lock (`editing_locked`) at the database level — this is the one access control that's actually server-enforced
    - `syncpad-files` Storage bucket (private) + Storage RLS policies
-2. **[`supabase/migrations/0007_room_edit_tokens.sql`](supabase/migrations/0007_room_edit_tokens.sql)** — real, server-enforced read-only links. Before this migration, an editable and a read-only link for the same room resolved to the same `room_id`, and `room_id` alone was sufficient to write via the anon key — read-only was a frontend convenience only. This migration adds a separate edit-token credential that every write now requires; see the file's own header comment for the full reasoning, and `docs/security.md` for the user-facing implications (editable links are now longer and, if lost, unrecoverable — by design).
+
+If you previously deployed with the edit-token migrations (`0007_room_edit_tokens.sql`), also run **[`supabase/migrations/0009_revert_edit_token_write_gating.sql`](supabase/migrations/0009_revert_edit_token_write_gating.sql)** to restore normal write access — see that file's header for why the edit-token model was reverted. A fresh project that never ran `0007` doesn't need `0009` either.
 
 The optional Storage cleanup Edge Function lives at `supabase/functions/syncpad-cleanup` and is deployed separately with the Supabase CLI. It is not installed by the SQL scripts.
 
@@ -63,7 +64,7 @@ The optional Storage cleanup Edge Function lives at `supabase/functions/syncpad-
 
 ### Optional feature migrations
 
-These genuinely are opt-in — the app works without them, and each feature just silently no-ops (or shows a "check Supabase setup" error) until its migration is run. Run `0001` and `0007` first, then any of these you want, in any order:
+These genuinely are opt-in — the app works without them, and each feature just silently no-ops (or shows a "check Supabase setup" error) until its migration is run. Run `0001` first, then any of these you want, in any order:
 
 | Migration | Enables | Symptom if skipped |
 |---|---|---|
@@ -72,7 +73,8 @@ These genuinely are opt-in — the app works without them, and each feature just
 | [`supabase/migrations/0004_version_history.sql`](supabase/migrations/0004_version_history.sql) | Version History panel — browse and restore past snapshots of a room | History panel shows no snapshots |
 | [`supabase/migrations/0005_device_limit.sql`](supabase/migrations/0005_device_limit.sql) | "Burn after N devices join" room setting | The device-limit setting has no effect; `device_limit` stays `null` |
 | [`supabase/migrations/0006_admin_dashboard_improvements.sql`](supabase/migrations/0006_admin_dashboard_improvements.sql) | Admin audit log, room quarantine, and disabled-downloads support in `/admin` | Those admin actions are unavailable; the rest of `/admin` still works |
-| [`supabase/migrations/0008_quarantine_enforcement.sql`](supabase/migrations/0008_quarantine_enforcement.sql) | Server-enforced quarantine — requires **both** `0006` and `0007` first | Quarantine still works from `/admin`, but (as documented in `0006`'s own header) is frontend-only without this — a determined user could bypass it by calling the API directly |
+| [`supabase/migrations/0008_quarantine_enforcement.sql`](supabase/migrations/0008_quarantine_enforcement.sql) | Server-enforced quarantine — a database trigger, same technique as room lock; requires `0006` first | Quarantine still works from `/admin`, but (as documented in `0006`'s own header) is frontend-only without this — a determined user could bypass it by calling the API directly |
+| [`supabase/migrations/0007_room_edit_tokens.sql`](supabase/migrations/0007_room_edit_tokens.sql) | Historical/optional — the edit-token table and RPCs, unused by the current client (see `0009`'s header). Only relevant if you want to build something else on top of it | Nothing — this is inert infrastructure, not a live feature |
 
 If a feature you expect to see doesn't work, re-check that its migration was actually run — the Supabase SQL Editor's query history shows past runs.
 
@@ -229,19 +231,18 @@ Current value at the time of this update: `syncpad-v10`.
 
 | Control | Enforcement |
 |---|---|
-| Read-only links | **Backend-enforced** — writes require a separate edit token (`rpc_update_room`, installed by `supabase/migrations/0007_room_edit_tokens.sql`); room_id alone (which a read-only visitor necessarily has, to view content) is no longer sufficient |
+| Read-only links (`?mode=read`, `/share/:token`) | **Frontend-only** — a UI/UX convention, not a server boundary. `room_id` + the anon key is sufficient to write regardless of which link was used; a read-only viewer necessarily learns `room_id` from viewing the room's content, so a technical visitor could call the write path directly. Use room lock for an actual guarantee |
 | Room lock | **Backend-enforced** — a database trigger (`syncpad_rooms_enforce_lock`, installed by `supabase/migrations/0001_base_schema.sql`) rejects content changes to a locked room regardless of what calls the API |
+| Room quarantine (optional, `/admin`) | **Backend-enforced** if `0008_quarantine_enforcement.sql` is applied — same trigger technique as room lock; frontend-only otherwise (see `0006`'s header) |
 | `/admin` route | Supabase Auth (`signInWithPassword`) + `is_syncpad_admin()` RLS — not a public-facing feature |
 | Passcode | Client-side hash check |
 | Text encryption | In-browser (AES-256-GCM) |
 | File access | Signed URLs (1 h TTL) — no end-to-end encryption |
 
-Passcode hashes and file signed URLs remain the two controls a determined user with the anon key can still get around on their own terms (see `docs/security.md`'s Known Limitations). Do not use SyncPad for sensitive data regardless.
+Room links, passcode hashes, and file signed URLs are all controls a determined user with the anon key can get around on their own terms (see `docs/security.md`'s Known Limitations). Do not use SyncPad for sensitive data regardless — room lock is the only hard guarantee this app makes.
 
 ### Admin session and RLS roles
 
-The Supabase JS client uses a single shared instance. After a user signs in at `/admin`, the client's session role changes from `anon` to `authenticated`. This means the anon RLS policies for `syncpad_files` and `storage.objects` no longer apply — they only match the `anon` role.
+The Supabase JS client uses a single shared instance. After a user signs in at `/admin`, the client's session role changes from `anon` to `authenticated`. This means the anon RLS policies for `syncpad_rooms`, `syncpad_files`, and `storage.objects` no longer apply — they only match the `anon` role.
 
-To prevent normal app features from breaking after admin login, `supabase/migrations/0001_base_schema.sql` adds mirrored **authenticated baseline** policies for those two that grant the same permissions as the anon policies. These are not privileged — they only allow what anon already could do. Admin-only destructive actions (delete rooms, etc.) are still gated by `is_syncpad_admin()` in separate admin policies.
-
-`syncpad_rooms` no longer needs an authenticated-baseline policy for this: since `0007_room_edit_tokens.sql`, normal room writes go through `rpc_update_room()` (a `SECURITY DEFINER` function), which works identically regardless of the caller's role — anon or authenticated. Direct anon/authenticated `UPDATE`/`INSERT` on `syncpad_rooms` is revoked entirely by that migration; only `is_syncpad_admin()`-gated admin policies and the RPCs can write to it now.
+To prevent normal app features from breaking after admin login, `supabase/migrations/0001_base_schema.sql` adds mirrored **authenticated baseline** policies for all three that grant the same permissions as the anon policies. These are not privileged — they only allow what anon already could do. Admin-only destructive actions (delete rooms, etc.) are still gated by `is_syncpad_admin()` in separate admin policies.

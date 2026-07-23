@@ -1,6 +1,6 @@
 // SyncPad – settings.js
 // Passcode, encryption, expiration, and view-once management.
-import { updateRoomSettings, updateRoom, consumeViewOnceRemote } from './rooms.js';
+import { updateRoomSettings, updateRoom } from './rooms.js';
 import { generateSalt, deriveKey, encryptContent, decryptContent, looksEncrypted } from './encryption.js';
 import { hashPasscode, getDeviceId, parseDuration } from './utils.js';
 
@@ -177,10 +177,13 @@ export async function consumeViewOnce(roomId, room, isCreator, replacementConten
   if (isCreator)        return false;
   if (room.viewed || room.cleared_reason === 'view_once') return false;
 
-  // Deliberately not updateRoom() — a view-once reader typically has no
-  // edit token (they're not the creator), so this goes through a narrow
-  // dedicated RPC instead. See consumeViewOnceRemote()'s doc comment.
-  return consumeViewOnceRemote(roomId, replacementContent, getDeviceId());
+  await updateRoom(roomId, {
+    viewed:            true,
+    content:           replacementContent,
+    updated_by_device: getDeviceId(),
+    cleared_reason:    'view_once',
+  });
+  return true;
 }
 
 export async function resetViewOnceNote(roomId, replacementContent = '', keepViewOnce = true) {

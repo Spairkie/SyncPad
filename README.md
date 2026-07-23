@@ -9,7 +9,7 @@
 
 > ⚠️ **Personal / demo project.**  
 > SyncPad is a personal project built for learning and portfolio purposes.  
-> **Read-only links are now backend-enforced** (a separate edit token, not just `room_id`, is required to write — see `docs/security.md`), same as room lock. The trade-off: editable links are longer and, if lost, **unrecoverable** by design — there's no "regain edit access" flow.  
+> **Room links are frontend-restricted, not backend-secret.** Anyone who knows or guesses a room's URL can view **and edit** it — `?mode=read` and `/share/:token` read-only links are a UI convention, not a hard boundary (see `docs/security.md`). Use the room lock feature for an actual, server-enforced "nobody can edit this" guarantee.  
 > View-once is a convenience feature, not a secure destruction guarantee. A viewer may copy, screenshot, save, or otherwise preserve content before it clears.  
 > **Do not use SyncPad for passwords, HIPAA/PII, classified information, or any sensitive data.**
 
@@ -53,9 +53,9 @@
 - **Conflict notice** — Apply / Keep mine / Copy remote / Dismiss when two devices edit simultaneously
 
 ### Sharing
-- **Editable and read-only share links** — genuinely different access levels, not just a UI flag: the editable link carries a separate edit token that read-only links (and the plain room link) never do
+- **Editable and read-only share links** — the plain room link is directly editable; `/share/:token` links stay read-only in the app's UI (see the Security note above for what that guarantees and what it doesn't)
 - **Redesigned share modal** with edit-access and read-only cards
-- **Short room codes** — a 6-character spoken/typed alternative to the full link (e.g. reading it aloud on a call), always read-only (a code resolves to the room, never to its edit token). Get one from the Share modal's "Short code" row; join with one by typing it straight into the landing page's join box. Requires the optional `supabase/migrations/0002_short_room_codes.sql` migration — see [Optional feature migrations](DEPLOYMENT.md#optional-feature-migrations)
+- **Short room codes** — a 6-character spoken/typed alternative to the full link (e.g. reading it aloud on a call), same access level as the plain link. Get one from the Share modal's "Short code" row; join with one by typing it straight into the landing page's join box. Requires the optional `supabase/migrations/0002_short_room_codes.sql` migration — see [Optional feature migrations](DEPLOYMENT.md#optional-feature-migrations)
 - **QR codes** with download button for each link type
 - **Room editing lock** — pause edits on all devices; enforced server-side by a database trigger, not just the frontend
 
@@ -221,10 +221,9 @@ ORDER  BY room_id, uploaded_at;
 
 | Limitation | Notes |
 |---|---|
-| No user accounts or authentication | Normal users do not log in; SyncPad is anonymous and link-based — "ownership" of a room means holding its edit-token link, not an identity |
-| Read-only vs. editable IS backend-enforced | Writing to a room requires a separate edit token, checked server-side (see `docs/security.md`) — not just a client-side flag |
-| Room lock IS backend-enforced | Same treatment — a database trigger, not just frontend JS |
-| Losing an editable link is unrecoverable | By design — there is no "regain edit access" flow, since building one would reopen the hole the edit-token system closes |
+| No user accounts or authentication | Normal users do not log in; SyncPad is anonymous and link-based — "ownership" of a room means knowing its URL, not an identity |
+| Read-only links are frontend-only | `?mode=read` and `/share/:token` restrict the app's own UI but are not a server-enforced boundary — `room_id` alone is sufficient to write (see `docs/security.md`). Use room lock for an actual guarantee |
+| Room lock IS backend-enforced | A database trigger, not just frontend JS — this is the one real, server-enforced "nobody can edit this" control |
 | Admin access requires Supabase Auth | The `/admin` route is protected by `signInWithPassword` + `is_syncpad_admin()` RLS — not for end users |
 | View-once is convenience-only | Not a secure destruction guarantee; viewers can still copy or capture content before it clears |
 | Files are not end-to-end encrypted | Text encryption covers note content only unless file encryption is explicitly added |
@@ -325,7 +324,6 @@ See [`docs/playwright.md`](docs/playwright.md) for the full test guide.
 
 ### Recently completed
 
-- [x] Real server-side read-only enforcement — a separate edit token, not `room_id`, is now required to write; see `supabase/migrations/0007_room_edit_tokens.sql`
 - [x] Command palette — `Ctrl/⌘+K` opens a searchable list of every app action
 - [x] Multi-file upload — drag-and-drop and file-picker both accept multiple files at once, uploaded sequentially with per-file progress
 - [x] Correct download filenames — downloads now carry the original uploaded filename via a forced-download signed URL, instead of the sanitized/timestamped Storage path name
