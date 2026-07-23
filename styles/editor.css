@@ -480,6 +480,4 @@ body.lock-mode .md-toolbar { opacity: 0.4; pointer-events: none; }
 }
 .footer-tool-btn:hover { background: var(--bg-elevated); color: var(--text-primary); }
 .footer-tool-btn svg { width: 13px; height: 13px; }
-.footer-tool-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.footer-tool-btn:disabled:hover { background: none; color: var(--text-secondary); }
 
