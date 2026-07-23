@@ -2,7 +2,7 @@
 // All DOM manipulation lives here. No business logic.
 import { TEMPLATE_CATEGORY_ORDER } from './templates.js';
 import {
-  countWords, countChars, formatFileSize, fileEmoji, formatTimestamp,
+  countWords, countChars, estimateReadingTime, formatFileSize, fileEmoji, formatTimestamp,
   escapeHtml, copyToClipboard,
 } from './utils.js';
 import { getIcon } from './icons.js';
@@ -112,6 +112,106 @@ export function showToast(message, type = '', duration = 2800) {
     toast.classList.add('out');
     setTimeout(() => toast.remove(), 260);
   }, duration);
+}
+
+// ── Cursor chat (Figma-style ephemeral message near a caret) ──────────────────
+// Bubbles live in #cursor-chat-layer, a full-viewport fixed layer — see
+// style.css. Never persisted; a bubble is just a DOM node with a timer.
+
+const _cursorChatBubbles = new Map(); // device_id -> { el, timer }
+let _cursorChatComposerEl = null;
+
+/**
+ * Open a small inline input at `{x, y}` (viewport coordinates, e.g. from
+ * LiveEditor.coordsAtPos()) for composing a cursor-chat message. Only one
+ * composer at a time — opening a new one discards any other in progress.
+ * @param {{x:number, y:number}} coords
+ * @param {(text: string) => void} onSubmit – called with the trimmed text on Enter; not called on cancel.
+ */
+export function openCursorChatComposer(coords, onSubmit) {
+  closeCursorChatComposer();
+  const layer = document.getElementById('cursor-chat-layer');
+  if (!layer) return;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'cursor-chat-composer';
+  wrap.style.left = `${coords.x}px`;
+  wrap.style.top  = `${coords.y}px`;
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.maxLength = 80;
+  input.placeholder = 'Say something…';
+  input.setAttribute('aria-label', 'Cursor chat message');
+  wrap.appendChild(input);
+  layer.appendChild(wrap);
+  _cursorChatComposerEl = wrap;
+  input.focus();
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const text = input.value.trim();
+      closeCursorChatComposer();
+      if (text) onSubmit?.(text);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      closeCursorChatComposer();
+    }
+  });
+  input.addEventListener('blur', () => closeCursorChatComposer());
+}
+
+export function closeCursorChatComposer() {
+  // Removing a focused input can synchronously fire its own 'blur' handler
+  // (which also calls this function) before .remove() returns — null the
+  // reference out first so that re-entrant call sees nothing to do, instead
+  // of racing to remove the same node twice.
+  const el = _cursorChatComposerEl;
+  _cursorChatComposerEl = null;
+  el?.remove();
+}
+
+/**
+ * Show (or replace) an ephemeral cursor-chat bubble from `deviceId`, fading
+ * out on its own after ~5s. A second message from the same device before
+ * the first fades replaces it and resets the timer, rather than stacking.
+ * @param {{deviceId: string, deviceName: string, text: string, x: number, y: number}} msg
+ */
+export function showCursorChatBubble({ deviceId, deviceName, text, x, y }) {
+  const layer = document.getElementById('cursor-chat-layer');
+  if (!layer) return;
+
+  const existing = _cursorChatBubbles.get(deviceId);
+  if (existing) { clearTimeout(existing.timer); existing.el.remove(); }
+
+  const el = document.createElement('div');
+  el.className = 'cursor-chat-bubble';
+  el.style.left = `${x}px`;
+  el.style.top  = `${y}px`;
+  el.innerHTML = `
+    <span class="cursor-chat-bubble-name">${escapeHtml(deviceName || 'Someone')}</span>
+    <span class="cursor-chat-bubble-text">${escapeHtml(text)}</span>`;
+  layer.appendChild(el);
+
+  const timer = setTimeout(() => {
+    el.classList.add('out');
+    setTimeout(() => { el.remove(); _cursorChatBubbles.delete(deviceId); }, 400);
+  }, 5000);
+  _cursorChatBubbles.set(deviceId, { el, timer });
+
+  // The bubble itself is a purely visual, viewport-positioned element — a
+  // screen reader has no way to discover it otherwise, so announce it
+  // through the same live region presence typing/join events use.
+  const region = document.getElementById('presence-live-region');
+  if (region) region.textContent = `${deviceName || 'Someone'} says: ${text}`;
+}
+
+/** Clear every cursor-chat bubble/composer immediately — used on room navigation. */
+export function clearCursorChat() {
+  for (const { el, timer } of _cursorChatBubbles.values()) { clearTimeout(timer); el.remove(); }
+  _cursorChatBubbles.clear();
+  closeCursorChatComposer();
 }
 
 // ── Remote update notice (4 actions: Apply / Keep mine / Copy remote / Dismiss) ─
@@ -263,11 +363,11 @@ export function setRoomTitleEditMode(editing, initialValue = '') {
 export function updateWordCount(text) {
   const w = countWords(text);
   const c = countChars(text);
-  const label = `${w} word${w !== 1 ? 's' : ''} · ${c} char${c !== 1 ? 's' : ''}`;
+  const mins = estimateReadingTime(text);
+  const readingLabel = mins > 0 ? ` · ${mins} min read` : '';
+  const label = `${w} word${w !== 1 ? 's' : ''} · ${c} char${c !== 1 ? 's' : ''}${readingLabel}`;
   const el = document.getElementById('word-count');
   if (el) el.textContent = label;
-  const tb = document.getElementById('toolbar-word-count');
-  if (tb) tb.textContent = label;
 }
 
 // ── Device count ──────────────────────────────────────────────────────────────
@@ -338,7 +438,7 @@ function _announcePresenceChanges(devices, myDeviceId) {
   if (region && messages.length) region.textContent = messages.join(' ');
 }
 
-export function renderDevicesList(devices, myDeviceId, onNameChange) {
+export function renderDevicesList(devices, myDeviceId, onNameChange, { followedDeviceId = null, onToggleFollow = null } = {}) {
   const list = document.getElementById('devices-list');
   if (!list) return;
   _announcePresenceChanges(devices, myDeviceId);
@@ -350,6 +450,7 @@ export function renderDevicesList(devices, myDeviceId, onNameChange) {
   }
   devices.forEach(device => {
     const isMe = device.device_id === myDeviceId;
+    const isFollowed = !isMe && !!device.device_id && device.device_id === followedDeviceId;
     const item = document.createElement('div');
     item.className = `device-item${isMe ? ' me' : ''}${device.read_only ? ' viewer' : ''}${device.typing ? ' typing' : ''}`;
     item.setAttribute('role', 'listitem');
@@ -375,6 +476,10 @@ export function renderDevicesList(devices, myDeviceId, onNameChange) {
       }
     }
 
+    const followBtnHtml = !isMe
+      ? `<button type="button" class="device-follow-btn${isFollowed ? ' is-active' : ''}" aria-pressed="${isFollowed}" title="${isFollowed ? 'Stop following this device' : 'Follow this device — jump your view to where they are'}" aria-label="${isFollowed ? 'Stop following' : 'Follow'} ${escapeHtml(device.device_name || 'this device')}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></button>`
+      : '';
+
     item.innerHTML = `
       <div class="device-dot"></div>
       <div class="device-info">
@@ -384,7 +489,11 @@ export function renderDevicesList(devices, myDeviceId, onNameChange) {
         }
         <div class="device-meta">${roBadge}${activityHtml}</div>
       </div>
-      <div class="${isMe ? 'device-you' : ''}">${isMe ? 'You' : ''}</div>`;
+      <div class="${isMe ? 'device-you' : ''}">${isMe ? 'You' : followBtnHtml}</div>`;
+
+    if (!isMe) {
+      item.querySelector('.device-follow-btn')?.addEventListener('click', () => onToggleFollow?.(device.device_id));
+    }
 
     if (isMe) {
       const input = item.querySelector('.device-name-edit');
@@ -522,9 +631,140 @@ export function renderHistoryList(revisions, onRestore, opts = {}) {
   });
 }
 
+/**
+ * A scrubbable slider over version history (Etherpad's time-slider pattern),
+ * shown above the discrete list rendered by renderHistoryList() rather than
+ * replacing it. `entries` must be ordered oldest-to-newest and end with the
+ * current live content as its last ("Now") entry.
+ * @param {{ label: string, text: string|null, locked?: boolean, isNow?: boolean, rev?: object }[]} entries
+ * @param {(entry: object) => void} onRestore — called with the scrubbed-to entry
+ */
+export function renderHistoryScrubber(entries, onRestore) {
+  const wrap      = document.getElementById('history-scrubber');
+  const slider    = document.getElementById('history-slider');
+  const label     = document.getElementById('history-scrubber-label');
+  const preview   = document.getElementById('history-scrubber-preview');
+  const restoreBtn = document.getElementById('history-scrubber-restore-btn');
+  if (!wrap || !slider || !label || !preview || !restoreBtn) return;
+
+  // Needs at least one real revision plus the synthetic "Now" entry to be
+  // worth scrubbing through — a brand-new room has nothing to slide across.
+  if (!entries || entries.length < 2) {
+    wrap.classList.add('hidden');
+    return;
+  }
+  wrap.classList.remove('hidden');
+
+  const maxIndex = entries.length - 1;
+  slider.min = '0';
+  slider.max = String(maxIndex);
+  slider.value = String(maxIndex); // start at "Now"
+
+  const renderAt = (index) => {
+    const entry = entries[index];
+    if (!entry) return;
+    label.textContent = entry.label;
+    if (entry.locked) {
+      preview.innerHTML = '<span class="history-preview-locked">🔒 Encrypted — open with the passphrase to preview</span>';
+    } else {
+      preview.textContent = entry.text || '';
+    }
+    restoreBtn.disabled = !!entry.isNow || !!entry.locked;
+  };
+
+  renderAt(maxIndex);
+  slider.oninput = () => renderAt(Number(slider.value));
+  restoreBtn.onclick = () => {
+    const entry = entries[Number(slider.value)];
+    if (entry && !entry.isNow && !entry.locked) onRestore?.(entry);
+  };
+}
+
+// ── Comments ─────────────────────────────────────────────────────────────────
+
+export function setCommentLoading(loading) {
+  document.getElementById('comment-loading')?.classList.toggle('hidden', !loading);
+}
+
+/**
+ * `pendingAnchor` is the range the next comment will be attached to (or
+ * null when there's no usable selection/caret to anchor to — e.g. the
+ * panel was opened before the editor ever had focus). `anchorPreviewText`
+ * is a short snippet of the anchored text for the composer's own label.
+ */
+export function setCommentComposer({ pendingAnchor, anchorPreviewText, onSubmit } = {}) {
+  const composer = document.getElementById('comment-composer');
+  const hint     = document.getElementById('comment-composer-hint');
+  const anchorEl = document.getElementById('comment-composer-anchor');
+  const input    = document.getElementById('comment-composer-input');
+  const btn      = document.getElementById('comment-composer-btn');
+  if (!composer || !hint || !anchorEl || !input || !btn) return;
+
+  if (!pendingAnchor) {
+    composer.classList.add('hidden');
+    hint.classList.remove('hidden');
+    return;
+  }
+  hint.classList.add('hidden');
+  composer.classList.remove('hidden');
+  anchorEl.textContent = pendingAnchor.from === pendingAnchor.to
+    ? 'On: cursor position (no text selected)'
+    : `On: “${(anchorPreviewText || '').replace(/\s+/g, ' ').trim().slice(0, 80)}”`;
+  input.value = '';
+
+  btn.onclick = () => {
+    const text = input.value.trim();
+    if (!text) { input.focus(); return; }
+    onSubmit?.(text, pendingAnchor);
+    input.value = '';
+  };
+}
+
+/**
+ * `comments` items: { id, created_at, device_id, device_name, anchor_from,
+ * anchor_to, _preview, _anchorPreview }, where _preview is the caller's
+ * already-decrypted (or plaintext) text — null if it couldn't be decrypted
+ * (shown as a locked placeholder) — and _anchorPreview is a short snippet
+ * of the anchored note text, if the caller could resolve one.
+ */
+export function renderCommentsList(comments, { onDelete, onJump, canDelete = true } = {}) {
+  const list  = document.getElementById('comments-list');
+  const empty = document.getElementById('comments-empty');
+  if (!list) return;
+  list.setAttribute('role', 'list');
+  list.innerHTML = '';
+  if (!comments?.length) { empty?.classList.remove('hidden'); return; }
+  empty?.classList.add('hidden');
+
+  comments.forEach((c) => {
+    const item = document.createElement('div');
+    item.className = 'comment-item';
+    item.setAttribute('role', 'listitem');
+    const bodyHtml = c._preview == null
+      ? '<span class="comment-text-locked">🔒 Encrypted — open with the passphrase to view</span>'
+      : escapeHtml(c._preview);
+    const anchorHtml = c._anchorPreview
+      ? `<div class="comment-anchor-preview">On: "${escapeHtml(c._anchorPreview)}"</div>`
+      : '';
+    item.innerHTML = `
+      <div class="comment-info">
+        <div class="comment-meta">${escapeHtml(c.device_name || 'Someone')} · ${formatTimestamp(c.created_at)}</div>
+        ${anchorHtml}
+        <div class="comment-text">${bodyHtml}</div>
+      </div>
+      <div class="comment-actions">
+        <button class="comment-jump-btn" title="Jump to this comment" aria-label="Jump to comment location"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg></button>
+        ${canDelete ? '<button class="comment-delete-btn" title="Delete comment" aria-label="Delete comment"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>' : ''}
+      </div>`;
+    item.querySelector('.comment-jump-btn')?.addEventListener('click', () => onJump?.(c));
+    item.querySelector('.comment-delete-btn')?.addEventListener('click', () => onDelete?.(c));
+    list.appendChild(item);
+  });
+}
+
 // ── Panels ────────────────────────────────────────────────────────────────────
 
-const PANEL_IDS = ['tools-panel', 'files-panel', 'presence-panel', 'settings-panel', 'search-panel', 'history-panel'];
+const PANEL_IDS = ['tools-panel', 'files-panel', 'presence-panel', 'settings-panel', 'search-panel', 'history-panel', 'comments-panel'];
 const FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 // Unlike every modal dialog, side panels didn't move focus into themselves
@@ -599,7 +839,7 @@ export function closeAllModals() {
 export function populateShareModal({
   editableUrl, readOnlyUrl, readOnlyError = false, hasPasscode, hasEncryption,
   roomPath = '', roomDisplayTitle = '', hasReadOnlyLink = false, isEditingLocked = false,
-  hasViewOnce = false, expiresAt = null,
+  hasViewOnce = false, expiresAt = null, roomCode = '', roomCodeError = false, showRoomCode = true,
 } = {}) {
   const roomPathEl = document.getElementById('share-room-path');
   const titleEl = document.getElementById('share-modal-title');
@@ -628,6 +868,16 @@ export function populateShareModal({
   _wireQrToggle('share-readonly-qr-toggle', 'share-readonly-qr-wrap', !!readOnlyUrl);
   _wireQrDownload('share-editable-qr-download', 'share-editable-qr', 'syncpad-editable-qr.png');
   _wireQrDownload('share-readonly-qr-download', 'share-readonly-qr', 'syncpad-readonly-qr.png', !readOnlyUrl);
+
+  // A read-only viewer session has no room-owning identity to generate a
+  // code from (same reason it gets an empty editableUrl above) — the
+  // section is hidden entirely rather than shown disabled.
+  const codeSection = document.getElementById('share-code-section');
+  if (codeSection) codeSection.classList.toggle('hidden', !showRoomCode);
+  if (showRoomCode) {
+    const codeDisplay = roomCode || (roomCodeError ? 'Could not create a short code. Check Supabase setup.' : 'Generating short code…');
+    _wireShareRow({ fieldId: 'share-code-text', copyBtnId: 'share-code-copy', openId: null, nativeBtnId: null, errorId: 'share-code-error', url: roomCode, displayValue: codeDisplay });
+  }
 }
 
 function _wireShareRow({ fieldId, copyBtnId, openId, nativeBtnId, errorId, url, displayValue = url }) {
@@ -995,6 +1245,7 @@ export function renderSettingsPanel(room) {
   const expStatus = document.getElementById('setting-exp-status');
   const voStatus  = document.getElementById('setting-vo-status');
   const lockStatus = document.getElementById('setting-lock-status');
+  const dlStatus  = document.getElementById('setting-dl-status');
 
   if (pcStatus)  pcStatus.textContent  = room.passcode_hash      ? 'Protected'  : 'None';
   if (encStatus) encStatus.textContent = room.encryption_enabled ? 'Enabled for note text' : 'Off';
@@ -1007,6 +1258,11 @@ export function renderSettingsPanel(room) {
       : 'Armed';
   }
   if (lockStatus) lockStatus.textContent = room.editing_locked ? 'Locked' : 'Unlocked';
+  if (dlStatus) {
+    dlStatus.textContent = room.cleared_reason === 'device_limit' ? 'Used (cleared)'
+      : room.device_limit ? `Armed — clears after ${room.device_limit} device${room.device_limit === 1 ? '' : 's'}`
+      : 'Off — clear the note after N different devices have joined';
+  }
 
   // Action button labels
   const pcBtn   = document.getElementById('setting-passcode-btn');
@@ -1014,6 +1270,8 @@ export function renderSettingsPanel(room) {
   const expBtn  = document.getElementById('setting-exp-btn');
   const voBtn   = document.getElementById('setting-vo-btn');
   const lockBtn = document.getElementById('setting-lock-btn');
+  const dlBtn   = document.getElementById('setting-dl-btn');
+  const dlInput = document.getElementById('setting-dl-input');
 
   if (pcBtn)   pcBtn.textContent   = room.passcode_hash      ? 'Remove'  : 'Set';
   if (encBtn)  encBtn.textContent  = room.encryption_enabled ? 'Disable' : 'Enable';
@@ -1022,6 +1280,8 @@ export function renderSettingsPanel(room) {
   if (expBtn)  expBtn.textContent  = room.expires_at         ? 'Modify'  : 'Set expiry';
   if (voBtn)   voBtn.textContent   = room.view_once          ? 'Disable' : 'Enable';
   if (lockBtn) lockBtn.textContent = room.editing_locked     ? 'Unlock'  : 'Lock';
+  if (dlBtn)   dlBtn.textContent   = room.device_limit       ? 'Disable' : 'Enable';
+  if (dlInput) dlInput.disabled    = !!room.device_limit;
 }
 
 // ── Offline banner ────────────────────────────────────────────────────────────

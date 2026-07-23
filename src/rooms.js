@@ -125,6 +125,50 @@ export async function resolveReadOnlyShareLink(token) {
   return Array.isArray(data) ? data[0] || null : data;
 }
 
+// ── Short room codes ─────────────────────────────────────────────────────────
+// A short (6-char), human-typeable/speakable alternate spelling of a room's
+// full id — same access level as the editable link, just shorter. See
+// docs/migrations/short-room-codes.sql for the generation/lookup RPCs and
+// the reasoning behind treating it as equivalent (not reduced) trust.
+
+export async function getOrCreateRoomCode(roomId) {
+  const sb = getSupabaseClient();
+  const { data, error } = await sb.rpc('get_or_create_room_code', { p_room_id: roomId });
+  if (error) { logSupabaseError('getOrCreateRoomCode', error, { room_id: roomId }); throw error; }
+  const row = Array.isArray(data) ? data[0] || null : data;
+  return row?.code || null;
+}
+
+export async function resolveRoomCode(code) {
+  const sb = getSupabaseClient();
+  const { data, error } = await sb.rpc('resolve_room_code', { p_code: code });
+  if (error) { logSupabaseError('resolveRoomCode', error, { code }); throw error; }
+  const row = Array.isArray(data) ? data[0] || null : data;
+  return row?.room_id || null;
+}
+
+// ── Device-limited rooms ("burn after N devices join") ───────────────────────
+// See docs/migrations/device-limit.sql. Call once per room load, mirroring
+// how consumeViewOnce() is called — the caller already has the content in
+// hand from loadRoom() and keeps showing it even when this call reports the
+// limit was just hit by this very view.
+
+export async function recordRoomDeviceView(roomId, deviceId) {
+  const sb = getSupabaseClient();
+  const { data, error } = await sb.rpc('record_room_device_view', { p_room_id: roomId, p_device_id: deviceId });
+  if (error) { logSupabaseError('recordRoomDeviceView', error, { room_id: roomId }); throw error; }
+  const row = Array.isArray(data) ? data[0] || null : data;
+  return { deviceCount: row?.device_count ?? null, deviceLimit: row?.device_limit ?? null, expired: !!row?.expired };
+}
+
+export async function setDeviceLimit(roomId, limit) {
+  await updateRoomSettings(roomId, { device_limit: limit });
+}
+
+export async function clearDeviceLimit(roomId) {
+  await updateRoomSettings(roomId, { device_limit: null });
+}
+
 
 export async function submitRoomReport({ roomId, shareToken = null, reason, details = '', mode = 'editable', pageUrl = null, userAgent = null, reporterDeviceId = null } = {}) {
   const sb = getSupabaseClient();

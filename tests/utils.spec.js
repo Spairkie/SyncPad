@@ -97,6 +97,32 @@ test.describe('countWords()', () => {
   });
 });
 
+test.describe('estimateReadingTime()', () => {
+  test('returns 0 for empty text', async ({ page }) => {
+    await goToLanding(page);
+    const result = await inBrowser(page, '/SyncPad/src/utils.js', (mod) =>
+      mod.estimateReadingTime('')
+    );
+    expect(result).toBe(0);
+  });
+
+  test('rounds up to at least 1 minute for any non-empty text', async ({ page }) => {
+    await goToLanding(page);
+    const result = await inBrowser(page, '/SyncPad/src/utils.js', (mod) =>
+      mod.estimateReadingTime('just a few words')
+    );
+    expect(result).toBe(1);
+  });
+
+  test('estimates ~200 words per minute', async ({ page }) => {
+    await goToLanding(page);
+    const result = await inBrowser(page, '/SyncPad/src/utils.js', (mod) =>
+      mod.estimateReadingTime(Array(450).fill('word').join(' '))
+    );
+    expect(result).toBe(2);
+  });
+});
+
 test.describe('Templates module', () => {
   test('TEMPLATES has at least 13 entries', async ({ page }) => {
     await goToLanding(page);
@@ -211,5 +237,72 @@ test.describe('Markdown renderer', () => {
       mod.renderMarkdown('![bad](javascript:alert(1))![bad2](data:text/html,x)')
     );
     expect(html).not.toContain('<img');
+  });
+
+  test('table columns honor GFM alignment markers', async ({ page }) => {
+    await goToLanding(page);
+    const html = await inBrowser(page, '/SyncPad/src/markdown.js', (mod) =>
+      mod.renderMarkdown('| L | C | R | N |\n|:---|:---:|---:|---|\n| a | b | c | d |')
+    );
+    expect(html).toContain('<th style="text-align:left">L</th>');
+    expect(html).toContain('<th style="text-align:center">C</th>');
+    expect(html).toContain('<th style="text-align:right">R</th>');
+    expect(html).toContain('<th>N</th>'); // no marker → no style attribute
+    expect(html).toContain('<td style="text-align:right">c</td>');
+  });
+
+  test('backslash-escaped punctuation suppresses markdown interpretation', async ({ page }) => {
+    await goToLanding(page);
+    const html = await inBrowser(page, '/SyncPad/src/markdown.js', (mod) =>
+      mod.renderMarkdown('This is \\*\\*not bold\\*\\* and \\[not a link\\](nope).')
+    );
+    expect(html).toContain('**not bold**');
+    expect(html).toContain('[not a link](nope)');
+    expect(html).not.toContain('<strong>');
+    expect(html).not.toContain('<a ');
+  });
+
+  test('footnotes render a numbered reference and a references section', async ({ page }) => {
+    await goToLanding(page);
+    const html = await inBrowser(page, '/SyncPad/src/markdown.js', (mod) => {
+      const src = 'A claim.[^1] A repeat.[^1]\n\n[^1]: The *footnote* text.';
+      return mod.renderMarkdown(src);
+    });
+    expect(html).toContain('<sup id="fnref-1"><a href="#fn-1">1</a></sup>');
+    // Second reference to the same id reuses the number, no duplicate id.
+    expect(html).toContain('<sup><a href="#fn-1">1</a></sup>');
+    expect(html).toContain('<li id="fn-1">');
+    expect(html).toContain('<em>footnote</em>');
+    expect(html).toContain('class="footnote-backref"');
+  });
+
+  test('an undefined footnote reference is left as literal text', async ({ page }) => {
+    await goToLanding(page);
+    const html = await inBrowser(page, '/SyncPad/src/markdown.js', (mod) =>
+      mod.renderMarkdown('This has no matching def.[^missing]')
+    );
+    expect(html).toContain('[^missing]');
+    expect(html).not.toContain('<sup>');
+    expect(html).not.toContain('class="footnotes"');
+  });
+
+  test('GitHub-style alerts render as labeled callouts, not plain blockquotes', async ({ page }) => {
+    await goToLanding(page);
+    const html = await inBrowser(page, '/SyncPad/src/markdown.js', (mod) =>
+      mod.renderMarkdown('> [!WARNING]\n> Be careful.')
+    );
+    expect(html).toContain('class="md-alert md-alert-warning"');
+    expect(html).toContain('Warning');
+    expect(html).toContain('Be careful.');
+    expect(html).not.toContain('<blockquote>');
+  });
+
+  test('a plain blockquote (no alert marker) still renders as <blockquote>', async ({ page }) => {
+    await goToLanding(page);
+    const html = await inBrowser(page, '/SyncPad/src/markdown.js', (mod) =>
+      mod.renderMarkdown('> Just a quote.')
+    );
+    expect(html).toContain('<blockquote>');
+    expect(html).not.toContain('md-alert');
   });
 });

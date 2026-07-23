@@ -59,6 +59,43 @@ test.describe('Version history', () => {
     expect(await page.locator('#note-editor').inputValue()).toBe(original);
   });
 
+  test('the scrubber slider appears once a revision exists, defaulting to "Now"', async ({ page }) => {
+    await createRoom(page);
+    await typeInEditor(page, 'First version of the note.');
+
+    const toolsPanel = page.locator('#tools-panel');
+    await page.locator('#btn-more').click();
+    await expect(page.locator('#more-dropdown')).toHaveClass(/open/, { timeout: 2000 });
+    await page.locator('#btn-tools').click();
+    await expect(toolsPanel).toHaveClass(/open/, { timeout: 3000 });
+    await page.locator('#tool-clear').click();
+    await page.waitForSelector('#sp-confirm-modal.visible', { timeout: 5000 });
+    await page.locator('#sp-confirm-ok').click();
+    await waitForToast(page, 'cleared');
+
+    await typeInEditor(page, 'Second version, after the clear.');
+    await openHistoryPanel(page);
+
+    const scrubber = page.locator('#history-scrubber');
+    await expect(scrubber).toBeVisible();
+    await expect(page.locator('#history-scrubber-label')).toHaveText('Now');
+    await expect(page.locator('#history-scrubber-preview')).toHaveText('Second version, after the clear.');
+    await expect(page.locator('#history-scrubber-restore-btn')).toBeDisabled();
+
+    // Drag to the oldest position (min of the range).
+    const slider = page.locator('#history-slider');
+    await slider.evaluate((el) => { el.value = el.min; el.dispatchEvent(new Event('input', { bubbles: true })); });
+    await expect(page.locator('#history-scrubber-label')).not.toHaveText('Now');
+    await expect(page.locator('#history-scrubber-preview')).toContainText('First version of the note.');
+    await expect(page.locator('#history-scrubber-restore-btn')).toBeEnabled();
+  });
+
+  test('the scrubber is hidden on a fresh room with no revisions yet', async ({ page }) => {
+    await createRoom(page);
+    await openHistoryPanel(page);
+    await expect(page.locator('#history-scrubber')).toHaveClass(/hidden/);
+  });
+
   test('Restore is hidden in read-only mode', async ({ page }) => {
     await createRoom(page);
     await typeInEditor(page, 'some content');

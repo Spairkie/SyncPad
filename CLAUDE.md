@@ -117,7 +117,7 @@ Transitions for background-color (0.22 s ease) are applied to `body`, panels, an
 
 - **Signed-URL cache eviction.** `src/files.js` caches signed URLs in a `Map` with a 55-minute TTL. When a file is deleted, call the eviction helper so the stale URL is not served to subsequent requests.
 
-- **Expiration minimum is 5 minutes.** `_buildExpirationDuration()` validates that the chosen expiry is at least 300 seconds. Do not bypass this check when adding new expiry options.
+- **Expiration minimum is 1 second.** `_buildExpirationDuration()` only requires a positive number (`n > 0`, enforced client-side via the input's `min="1"`) — there is no artificial floor beyond that. A 1-second custom expiry is a legitimate (if aggressive) choice; it is not validated further.
 
 - **Bulk file delete requires `danger: true`.** Pass `{ danger: true }` to `showConfirm()` so that Cancel is focused by default, protecting users from accidental mass deletion.
 

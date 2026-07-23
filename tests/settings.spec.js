@@ -1,6 +1,6 @@
 // tests/settings.spec.js
-// Settings panel: opening, expiration validation (5-min minimum),
-// theme switching, file sort.
+// Settings panel: opening, expiration validation (no artificial minimum
+// beyond a positive number of seconds), theme switching, file sort.
 
 import { test, expect } from '@playwright/test';
 import { createRoom, openPanel, openMoreMenu, waitForToast } from './helpers.js';
@@ -49,51 +49,33 @@ test.describe('Settings panel', () => {
     await expect(firstChip).toHaveClass(/is-active/);
   });
 
-  test('custom expiration rejects values below 5 minutes', async ({ page }) => {
+  test('custom expiration accepts 1 second (no artificial floor)', async ({ page }) => {
     await createRoom(page);
     await openSettingsPanel(page);
     await page.locator('#setting-exp-btn').click();
-    // Select custom preset
     await page.locator('[data-exp-preset="custom"]').click();
-    // Enter 30 seconds (less than 5 min = 300s)
-    await page.locator('#exp-custom-value').fill('30');
+    await page.locator('#exp-custom-value').fill('1');
     await page.locator('#exp-custom-unit').selectOption('s');
-    await page.locator('#setting-exp-apply-btn').click();
-    // Should show error
-    const errorEl = page.locator('#setting-exp-error');
-    await expect(errorEl).toBeVisible();
-    await expect(errorEl).toContainText('5 minutes');
-  });
-
-  test('custom expiration accepts values of 5 minutes', async ({ page }) => {
-    await createRoom(page);
-    await openSettingsPanel(page);
-    await page.locator('#setting-exp-btn').click();
-    await page.locator('[data-exp-preset="custom"]').click();
-    await page.locator('#exp-custom-value').fill('5');
-    await page.locator('#exp-custom-unit').selectOption('m');
     // Error should not be shown (we don't submit to DB in unit test context,
-    // but validation should pass — the apply btn click either succeeds or
-    // shows a DB-level error, not the validation error).
+    // but client-side validation should pass — the apply btn click either
+    // succeeds or shows a DB-level error, not a "too short" validation error).
     const errorEl = page.locator('#setting-exp-error');
-    // Either hidden or doesn't contain the "5 minutes" message
     await page.locator('#setting-exp-apply-btn').click();
-    // If error is visible, it should NOT be about the 5-minute minimum
     if (await errorEl.isVisible()) {
       const text = await errorEl.textContent();
-      expect(text).not.toContain('5 minutes');
+      expect(text).not.toMatch(/minimum/i);
     }
   });
 
-  test('custom expiration rejects 4 minutes', async ({ page }) => {
+  test('custom expiration rejects zero and negative values', async ({ page }) => {
     await createRoom(page);
     await openSettingsPanel(page);
     await page.locator('#setting-exp-btn').click();
     await page.locator('[data-exp-preset="custom"]').click();
-    await page.locator('#exp-custom-value').fill('4');
-    await page.locator('#exp-custom-unit').selectOption('m');
+    await page.locator('#exp-custom-value').fill('0');
+    await page.locator('#exp-custom-unit').selectOption('s');
     await page.locator('#setting-exp-apply-btn').click();
-    await expect(page.locator('#setting-exp-error')).toContainText('5 minutes');
+    await expect(page.locator('#setting-exp-error')).toContainText('greater than 0');
   });
 
   test('theme picker renders theme options', async ({ page }) => {
@@ -166,6 +148,43 @@ test.describe('View-once mode', () => {
     // Toggle back
     await btn.click();
     await expect(status).toHaveText(before || '', { timeout: 5000 });
+  });
+});
+
+test.describe('Device limit', () => {
+  test('device limit toggle button and input are visible in settings panel', async ({ page }) => {
+    await createRoom(page);
+    await openSettingsPanel(page);
+    await expect(page.locator('#setting-dl-btn')).toBeVisible();
+    await expect(page.locator('#setting-dl-input')).toBeVisible();
+  });
+
+  test('rejects an out-of-range device count without enabling', async ({ page }) => {
+    await createRoom(page);
+    await openSettingsPanel(page);
+    await page.fill('#setting-dl-input', '0');
+    await page.click('#setting-dl-btn');
+    await expect(page.locator('#setting-dl-status')).toContainText('Off', { timeout: 5000 });
+    await expect(page.locator('#setting-dl-btn')).toHaveText('Enable');
+  });
+
+  test('clicking the button toggles the status text and disables the input while armed', async ({ page }) => {
+    await createRoom(page);
+    await openSettingsPanel(page);
+    const btn    = page.locator('#setting-dl-btn');
+    const status = page.locator('#setting-dl-status');
+    const input  = page.locator('#setting-dl-input');
+
+    await input.fill('3');
+    await btn.click();
+    await expect(status).toContainText('Armed', { timeout: 5000 });
+    await expect(btn).toHaveText('Disable');
+    await expect(input).toBeDisabled();
+
+    await btn.click();
+    await expect(status).toContainText('Off', { timeout: 5000 });
+    await expect(btn).toHaveText('Enable');
+    await expect(input).toBeEnabled();
   });
 });
 

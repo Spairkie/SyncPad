@@ -229,6 +229,27 @@ test.describe('Markdown preview', () => {
     expect(content).toContain('- [x] normal');
     expect(content).toContain('> - [ ] quoted');
   });
+
+  test('renders ==highlight== as <mark>', async ({ page }) => {
+    const preview = await withPreview(page, 'This is ==important== text.');
+    await expect(preview.locator('mark')).toContainText('important');
+  });
+
+  test('shows a checklist progress badge above the list', async ({ page }) => {
+    const preview = await withPreview(page, '- [x] done one\n- [ ] not done\n- [x] done two');
+    await expect(preview.locator('.md-checklist-progress')).toHaveText('2/3 done');
+  });
+
+  test('does not show a progress badge for a list with no checkboxes', async ({ page }) => {
+    const preview = await withPreview(page, '- plain item\n- another item');
+    await expect(preview.locator('.md-checklist-progress')).toHaveCount(0);
+  });
+
+  test('nested sub-list does not get its own progress badge', async ({ page }) => {
+    const preview = await withPreview(page, '- [ ] top\n  - [x] nested');
+    await expect(preview.locator('.md-checklist-progress')).toHaveCount(1);
+    await expect(preview.locator('.md-checklist-progress')).toHaveText('1/2 done');
+  });
 });
 
 test.describe('Table of contents', () => {
@@ -244,5 +265,20 @@ test.describe('Table of contents', () => {
   test('omits the Contents nav for notes with fewer than 2 headings', async ({ page }) => {
     const preview = await withPreview(page, '# Just one heading\n\nSome text.');
     await expect(preview.locator('.note-toc')).toHaveCount(0);
+  });
+
+  test('a [TOC] marker renders an inline contents block, including headings that follow it', async ({ page }) => {
+    const preview = await withPreview(page, '# Title\n\n[TOC]\n\n## Section A\n\n## Section B');
+    const inlineToc = preview.locator('.md-inline-toc');
+    await expect(inlineToc).toBeVisible();
+    const links = inlineToc.locator('a');
+    expect(await links.count()).toBe(3);
+    await expect(links.nth(1)).toHaveAttribute('href', '#section-a');
+    await expect(links.nth(2)).toHaveAttribute('href', '#section-b');
+  });
+
+  test('[TOC] is left as literal text when the note has fewer than 2 headings', async ({ page }) => {
+    const preview = await withPreview(page, '[TOC]\n\n# Only heading');
+    await expect(preview.locator('.md-inline-toc')).toHaveCount(0);
   });
 });

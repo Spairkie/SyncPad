@@ -51,6 +51,31 @@ const _mdHighlight = HighlightStyle.define([
   { tag: tags.contentSeparator, color: 'var(--text-muted)' },      // --- rules
 ]);
 
+// ── ==highlight== extension ──────────────────────────────────────────────────
+//
+// Not part of CommonMark/GFM, so the base markdown language doesn't parse it.
+// Modeled directly on @lezer/markdown's own built-in Strikethrough extension
+// (same "==" delimiter shape as "~~") and fed to markdown()'s `extensions`
+// option — this plain-object shape (defineNodes + parseInline) is the
+// documented public extension mechanism, not an internal API.
+const _highlightDelim = { resolve: 'Highlight', mark: 'HighlightMark' };
+const _highlightExtension = {
+  defineNodes: [
+    { name: 'Highlight', style: { 'Highlight/...': tags.special(tags.content) } },
+    { name: 'HighlightMark', style: tags.processingInstruction },
+  ],
+  parseInline: [{
+    name: 'Highlight',
+    parse(cx, next, pos) {
+      if (next !== 61 /* '=' */ || cx.char(pos + 1) !== 61 || cx.char(pos + 2) === 61) return -1;
+      const before = cx.slice(pos - 1, pos), after = cx.slice(pos + 2, pos + 3);
+      const sBefore = /\s|^$/.test(before), sAfter = /\s|^$/.test(after);
+      return cx.addDelimiter(_highlightDelim, pos, pos + 2, !sAfter, !sBefore);
+    },
+    after: 'Emphasis',
+  }],
+};
+
 // ── Seamless-preview decorations ─────────────────────────────────────────────
 //
 // The Typora behaviour: syntax markers (#, **, *, ~~, `) are hidden wherever
@@ -60,10 +85,11 @@ const _mdHighlight = HighlightStyle.define([
 // Decoration.replace ranges recomputed per viewport/selection/doc update.
 
 // Marker node → the enclosing element whose selection-touch reveals it.
-const _MARK_NODES = new Set(['HeaderMark', 'EmphasisMark', 'CodeMark', 'StrikethroughMark']);
-const _hideDeco   = Decoration.replace({});
-const _codeDeco   = Decoration.mark({ class: 'cm-md-inlinecode' });
-const _quoteLine  = Decoration.line({ class: 'cm-md-blockquote' });
+const _MARK_NODES = new Set(['HeaderMark', 'EmphasisMark', 'CodeMark', 'StrikethroughMark', 'HighlightMark']);
+const _hideDeco      = Decoration.replace({});
+const _codeDeco      = Decoration.mark({ class: 'cm-md-inlinecode' });
+const _highlightDeco = Decoration.mark({ class: 'cm-md-highlight' });
+const _quoteLine     = Decoration.line({ class: 'cm-md-blockquote' });
 
 function _selectionTouches(state, from, to) {
   return state.selection.ranges.some((r) => r.from <= to && r.to >= from);
@@ -109,6 +135,20 @@ class _HrWidget extends WidgetType {
 
 const _bulletWidget = new _BulletWidget();
 const _hrWidget     = new _HrWidget();
+
+// "3/5 done" badge above a top-level checklist block, counting every
+// checkbox in the block including nested sub-items — mirrors the badge the
+// rendered-HTML preview shows via markdown.js's own list renderer.
+class _ChecklistProgressWidget extends WidgetType {
+  constructor(checked, total) { super(); this.checked = checked; this.total = total; }
+  eq(other) { return other.checked === this.checked && other.total === this.total; }
+  toDOM() {
+    const el = document.createElement('div');
+    el.className = 'cm-md-checklist-progress';
+    el.textContent = `${this.checked}/${this.total} done`;
+    return el;
+  }
+}
 
 // Images pasted straight into the editor use the syncpad-file: pseudo-scheme
 // (see markdown.js) since the Storage bucket is private and a real signed
@@ -180,6 +220,117 @@ const _remoteCursorField = StateField.define({
   provide: (f) => EditorView.decorations.from(f),
 });
 
+// "3/5 done" badges above top-level checklists. CM6 requires block-level
+// widgets to come from a StateField, not a ViewPlugin (the seamless-folding
+// plugin above only ever produces inline/replace decorations) — recomputed
+// on every doc change by re-walking the syntax tree, which is cheap at
+// BODY_MAX's ~50k-character ceiling.
+function _computeChecklistBadges(state) {
+  const ranges = [];
+  syntaxTree(state).iterate({
+    enter: (nodeRef) => {
+      const name = nodeRef.name;
+      if (name !== 'BulletList' && name !== 'OrderedList') return;
+      // Nested sub-lists don't get their own badge — only the outermost
+      // list of a block, matching the rendered-preview renderer.
+      if (nodeRef.node.parent?.name === 'ListItem') return;
+      let total = 0, checkedCount = 0;
+      syntaxTree(state).iterate({
+        from: nodeRef.from, to: nodeRef.to,
+        enter: (inner) => {
+          if (inner.name !== 'TaskMarker') return;
+          total++;
+          if (/x/i.test(state.doc.sliceString(inner.from, inner.to))) checkedCount++;
+        },
+      });
+      if (total > 0) {
+        ranges.push(Decoration.widget({
+          widget: new _ChecklistProgressWidget(checkedCount, total), side: -1, block: true,
+        }).range(nodeRef.from));
+      }
+    },
+  });
+  return Decoration.set(ranges, true);
+}
+
+const _checklistProgressField = StateField.define({
+  create: (state) => _computeChecklistBadges(state),
+  update(value, tr) { return tr.docChanged ? _computeChecklistBadges(tr.state) : value.map(tr.changes); },
+  provide: (f) => EditorView.decorations.from(f),
+});
+
+// Typora-style [TOC] marker: a line containing only "[TOC]" gets a rendered
+// contents nav placed above it (the literal "[TOC]" text stays visible/
+// editable below, same badge-above-content pattern as the checklist
+// progress indicator). Non-interactive — this is a document-editing surface,
+// not the read-only preview pane, so links here don't need to navigate.
+function _stripHeadingMarkup(raw) {
+  return raw
+    .replace(/^#{1,6}\s+/, '')
+    .replace(/\s*#*\s*$/, '')
+    .replace(/[*_`~=]/g, '')
+    .trim();
+}
+
+class _TocWidget extends WidgetType {
+  constructor(entries) { super(); this.entries = entries; }
+  eq(other) {
+    return other.entries.length === this.entries.length &&
+      other.entries.every((e, i) => e.level === this.entries[i].level && e.text === this.entries[i].text);
+  }
+  toDOM() {
+    const nav = document.createElement('div');
+    nav.className = 'cm-md-inline-toc';
+    const label = document.createElement('strong');
+    label.textContent = 'Contents';
+    nav.appendChild(label);
+    const ul = document.createElement('ul');
+    for (const e of this.entries) {
+      const li = document.createElement('li');
+      li.style.paddingLeft = `${(Math.max(1, e.level) - 1) * 0.9}em`;
+      const a = document.createElement('a');
+      a.href = '#';
+      a.textContent = e.text || 'section';
+      li.appendChild(a);
+      ul.appendChild(li);
+    }
+    nav.appendChild(ul);
+    return nav;
+  }
+  ignoreEvent() { return true; }
+}
+
+function _computeTocBadges(state) {
+  const headings = [];
+  syntaxTree(state).iterate({
+    enter: (nodeRef) => {
+      const m = /^ATXHeading([1-6])$/.exec(nodeRef.name);
+      if (!m) return;
+      headings.push({
+        level: Number(m[1]),
+        text: _stripHeadingMarkup(state.doc.sliceString(nodeRef.from, nodeRef.to)),
+      });
+    },
+  });
+  if (headings.length < 2) return Decoration.none;
+
+  const ranges = [];
+  for (let n = 1; n <= state.doc.lines; n++) {
+    const line = state.doc.line(n);
+    if (!/^\[toc\]$/i.test(line.text.trim())) continue;
+    ranges.push(Decoration.widget({
+      widget: new _TocWidget(headings), side: -1, block: true,
+    }).range(line.from));
+  }
+  return Decoration.set(ranges, true);
+}
+
+const _tocField = StateField.define({
+  create: (state) => _computeTocBadges(state),
+  update(value, tr) { return tr.docChanged ? _computeTocBadges(tr.state) : value.map(tr.changes); },
+  provide: (f) => EditorView.decorations.from(f),
+});
+
 /** Stable per-device caret colour derived from its id. */
 export function colorForDevice(deviceId) {
   let hash = 0;
@@ -189,23 +340,81 @@ export function colorForDevice(deviceId) {
 }
 
 /**
- * Render carets for remote collaborators.
- * @param {{ id: string, name: string, pos: number }[]} cursors
+ * Render carets (and selection ranges, when a collaborator has one) for
+ * remote collaborators.
+ * @param {{ id: string, name: string, pos: number, anchor?: number }[]} cursors
  */
 export function setRemoteCursors(cursors) {
   if (!_view) return;
   const docLen = _view.state.doc.length;
-  const ranges = (cursors || [])
-    .filter((c) => typeof c.pos === 'number' && c.pos >= 0)
-    .map((c) => {
-      const pos = Math.min(c.pos, docLen);
-      return Decoration.widget({
-        widget: new _RemoteCaretWidget(c.name || 'Someone', colorForDevice(c.id)),
-        side: -1,
-      }).range(pos);
-    });
+  const ranges = [];
+  for (const c of (cursors || [])) {
+    if (typeof c.pos !== 'number' || c.pos < 0) continue;
+    const pos = Math.min(c.pos, docLen);
+    const anchor = typeof c.anchor === 'number' && c.anchor >= 0 ? Math.min(c.anchor, docLen) : pos;
+    if (anchor !== pos) {
+      const from = Math.min(anchor, pos);
+      const to   = Math.max(anchor, pos);
+      ranges.push(Decoration.mark({
+        class: 'cm-remote-selection',
+        attributes: { style: `background: color-mix(in srgb, ${colorForDevice(c.id)} 28%, transparent)` },
+      }).range(from, to));
+    }
+    ranges.push(Decoration.widget({
+      widget: new _RemoteCaretWidget(c.name || 'Someone', colorForDevice(c.id)),
+      side: -1,
+    }).range(pos));
+  }
   _view.dispatch({
     effects: _setRemoteCursorsEffect.of(Decoration.set(ranges, true)),
+    annotations: External.of(true),
+  });
+}
+
+/**
+ * Scroll the local view so `pos` is visible — used by "Follow" mode to
+ * jump to where a followed collaborator's cursor/selection currently is.
+ * No-op when unmounted or pos is out of range.
+ */
+export function scrollToPos(pos) {
+  if (!_view || typeof pos !== 'number' || pos < 0 || pos > _view.state.doc.length) return;
+  _view.dispatch({ effects: EditorView.scrollIntoView(pos, { y: 'center' }) });
+}
+
+// ── Comment anchors ───────────────────────────────────────────────────────────
+// A dotted underline marking the text range a comment is attached to —
+// display only, no popover; clicking one is handled by the Comments panel's
+// own list rather than in-editor, keeping this to the same "decoration
+// pushed in from outside" pattern setRemoteCursors() already uses.
+
+const _setCommentAnchorsEffect = StateEffect.define();
+
+const _commentAnchorsField = StateField.define({
+  create: () => Decoration.none,
+  update(value, tr) {
+    value = value.map(tr.changes);
+    for (const e of tr.effects) if (e.is(_setCommentAnchorsEffect)) value = e.value;
+    return value;
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
+
+/**
+ * @param {{ id: string, from: number, to: number }[]} comments
+ */
+export function setCommentAnchors(comments) {
+  if (!_view) return;
+  const docLen = _view.state.doc.length;
+  const ranges = [];
+  for (const c of (comments || [])) {
+    if (typeof c.from !== 'number' || typeof c.to !== 'number') continue;
+    const from = Math.max(0, Math.min(c.from, docLen));
+    const to   = Math.max(from, Math.min(c.to, docLen));
+    if (to <= from) continue; // point comments (no selected range) have nothing to underline
+    ranges.push(Decoration.mark({ class: 'cm-comment-anchor' }).range(from, to));
+  }
+  _view.dispatch({
+    effects: _setCommentAnchorsEffect.of(Decoration.set(ranges, true)),
     annotations: External.of(true),
   });
 }
@@ -243,6 +452,14 @@ const _seamless = ViewPlugin.fromClass(class {
             ranges.push(_codeDeco.range(nodeRef.from, nodeRef.to));
             return;
           }
+
+          // Highlight background spans the whole ==text==; its HighlightMark
+          // children still fold/reveal via the generic _MARK_NODES handling
+          // below, so this doesn't return — the walk continues into them.
+          if (name === 'Highlight') {
+            ranges.push(_highlightDeco.range(nodeRef.from, nodeRef.to));
+          }
+
 
           // Blockquote: styled left border on each line; the > marks are
           // hidden below via QuoteMark when the quote isn't being edited.
@@ -365,6 +582,24 @@ const _theme = EditorView.theme({
 
 export function isMounted() { return !!_view; }
 
+/** Current local caret offset into the doc, or null if unmounted. */
+export function getCaretPos() {
+  return _view ? _view.state.selection.main.head : null;
+}
+
+/**
+ * Viewport pixel coordinates for a document offset (cursor-chat bubble
+ * placement). Returns null when unmounted or the position can't be resolved
+ * (e.g. a remote peer's offset from a doc that has since changed length).
+ */
+export function coordsAtPos(pos) {
+  if (!_view || !Number.isFinite(pos) || pos < 0 || pos > _view.state.doc.length) return null;
+  try {
+    const c = _view.coordsAtPos(pos);
+    return c ? { x: c.left, y: c.top } : null;
+  } catch { return null; }
+}
+
 /**
  * Mount the surface into `container` (idempotent — remounts if called while
  * already mounted). `onChange(text)` fires only for edits made in this
@@ -385,7 +620,7 @@ export function mount(container, initialValue, { onChange, onCursorActivity, rea
         // Backspace; closeBrackets auto-pairs brackets/quotes.
         closeBrackets(),
         keymap.of([...closeBracketsKeymap, ...markdownKeymap, ...defaultKeymap, ...historyKeymap, indentWithTab]),
-        markdown({ base: markdownLanguage }),
+        markdown({ base: markdownLanguage, extensions: [_highlightExtension] }),
         syntaxHighlighting(_mdHighlight),
         _seamless,
         // Ctrl/Cmd+click a folded link to open it (http(s) only — same
@@ -407,10 +642,14 @@ export function mount(container, initialValue, { onChange, onCursorActivity, rea
         placeholder('Start writing… Your note syncs live across devices.'),
         _readOnly.of(EditorState.readOnly.of(!!readOnly)),
         _remoteCursorField,
+        _checklistProgressField,
+        _tocField,
+        _commentAnchorsField,
         EditorView.updateListener.of((update) => {
           const external = update.transactions.some((tr) => tr.annotation(External));
           if (update.selectionSet && !external) {
-            _onCursorActivity?.(update.state.selection.main.head);
+            const sel = update.state.selection.main;
+            _onCursorActivity?.(sel.head, sel.anchor);
           }
           if (!update.docChanged || external) return;
           _onChange?.(update.state.doc.toString());

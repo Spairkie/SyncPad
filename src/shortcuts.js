@@ -14,6 +14,7 @@
 //   Ctrl/Cmd + Shift + K     Open share modal
 //   Ctrl/Cmd + Shift + T     Insert timestamp
 //   Ctrl/Cmd + Shift + C     Copy note
+//   Ctrl/Cmd + Shift + /     Send a cursor chat message (Preview/Split only)
 //   Ctrl/Cmd + /             Open shortcuts modal
 //   Esc                      Close panel / modal / dropdown
 
@@ -30,6 +31,7 @@ let _onOpenShortcuts  = null;
 let _onOpenShare      = null;
 let _onInsertTimestamp = null;
 let _onCopyNote       = null;
+let _onCursorChat     = null;
 
 /** @type {HTMLTextAreaElement|null} */
 let _editor = null;
@@ -54,6 +56,7 @@ export function initShortcuts(handlers) {
   _onOpenShare       = handlers.onOpenShare;
   _onInsertTimestamp = handlers.onInsertTimestamp;
   _onCopyNote        = handlers.onCopyNote;
+  _onCursorChat      = handlers.onCursorChat;
   _editor = document.getElementById('note-editor');
 
   document.addEventListener('keydown', _handleKeyDown, { capture: false });
@@ -118,6 +121,7 @@ function _handleKeyDown(e) {
     if (key === 'K' || key === 'k') { e.preventDefault(); _onOpenShare?.(); return; }
     if (key === 'T' || key === 't') { e.preventDefault(); if (canEdit()) _onInsertTimestamp?.(); return; }
     if (key === 'C' || key === 'c') { e.preventDefault(); _onCopyNote?.(); return; }
+    if (key === '?' || key === '/') { e.preventDefault(); _onCursorChat?.(); return; }
   }
 
   // ── Markdown formatting (editor only, edit mode only) ───────────────────

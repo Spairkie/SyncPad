@@ -77,7 +77,7 @@ Implements handlers for the room settings panel: expiry presets, passcode change
 Manages the 13 built-in templates and any custom templates persisted in `localStorage` under the key `syncpad_custom_templates`. It exposes `exportCustomTemplates()` and `importCustomTemplates(json)`, and enforces the `BODY_MAX = 50,000` character limit. It does NOT render the template picker UI — that is handled by `ui.js`.
 
 ### `theme.js`
-Applies and persists the active theme by writing to the `data-theme` attribute on `<html>`, which triggers CSS custom-property cascades defined in `styles/style.css`. It does NOT contain any CSS itself — all theme colours and transition rules live in the stylesheet.
+Applies and persists the active theme by writing to the `data-theme` attribute on `<html>`, which triggers CSS custom-property cascades defined in `styles/base.css`. It does NOT contain any CSS itself — all theme colours and transition rules live in the stylesheet.
 
 ### `shortcuts.js`
 Registers global `keydown` listeners and maps key combinations to application actions (formatting, navigation, search, etc.). It does NOT implement the actions themselves — it calls into `app.js` or `ui.js` functions.
@@ -228,7 +228,7 @@ The optional `supabase/functions/syncpad-cleanup` Edge Function runs with a serv
 
 ## 11. CSS Architecture
 
-All styles live in a **single file**: `styles/style.css`. There is no preprocessor, no CSS-in-JS, and no utility framework.
+Styles are split across several plain CSS files under `styles/`, loaded via ordered `<link>` tags in `index.html` (later files override earlier ones at equal specificity, mirroring the original single style.css's rule order): `base.css` (theme variables, reset, loading screen) → `landing.css` → `app-shell.css` (header) → `editor.css` → `panels.css` (side panels) → `modals.css` → `file-preview.css` → `room-tools.css`. `admin.css` is lazy-loaded by `admin.js` only on the `/admin` route. There is no preprocessor, no CSS-in-JS, no utility framework, and no build/bundling step — every file is served as-is.
 
 ### Theming
 - Themes are defined as sets of CSS custom properties (`--color-bg`, `--color-text`, etc.) scoped to `[data-theme="<name>"]` selectors on `<html>`

@@ -8,6 +8,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Phase 17 — UI bug-fix pass, CSS modularization, Markdown feature audit
+
+Branch: `claude/repo-review-refactor-kba1k5`
+
+#### Fixed
+- **Side panels rendered behind the app header**: `.side-panel`/`.panel-backdrop` z-index was below `.app-header`, hiding every panel's header (including its close button) at the top of the viewport. All 7 panels already had a close button in their markup — it was just invisible.
+- **Write/Live/Split editor surfaces had mismatched typography**: `.note-live` and `.note-preview` were missing the `letter-spacing` and a `768px` `font-size` bump that `#note-editor` picked up only through a disconnected "UI modernization pass" override block.
+- **Custom auto-expire had an undocumented 5-minute floor**: dropped to "greater than 0" per product decision.
+- **Editor lost focus/selection when clicking a settings toggle**: the 6 on/off toggle buttons now use `mousedown` `preventDefault()` so they don't steal focus from the editor mid-edit.
+- **`[TOC]` silently rendered as nothing in the HTML-export/print path**: `renderMarkdownWithToc()`'s top-level detection was tied to the same internal flag as blockquote recursion, so its own [TOC] pre-pass never ran. Introduced an explicit `_isRecursiveCall` marker instead of overloading "was a ctx passed in at all" to mean two different things.
+- **GFM table alignment markers (`:---`, `---:`, `:---:`) were parsed and silently discarded** — every table rendered left-aligned regardless of what the separator row said.
+
+#### Added
+- Backslash-escaped punctuation (`\*`, `\_`, `\[`, etc.) — standard CommonMark escaping, previously unsupported.
+- Footnotes: `text[^id]` + `[^id]: note text`, numbered by first appearance, rendered in a references section with backlinks.
+- GitHub-style alerts: `> [!NOTE]` / `[!TIP]` / `[!IMPORTANT]` / `[!WARNING]` / `[!CAUTION]` render as labeled callouts instead of plain blockquotes.
+- Removed 4 Tools-panel entries (Copy Note, Timestamp, Share, Select All) that duplicated always-visible footer/header controls or native browser behavior (Ctrl+A).
+- Renamed the Write/Preview/Split mode labels to Source/Live/Split — "Preview" wrongly implied a read-only view when it's actually an editable Typora-style live-rendered surface.
+- `docs/markdown-feature-audit.md` — full audit of SyncPad's Markdown support against the Markdown Guide's basic/extended/hacks feature set, with rationale for what's intentionally out of scope (raw HTML, center/color, definition lists, subscript/superscript, etc.).
+
+#### Changed
+- **Split `styles/style.css` (3,059 lines) into 9 files** under `styles/` (`base.css`, `landing.css`, `app-shell.css`, `editor.css`, `panels.css`, `modals.css`, `file-preview.css`, `room-tools.css`, plus the already-separate `admin.css`), loaded via ordered `<link>` tags that preserve the original cascade exactly. `admin.css` is lazy-loaded by `admin.js` only on the `/admin` route — regular room pages no longer fetch or parse it. Verified byte-for-byte against the pre-split file (every rule reconstructs in order; only blank-line spacing and two intentional header-comment edits differ).
+- Resolved a real merge conflict between this branch and `main` (both had independently implemented the same live-surface gap fixes) via a merge commit rather than a rebase, to resolve the overlapping content exactly once.
+- Bumped the service worker cache version several times across this phase (currently `syncpad-v36`) to match the precache-asset changes above.
+
 ### Phase 16 — Responsive text wrapping in modals and toasts
 
 Branch: `claude/repo-review-refactor-kba1k5`

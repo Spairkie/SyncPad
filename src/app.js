@@ -10,18 +10,19 @@ import {
   escapeHtml, debounce, formatTimestamp,
 } from './utils.js';
 
-import { loadRoom, createRoom, clearRoomContent, subscribeToRoom, getOrCreateReadOnlyShareLink, resolveReadOnlyShareLink, updateRoomDisplayName, normalizeRoomDisplayName, submitRoomReport, REPORT_REASONS } from './rooms.js';
+import { loadRoom, createRoom, clearRoomContent, subscribeToRoom, getOrCreateReadOnlyShareLink, resolveReadOnlyShareLink, getOrCreateRoomCode, resolveRoomCode, recordRoomDeviceView, setDeviceLimit, clearDeviceLimit, updateRoomDisplayName, normalizeRoomDisplayName, submitRoomReport, REPORT_REASONS } from './rooms.js';
 import { listRevisions } from './revisions.js';
+import { listComments, addComment, deleteComment, subscribeToComments } from './comments.js';
 
 import {
   initBroadcast, destroyBroadcast,
   broadcastSettingsChange, broadcastFilesChange, cancelPendingTypingBroadcast, cancelPendingLiveContentBroadcast,
-  broadcastClear, broadcastViewOnceCleared,
+  broadcastClear, broadcastViewOnceCleared, broadcastCursorChat,
 } from './live-broadcast.js';
 
 import {
   initPresence, destroyPresence,
-  setTyping, updatePresenceDeviceName, setCursorLine,
+  setTyping, updatePresenceDeviceName, setCursorLine, setPresenceHidden,
 } from './presence.js';
 
 import {
@@ -73,6 +74,7 @@ let _encKey        = null;   // CryptoKey | null
 let _encSalt       = null;
 let _unsubRoom     = null;
 let _unsubFiles    = null;
+let _unsubComments = null;
 let _expTimer      = null;
 let _onlineCleanup = null;   // v1: teardown fn returned by onOnlineChange()
 let _monospace     = false;
@@ -85,6 +87,14 @@ let _markdownMode  = 'write'; // 'write' | 'preview' | 'split'
 let _showPreview   = false;  // derived: _markdownMode !== 'write'
 let _previewObserverWired = false;
 let _expPreset = '10m';
+// Room-scoped: which remote device_id (if any) the local view auto-scrolls
+// to follow. Reset on room navigation like the other room-scoped state below.
+let _followedDeviceId = null;
+// Raw (not-yet-decrypted-for-display) comments from the last _refreshComments()
+// call — re-applied to the live surface whenever it (re)mounts, since
+// setCommentAnchors() silently no-ops while unmounted (e.g. the room loaded
+// straight into Write mode, where nothing is mounted yet to receive them).
+let _lastComments = [];
 
 // ── Search state ──────────────────────────────────────────────────────────────
 let _searchMatches    = []; // [{start,end}]
@@ -104,6 +114,8 @@ const _FOCUS_MODE_KEY = 'syncpad_focus_mode';
 let _focusMode = localStorage.getItem(_FOCUS_MODE_KEY) === 'true';
 const _TYPEWRITER_MODE_KEY = 'syncpad_typewriter_mode';
 let _typewriterMode = localStorage.getItem(_TYPEWRITER_MODE_KEY) === 'true';
+const _HIDE_PRESENCE_KEY = 'syncpad_hide_presence';
+let _hidePresence = localStorage.getItem(_HIDE_PRESENCE_KEY) === 'true';
 
 // ── Files state ───────────────────────────────────────────────────────────────
 let _filesSelectMode = false;
@@ -384,6 +396,7 @@ async function _openShareModal() {
       isEditingLocked: !!_room?.editing_locked,
       hasViewOnce: !!_room?.view_once,
       expiresAt: _room?.expires_at || null,
+      showRoomCode: false, // no room-owning identity in a read-only session to generate one from
     });
     UI.openModal('share-modal');
     return;
@@ -399,6 +412,14 @@ async function _openShareModal() {
     readOnlyError = true;
     UI.showToast('Could not create read-only link.', 'error');
   }
+  let roomCode = '';
+  let roomCodeError = false;
+  try {
+    roomCode = await getOrCreateRoomCode(_roomId) || '';
+    if (!roomCode) roomCodeError = true;
+  } catch {
+    roomCodeError = true;
+  }
   UI.populateShareModal({
     editableUrl: buildRoomUrl(BASE, _roomId),
     readOnlyUrl,
@@ -411,6 +432,8 @@ async function _openShareModal() {
     isEditingLocked: !!_room?.editing_locked,
     hasViewOnce: !!_room?.view_once,
     expiresAt: _room?.expires_at || null,
+    roomCode,
+    roomCodeError,
   });
   UI.openModal('share-modal');
 }
@@ -428,9 +451,32 @@ function wireLandingEvents() {
     joinRoom(roomId);
   };
 
-  const joinRoom_ = () => {
+  // A bare 6-character code from the short-code alphabet (see
+  // docs/migrations/short-room-codes.sql) — distinct enough from
+  // generateRoomId()'s "adjective-noun-suffix" shape and from any
+  // sanitizeRoomId() output containing a URL/slash that a false-positive
+  // match against a deliberately-chosen custom room id is very unlikely.
+  // Resolution failure just falls through to the existing room-id path
+  // below rather than erroring, so this can never make a previously
+  // working join input stop working.
+  const SHORT_CODE_RE = /^[23456789ABCDEFGHJKMNPQRSTVWXYZ]{6}$/i;
+
+  const joinRoom_ = async () => {
     const raw = joinInput?.value?.trim();
     if (!raw) return;
+
+    if (SHORT_CODE_RE.test(raw)) {
+      try {
+        const resolvedId = await resolveRoomCode(raw);
+        if (resolvedId) {
+          history.pushState(null, '', `${BASE}/${resolvedId}`);
+          UI.showScreen('loading');
+          joinRoom(resolvedId);
+          return;
+        }
+      } catch { /* fall through to the literal-room-id path below */ }
+    }
+
     // Accept full URL or bare ID
     let id;
     try {
@@ -710,6 +756,20 @@ async function startApp() {
   // creator presumably wants real readers to consume it.
   const deviceId  = getDeviceId();
   const isCreator = _room.created_by_device === deviceId;
+
+  // ── Device limit: record this device's join, clearing the room once the
+  // configured number of distinct devices has been reached ─────────────────
+  // The creator's own devices don't consume a slot — same reasoning as
+  // View-once's isCreator exclusion above. Best-effort: a Supabase project
+  // that hasn't run docs/migrations/device-limit.sql yet just has
+  // device_limit stay null forever, so this never fires for it.
+  if (_room.device_limit && !isCreator) {
+    try {
+      const result = await recordRoomDeviceView(_roomId, deviceId);
+      if (result.expired) _room = await loadRoom(_roomId);
+    } catch { /* non-fatal — see comment above */ }
+  }
+
   const shouldConsumeViewOnce = (
     _room.view_once &&
     !isCreator &&
@@ -812,22 +872,60 @@ async function startApp() {
       _refreshPreviewIfActive();
       UI.showToast('This note was view-once and has been cleared from the server.', 'warning', 6000);
     },
+    onRemoteCursorChat: (payload) => {
+      // Only meaningful where there's a real caret to anchor to — the CM6
+      // live surface, the same place remote carets themselves render.
+      // Write mode has no per-character screen coordinates to place a
+      // bubble at (and LiveEditor stays mounted-but-hidden there), so the
+      // message is silently dropped rather than faked into a wrong position.
+      if (_markdownMode === 'write' || !LiveEditor.isMounted()) return;
+      const coords = LiveEditor.coordsAtPos(payload.pos);
+      if (!coords) return;
+      UI.showCursorChatBubble({
+        deviceId:   payload.device_id,
+        deviceName: payload.device_name,
+        text:       String(payload.text || '').slice(0, 80),
+        x: coords.x, y: coords.y,
+      });
+    },
   });
 
   initPresence(_roomId, (devices) => {
     UI.updateDeviceCount(devices.length);
+    // A followed device that disconnected (or hid its presence) can't be
+    // followed anymore — drop it rather than leaving a dead toggle active.
+    if (_followedDeviceId && !devices.some((d) => d.device_id === _followedDeviceId && !d.isMe)) {
+      _followedDeviceId = null;
+    }
     UI.renderDevicesList(devices, deviceId, (name) => {
       setDeviceName(name);
       updatePresenceDeviceName(getDeviceName());
+    }, {
+      followedDeviceId: _followedDeviceId,
+      onToggleFollow: (id) => { _followedDeviceId = _followedDeviceId === id ? null : id; },
     });
-    // Render remote collaborators' carets in the live surface (no-op when
-    // it isn't mounted).
+    // Render remote collaborators' carets/selections in the live surface
+    // (no-op when it isn't mounted).
     LiveEditor.setRemoteCursors(
       devices
         .filter((d) => !d.isMe && typeof d.cursor_pos === 'number')
-        .map((d) => ({ id: d.device_id, name: d.device_name, pos: d.cursor_pos })),
+        .map((d) => ({ id: d.device_id, name: d.device_name, pos: d.cursor_pos, anchor: d.cursor_anchor })),
     );
+    // "Follow" mode: jump the local view to the followed device's cursor as
+    // it moves. Only meaningful where there's a real caret to scroll to —
+    // the CM6 live surface — same gating as cursor chat.
+    if (_followedDeviceId && _markdownMode !== 'write' && LiveEditor.isMounted()) {
+      const followed = devices.find((d) => d.device_id === _followedDeviceId);
+      if (followed && typeof followed.cursor_pos === 'number') {
+        LiveEditor.scrollToPos(followed.cursor_pos);
+      }
+    }
   }, { readOnly: _isReadOnly });
+  // Re-applied on every room entry — destroyPresence() deliberately leaves
+  // this preference alone since it's per-device, not room state (see
+  // presence.js), so the fresh channel from initPresence() above always
+  // starts back at the default until this runs.
+  setPresenceHidden(_hidePresence);
 
   _unsubRoom = subscribeToRoom(_roomId, async ({ event, room }) => {
     if (event === 'DELETE') {
@@ -847,6 +945,13 @@ async function startApp() {
 
   _unsubFiles = subscribeToFiles(_roomId, () => refreshFiles());
   await refreshFiles();
+
+  // Best-effort: a Supabase project that hasn't run
+  // docs/migrations/room-comments.sql yet just never shows any comments —
+  // _refreshComments() swallows the failure rather than surfacing an error
+  // toast for what is an entirely optional feature.
+  _unsubComments = subscribeToComments(_roomId, () => _refreshComments());
+  await _refreshComments();
 
   if (_room.expires_at) setupExpirationTimer();
 
@@ -1040,6 +1145,24 @@ async function _handleRoomStateTransition(prev, newRoom) {
       UI.updateWordCount('');
       _refreshPreviewIfActive();
       UI.showToast('This note was view-once and has been cleared from the server.', 'warning', 6000);
+    }
+  }
+
+  if (newRoom.cleared_reason === 'device_limit' && prev?.cleared_reason !== 'device_limit') {
+    clearDraft(_roomId);
+    if (isOwnWrite) {
+      // This device's own join was the one that hit the limit — it already
+      // has the content in hand from startApp() (captured before the
+      // clearing write), so don't wipe what it just earned the right to see.
+      _updatePermissionContext();
+    } else {
+      cancelPendingSave();
+      cancelPendingTypingBroadcast();
+      cancelPendingLiveContentBroadcast();
+      setContentNoSave('');
+      UI.updateWordCount('');
+      _refreshPreviewIfActive();
+      UI.showToast('This room reached its device limit and has been cleared from the server.', 'warning', 6000);
     }
   }
 
@@ -1315,9 +1438,6 @@ function _buildExpirationDuration() {
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) return { error: 'Custom auto-expire must be a number greater than 0.' };
   if (!['s', 'm', 'h', 'd'].includes(unit)) return { error: 'Unsupported unit. Use seconds, minutes, hours, or days.' };
-  // Enforce a 5-minute minimum to prevent accidental near-immediate expiry.
-  const seconds = unit === 's' ? n : unit === 'm' ? n * 60 : unit === 'h' ? n * 3600 : n * 86400;
-  if (seconds < 300) return { error: 'Minimum auto-expire duration is 5 minutes.' };
   return `${n}${unit}`;
 }
 
@@ -1458,6 +1578,7 @@ function _wireShortcuts() {
           ? UI.showToast('Copied to clipboard.', 'success')
           : UI.showToast('Could not copy.', 'error'));
     },
+    onCursorChat: () => _openCursorChatComposer(),
   });
 
 }
@@ -1701,13 +1822,18 @@ function _wireEditorToolbarAndLifecycle() {
     }
   });
 
-  // Broadcast cursor line on selection/click (throttled in presence.js at 800ms)
+  // Broadcast cursor line on selection/click (throttled in presence.js at 800ms).
+  // selectionEnd is reported as the "head" (matches CM6's convention, and is
+  // where the caret itself renders for a forward selection) with
+  // selectionStart as the anchor — so a Write-mode user's selected range
+  // shows up as a highlighted span for collaborators viewing in Preview/Split,
+  // not just a caret.
   const _broadcastCursor = () => {
     if (!editor) return;
-    const pos    = editor.selectionStart;
+    const pos    = editor.selectionEnd;
     const before = editor.value.substring(0, pos);
     const line   = (before.match(/\n/g) || []).length + 1;
-    setCursorLine(line, pos);
+    setCursorLine(line, pos, editor.selectionStart);
     UI.refreshFocusMode(); // no-op unless focus mode is on
     UI.refreshTypewriterMode(); // no-op unless typewriter mode is on
   };
@@ -1911,6 +2037,8 @@ function _wireFooterQuickButtons() {
   });
   UI.initFooterClock();
 
+  document.getElementById('btn-cursor-chat')?.addEventListener('click', () => _openCursorChatComposer());
+
 }
 
 function _wirePanelsAndModals() {
@@ -1993,12 +2121,6 @@ function _wireTools() {
 
   // ── Tools ──────────────────────────────────────────────────────────────────
   const toolActions = {
-    'tool-copy': () =>
-      copyToClipboard(UI.getEditorValue())
-        .then(ok => ok
-          ? UI.showToast('Note copied.', 'success')
-          : UI.showToast('Could not copy.', 'error')),
-
     'tool-copy-link': () =>
       copyToClipboard(buildRoomUrl(BASE, _roomId))
         .then(ok => ok
@@ -2010,8 +2132,6 @@ function _wireTools() {
       try { UI.insertAtCursor(await navigator.clipboard.readText()); }
       catch { UI.showToast('Clipboard access denied.', 'error'); }
     },
-
-    'tool-share': () => { _openShareModal(); },
 
     'tool-clear': async () => {
       if (!canClearNote()) { UI.showToast(editBlockedReason() || 'Clear is disabled.', 'warning'); return; }
@@ -2050,11 +2170,6 @@ function _wireTools() {
       inp.click();
     },
 
-    'tool-timestamp':  () => {
-      if (!canEdit()) { UI.showToast(editBlockedReason() || 'Editing is disabled.', 'warning'); return; }
-      UI.insertAtCursor(insertTimestamp());
-    },
-    'tool-select-all': () => { editor?.focus(); editor?.setSelectionRange(0, editor.value.length); },
     'tool-find':       () => { UI.openPanel('search-panel'); document.getElementById('search-input')?.focus(); },
     'tool-templates': () => {
       if (!canUseTemplates()) { UI.showToast(editBlockedReason() || 'Templates are disabled.', 'warning'); return; }
@@ -2070,6 +2185,7 @@ function _wireTools() {
   // and toolActions' blanket closeAllPanels() after every action would close
   // that panel again immediately.
   document.getElementById('tool-history')?.addEventListener('click', () => { _openHistoryPanel(); });
+  document.getElementById('tool-comments')?.addEventListener('click', () => { _openCommentsPanel(); });
 
 }
 
@@ -2278,6 +2394,7 @@ function _wireSettings() {
     const controls = document.getElementById('setting-exp-controls');
     if (!controls) return;
     const isHidden = controls.classList.toggle('hidden');
+    controls.toggleAttribute('inert', isHidden); // keep its clipped controls out of Tab order while collapsed
     if (!isHidden) _updateExpirationPreview(); // refresh preview when expanding
   });
   document.querySelectorAll('[data-exp-preset]').forEach((el) => el.addEventListener('click', () => _selectExpirationPreset(el.dataset.expPreset || '10m')));
@@ -2332,6 +2449,29 @@ function _wireSettings() {
       UI.renderSettingsPanel(_room);
       broadcastSettingsChange();
     } catch { UI.showToast('Could not update view-once setting.', 'error'); }
+  });
+
+  document.getElementById('setting-dl-btn')?.addEventListener('click', async () => {
+    if (!canChangeSettings()) { UI.showToast(editBlockedReason() || 'Settings are disabled.', 'warning'); return; }
+    try {
+      if (_room.device_limit) {
+        await clearDeviceLimit(_roomId);
+        UI.showToast('Device limit removed.', 'success');
+      } else {
+        const input = document.getElementById('setting-dl-input');
+        const n = Math.round(Number(input?.value));
+        if (!Number.isFinite(n) || n < 1 || n > 50) {
+          UI.showToast('Enter a device limit between 1 and 50.', 'warning');
+          return;
+        }
+        await setDeviceLimit(_roomId, n);
+        UI.showToast(`Device limit set. The note clears once ${n} device${n === 1 ? '' : 's'} have joined.`, 'success', 5000);
+      }
+      _room = await loadRoom(_roomId);
+      _renderRoomHeader();
+      UI.renderSettingsPanel(_room);
+      broadcastSettingsChange();
+    } catch { UI.showToast('Could not update device limit. Has docs/migrations/device-limit.sql been run?', 'error', 5000); }
   });
 
   // Lock-editing toggle
@@ -2744,6 +2884,31 @@ function _wireEditorPreferenceToggles() {
     UI.showToast(_typewriterMode ? 'Typewriter mode: On' : 'Typewriter mode: Off', 'info', 2000);
   });
 
+  // ── Hide-my-cursor-&-typing setting button ──────────────────────────────────
+  const _updateHidePresenceUI = () => {
+    const btn = document.getElementById('setting-hide-presence-btn');
+    if (!btn) return;
+    btn.textContent = _hidePresence ? 'On' : 'Off';
+    btn.setAttribute('aria-pressed', String(_hidePresence));
+  };
+  _updateHidePresenceUI();
+
+  document.getElementById('setting-hide-presence-btn')?.addEventListener('click', () => {
+    _hidePresence = !_hidePresence;
+    try { localStorage.setItem(_HIDE_PRESENCE_KEY, String(_hidePresence)); } catch {}
+    setPresenceHidden(_hidePresence);
+    _updateHidePresenceUI();
+    UI.showToast(_hidePresence ? 'Cursor & typing hidden from others' : 'Cursor & typing visible to others', 'info', 2000);
+  });
+
+  // These are simple on/off flips, not navigations — clicking one shouldn't
+  // steal focus (and with it the caret position/selection) from the editor.
+  // preventDefault on mousedown stops the browser's default click-to-focus
+  // behavior for pointer users while leaving keyboard activation (Tab +
+  // Enter/Space, which never fires mousedown) untouched.
+  ['setting-monospace-btn', 'setting-strip-paste-btn', 'setting-smart-punct-btn',
+   'setting-focus-mode-btn', 'setting-typewriter-mode-btn', 'setting-hide-presence-btn']
+    .forEach((id) => document.getElementById(id)?.addEventListener('mousedown', (e) => e.preventDefault()));
 }
 
 function wireEvents() {
@@ -2852,6 +3017,7 @@ function _applyMarkdownFormat(action, editor) {
     case 'bold':          wrapSel('**', '**'); break;
     case 'italic':        wrapSel('_',  '_');  break;
     case 'strikethrough': wrapSel('~~', '~~'); break;
+    case 'highlight':     wrapSel('==', '=='); break;
     case 'code':          wrapSel('`',  '`');  break;
     case 'h1':            toggleHeading(1);    break;
     case 'h2':            toggleHeading(2);    break;
@@ -2887,17 +3053,31 @@ function _applyMarkdownFormat(action, editor) {
       editor.dispatchEvent(new Event('input', { bubbles: true }));
       break;
     }
+    case 'toc': {
+      const before = start > 0 && val[start - 1] !== '\n' ? '\n' : '';
+      const after  = end < val.length && val[end] !== '\n' ? '\n' : '';
+      const ins = `${before}[TOC]\n${after}`;
+      editor.value = val.slice(0, start) + ins + val.slice(end);
+      editor.selectionStart = editor.selectionEnd = start + ins.length;
+      editor.dispatchEvent(new Event('input', { bubbles: true }));
+      break;
+    }
   }
 }
 
 function teardownRealtimeSession() {
   try { _unsubRoom?.(); } catch {}
   try { _unsubFiles?.(); } catch {}
+  try { _unsubComments?.(); } catch {}
   _unsubRoom = null;
   _unsubFiles = null;
+  _unsubComments = null;
   destroyPresence();
   destroyBroadcast();
   destroySync();
+  UI.clearCursorChat();
+  _followedDeviceId = null;
+  _lastComments = [];
   // Remove the keydown handler so wireEvents() can install fresh callbacks
   // on the next room join. DOM element listeners (editor, buttons, etc.) are
   // protected by the _eventsWired guard and must NOT be reset here — resetting
@@ -3042,6 +3222,21 @@ async function _openHistoryPanel() {
       canRestore: canEdit(),
       deviceId:   getDeviceId(),
     });
+
+    // Scrubbable time-slider: oldest → newest → "Now" (the live content),
+    // reusing the same decrypted previews already computed above.
+    const oldestFirst = [...withPreviews].reverse().map((rev) => ({
+      label:  formatTimestamp(rev.created_at),
+      text:   rev._preview,
+      locked: rev._preview == null,
+      rev,
+    }));
+    oldestFirst.push({ label: 'Now', text: UI.getEditorValue(), isNow: true });
+    if (canEdit()) {
+      UI.renderHistoryScrubber(oldestFirst, (entry) => _restoreRevision(entry.rev));
+    } else {
+      UI.renderHistoryScrubber([], null);
+    }
   } catch {
     UI.showToast('Could not load version history.', 'error');
   } finally {
@@ -3076,6 +3271,95 @@ async function _restoreRevision(rev) {
   UI.showToast('Version restored.', 'success');
 }
 
+// ── Comments ───────────────────────────────────────────────────────────────────
+
+/** The selection range a new comment would attach to, in whichever surface
+ *  (plain textarea or CM6 live surface) is currently active. */
+function _currentSelectionRange() {
+  if (_markdownMode !== 'write' && LiveEditor.isMounted()) {
+    return LiveEditor.getSelection();
+  }
+  const editor = document.getElementById('note-editor');
+  if (!editor) return null;
+  return { from: editor.selectionStart, to: editor.selectionEnd };
+}
+
+function _openCommentsPanel() {
+  UI.openPanel('comments-panel');
+  const range = canEdit() ? _currentSelectionRange() : null;
+  const pendingAnchor = range && Number.isFinite(range.from) && Number.isFinite(range.to) ? range : null;
+  const anchorPreviewText = pendingAnchor ? UI.getEditorValue().slice(pendingAnchor.from, pendingAnchor.to) : '';
+  UI.setCommentComposer({
+    pendingAnchor,
+    anchorPreviewText,
+    onSubmit: (text, anchor) => _submitComment(text, anchor),
+  });
+  _refreshComments();
+}
+
+async function _submitComment(text, anchor) {
+  if (!canEdit()) { UI.showToast(editBlockedReason() || 'Editing is disabled.', 'warning'); return; }
+  try {
+    const payloadText = _encKey ? await encryptContent(text, _encKey) : text;
+    await addComment(_roomId, { anchorFrom: anchor.from, anchorTo: anchor.to, text: payloadText });
+    await _refreshComments();
+    UI.showToast('Comment added.', 'success');
+  } catch {
+    UI.showToast('Could not add comment. Has docs/migrations/room-comments.sql been run?', 'error', 5000);
+  }
+}
+
+async function _deleteCommentClick(c) {
+  const ok = await UI.showConfirm('Delete this comment?', { confirmLabel: 'Delete', danger: true });
+  if (!ok) return;
+  try {
+    await deleteComment(c.id);
+    await _refreshComments();
+  } catch {
+    UI.showToast('Could not delete comment.', 'error');
+  }
+}
+
+function _jumpToComment(c) {
+  if (_markdownMode !== 'write' && LiveEditor.isMounted()) {
+    LiveEditor.scrollToPos(c.anchor_from);
+  } else {
+    const editor = document.getElementById('note-editor');
+    if (editor) { editor.focus(); editor.setSelectionRange(c.anchor_from, c.anchor_to); }
+  }
+  UI.closeAllPanels();
+}
+
+async function _refreshComments() {
+  try {
+    const comments = await listComments(_roomId);
+    const currentText = UI.getEditorValue();
+    const withPreviews = await Promise.all(comments.map(async (c) => {
+      let preview = c.text || '';
+      if (looksEncrypted(preview)) {
+        if (!_encKey) { preview = null; }
+        else {
+          try { preview = await decryptContent(preview, _encKey); }
+          catch { preview = null; }
+        }
+      }
+      const anchorPreview = Number.isFinite(c.anchor_from) && Number.isFinite(c.anchor_to) && c.anchor_to > c.anchor_from
+        ? currentText.slice(c.anchor_from, c.anchor_to)
+        : null;
+      return { ...c, _preview: preview, _anchorPreview: anchorPreview };
+    }));
+    UI.renderCommentsList(withPreviews, {
+      onDelete: _deleteCommentClick,
+      onJump:   _jumpToComment,
+      canDelete: canEdit(),
+    });
+    _lastComments = comments;
+    LiveEditor.setCommentAnchors(comments.map((c) => ({ id: c.id, from: c.anchor_from, to: c.anchor_to })));
+  } catch {
+    // Best-effort — a project that hasn't run docs/migrations/room-comments.sql
+    // yet just never shows any comments. See the subscribeToComments() call site.
+  }
+}
 
 // ── Preview helpers ───────────────────────────────────────────────────────────
 
@@ -3085,6 +3369,10 @@ async function _restoreRevision(rev) {
  * to mount for any reason the old rendered-HTML preview is the fallback.
  */
 function _applyMarkdownMode(mode) {
+  // Cursor-chat bubbles/composer are positioned in viewport coordinates from
+  // the live surface, which is about to be hidden (or was never shown) —
+  // leaving them up would float a stale bubble over whatever mode follows.
+  if (mode === 'write') UI.clearCursorChat();
   _markdownMode = mode;
   _showPreview  = mode !== 'write';
 
@@ -3104,6 +3392,14 @@ function _applyMarkdownMode(mode) {
           LiveEditor.setReadOnly(!canEdit());
         }
         live = LiveEditor.isMounted();
+        // setCommentAnchors() silently no-ops while unmounted, so the very
+        // first mount (or a remount after room navigation) needs today's
+        // comments re-applied now that there's a view to receive them —
+        // _refreshComments() itself only runs on room load/realtime events,
+        // neither of which necessarily follows a later mode switch.
+        if (live) {
+          LiveEditor.setCommentAnchors(_lastComments.map((c) => ({ id: c.id, from: c.anchor_from, to: c.anchor_to })));
+        }
       } catch { live = false; }
     }
   }
@@ -3129,13 +3425,34 @@ function _onLiveEditorChange(text) {
   editor.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
-// Cursor movement in the live surface broadcasts the same presence payload
-// the textarea's keyup/mouseup path does — line for the devices list,
-// precise offset for in-text remote carets.
-function _onLiveCursorActivity(pos) {
-  const before = UI.getEditorValue().slice(0, pos);
+// Cursor/selection movement in the live surface broadcasts the same
+// presence payload the textarea's keyup/mouseup path does — line for the
+// devices list, precise offset(s) for in-text remote carets/selections.
+function _onLiveCursorActivity(head, anchor) {
+  const before = UI.getEditorValue().slice(0, head);
   const line   = (before.match(/\n/g) || []).length + 1;
-  setCursorLine(line, pos);
+  setCursorLine(line, head, anchor);
+}
+
+// Cursor chat only makes sense where there's a real caret to anchor a bubble
+// to — the CM6 live surface (Preview/Split), the same place remote carets
+// themselves render. Write mode's plain textarea has no per-character
+// screen coordinates to place one at.
+function _openCursorChatComposer() {
+  // LiveEditor stays mounted (just hidden) after switching back to Write
+  // mode, so isMounted() alone isn't enough — the surface has to actually
+  // be the visible one for its screen coordinates to mean anything.
+  if (_markdownMode === 'write' || !LiveEditor.isMounted()) {
+    UI.showToast('Switch to Live or Split mode to send a cursor chat.', 'info', 3000);
+    return;
+  }
+  const pos = LiveEditor.getCaretPos();
+  const coords = pos != null ? LiveEditor.coordsAtPos(pos) : null;
+  if (!coords) return;
+  UI.openCursorChatComposer(coords, (text) => {
+    broadcastCursorChat(text, pos);
+    UI.showCursorChatBubble({ deviceId: getDeviceId(), deviceName: 'You', text, x: coords.x, y: coords.y });
+  });
 }
 
 function _refreshPreviewIfActive() {

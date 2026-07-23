@@ -55,7 +55,7 @@ Use this checklist before publishing a new version or sharing the demo link.
 - [ ] **Copy as plain text** — copies to clipboard
 - [ ] **Copy as Markdown** — copies to clipboard
 - [ ] **Monospace toggle** — `Ctrl/⌘+Shift+M` switches font
-- [ ] **Timestamp insert** — footer Time button or `tool-timestamp` inserts current date/time
+- [ ] **Timestamp insert** — footer Time button inserts current date/time
 
 ---
 

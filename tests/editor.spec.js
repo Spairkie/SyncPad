@@ -16,7 +16,7 @@ test.describe('Editor', () => {
 
   test('word count updates as user types', async ({ page }) => {
     await createRoom(page);
-    const wc = page.locator('#word-count, #toolbar-word-count').first();
+    const wc = page.locator('#word-count');
     await page.locator('#note-editor').fill('one two three');
     await expect(wc).toContainText('3 word');
   });
@@ -25,7 +25,7 @@ test.describe('Editor', () => {
     await createRoom(page);
     const editor = page.locator('#note-editor');
     await editor.fill('');
-    const wc = page.locator('#word-count, #toolbar-word-count').first();
+    const wc = page.locator('#word-count');
     await expect(wc).toContainText('0 word');
   });
 
@@ -353,6 +353,23 @@ test.describe('Focus mode (opt-in)', () => {
     await expect(editor).not.toHaveClass(/focus-mode/);
   });
 
+  test('clicking a settings toggle does not steal the editor caret/selection', async ({ page }) => {
+    await createRoom(page);
+    const editor = page.locator('#note-editor');
+    await editor.fill('Hello world');
+
+    // The settings panel can stay open alongside editing (it isn't modal).
+    // Simulate the real workflow: open it, then click back into the note to
+    // keep typing, then flip a toggle without leaving the editor.
+    await openPanel(page, 'settings');
+    await editor.evaluate((el) => { el.focus(); el.setSelectionRange(2, 5); }); // select "llo"
+
+    await page.locator('#setting-focus-mode-btn').click();
+
+    const sel = await editor.evaluate((el) => [document.activeElement === el, el.selectionStart, el.selectionEnd]);
+    expect(sel).toEqual([true, 2, 5]);
+  });
+
   test('the dimmed band follows the caret as it moves through the document', async ({ page }) => {
     await createRoom(page);
     const editor = page.locator('#note-editor');
@@ -440,5 +457,36 @@ test.describe('Typewriter mode (opt-in)', () => {
     await openPanel(page, 'settings');
     await expect(page.locator('#setting-typewriter-mode-btn')).toHaveAttribute('aria-pressed', 'true');
     await expect(page.locator('#note-editor')).toHaveClass(/typewriter-mode/);
+  });
+});
+
+test.describe('Hide my cursor & typing (opt-in)', () => {
+  test('is off by default', async ({ page }) => {
+    await createRoom(page);
+    await openPanel(page, 'presence');
+    await expect(page.locator('#setting-hide-presence-btn')).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  test('toggling flips the button state', async ({ page }) => {
+    await createRoom(page);
+    await openPanel(page, 'presence');
+    const btn = page.locator('#setting-hide-presence-btn');
+
+    await btn.click();
+    await expect(btn).toHaveAttribute('aria-pressed', 'true');
+    await expect(btn).toHaveText('On');
+
+    await btn.click();
+    await expect(btn).toHaveAttribute('aria-pressed', 'false');
+    await expect(btn).toHaveText('Off');
+  });
+
+  test('the preference persists across a page reload', async ({ page }) => {
+    await createRoom(page);
+    await openPanel(page, 'presence');
+    await page.locator('#setting-hide-presence-btn').click();
+    await page.reload();
+    await openPanel(page, 'presence');
+    await expect(page.locator('#setting-hide-presence-btn')).toHaveAttribute('aria-pressed', 'true');
   });
 });
