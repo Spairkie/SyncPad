@@ -61,7 +61,18 @@ const _mdHighlight = HighlightStyle.define([
   // Embedded fenced-code-block languages.
   { tag: [tags.comment, tags.lineComment, tags.blockComment, tags.docComment], color: 'var(--text-muted)', fontStyle: 'italic' },
   { tag: [tags.keyword, tags.controlKeyword, tags.moduleKeyword, tags.operatorKeyword, tags.definitionKeyword, tags.modifier, tags.self, tags.tagName, tags.attributeName], color: 'var(--accent)' },
-  { tag: [tags.string, tags.special(tags.string), tags.character, tags.attributeValue], color: 'var(--syntax-string)' },
+  { tag: [tags.string, tags.special(tags.string), tags.attributeValue], color: 'var(--syntax-string)' },
+  // @lezer/highlight defines tags.character as a sub-tag of tags.string
+  // (`character: t(string)`), so it would otherwise inherit the string
+  // color above — explicitly neutralized because markdownLanguage's own
+  // built-in Emoji shortcode extension (":smile:") tags its match with
+  // exactly this tag, and none of the 5 target code languages need a
+  // distinct "character" color (all use plain tags.string). Without this,
+  // literal, unconverted shortcode text — which markdown.js's static
+  // renderer deliberately leaves unstyled; see "Emoji" in
+  // docs/markdown-feature-audit.md — would visibly (mis)color as if it
+  // were a real string.
+  { tag: tags.character, color: 'inherit' },
   { tag: [tags.number, tags.integer, tags.float, tags.bool, tags.null, tags.atom], color: 'var(--syntax-number)' },
   { tag: [tags.function(tags.variableName), tags.function(tags.propertyName), tags.className, tags.typeName], color: 'var(--syntax-fn)' },
   { tag: [tags.operator, tags.punctuation, tags.bracket, tags.paren, tags.squareBracket, tags.brace, tags.separator], color: 'var(--text-secondary)' },
