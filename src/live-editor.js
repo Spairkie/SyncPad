@@ -726,13 +726,19 @@ const _seamless = ViewPlugin.fromClass(class {
             ranges.push(_hideDeco.range(nodeRef.from, to));
             return;
           }
-          if (name === 'LinkMark' || name === 'URL') {
+          if (name === 'LinkMark' || name === 'URL' || name === 'LinkLabel') {
+            // LinkLabel is also how a reference *definition* line's own
+            // "[id]:" starts — walking up from there never reaches a Link/
+            // Image (its parent is LinkReference, not Link), so the walk
+            // below naturally leaves that instance alone and only folds a
+            // LinkLabel that's actually a reference *usage*, e.g. the
+            // "[ref1]" in "[text][ref1]".
             let link = nodeRef.node.parent;
             while (link && link.name !== 'Link' && link.name !== 'Image') link = link.parent;
             if (!link) return;
             if (_selectionTouches(state, link.from, link.to)) return;
-            // Hide [ ] ( ) marks and the URL — leaving just the link text.
-            // For URL also swallow nothing extra; marks bracket it already.
+            // Hide [ ] ( ) marks, the URL, and a reference usage's own
+            // "[id]" label — leaving just the link text.
             ranges.push(_hideDeco.range(nodeRef.from, nodeRef.to));
             return;
           }

@@ -71,4 +71,22 @@ test.describe('Live/Split surface rendering', () => {
     await expect(page.locator('.note-live table.cm-md-table')).toHaveCount(0);
     await expect(page.locator('.note-live')).toContainText('| A | B |');
   });
+
+  test('reference-style link labels fold away like inline links do, but a definition keeps its label visible', async ({ page }) => {
+    await createRoom(page);
+    await typeInEditor(page,
+      'Text.\n\n[Reference link][ref1]\n\n[Reference link, collapsed][]\n\n' +
+      '[ref1]: https://example.com "Title"\n[Reference link, collapsed]: https://example.com\n',
+    );
+    await setEditorMode(page, 'preview');
+    await page.keyboard.press('Control+Home');
+
+    const live = page.locator('.note-live');
+    await expect(live).not.toContainText('[ref1]');
+    await expect(live).toContainText('Reference link');
+    // The definition lines are a different node shape (LinkReference, not a
+    // Link usage) and must keep their own "[id]" label visible.
+    await expect(live).toContainText('[ref1]: https://example.com "Title"');
+    await expect(live).toContainText('[Reference link, collapsed]: https://example.com');
+  });
 });
