@@ -1,7 +1,7 @@
 {
   "name": "syncpad",
   "version": "1.0.0",
-  "description": "> **A temporary shared notepad for fast handoff between devices.**   > Create a room, share an editable or read-only link, and sync notes and files in real time \u2014 no account needed.",
+  "description": "> **A temporary shared notepad for fast handoff between devices.**   > Create a room, share an editable or read-only link, and sync notes and files in real time — no account needed.",
   "main": "service-worker.js",
   "scripts": {
     "test": "playwright test",
@@ -21,8 +21,11 @@
   "license": "ISC",
   "devDependencies": {
     "@codemirror/commands": "^6.10.4",
+    "@codemirror/lang-json": "^6.0.2",
     "@codemirror/lang-markdown": "^6.5.1",
+    "@codemirror/lang-python": "^6.2.1",
     "@codemirror/language": "^6.12.4",
+    "@codemirror/legacy-modes": "^6.5.3",
     "@codemirror/state": "^6.7.1",
     "@codemirror/view": "^6.43.6",
     "@lezer/highlight": "^1.2.3",

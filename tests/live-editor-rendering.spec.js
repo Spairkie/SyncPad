@@ -89,4 +89,33 @@ test.describe('Live/Split surface rendering', () => {
     await expect(live).toContainText('[ref1]: https://example.com "Title"');
     await expect(live).toContainText('[Reference link, collapsed]: https://example.com');
   });
+
+  test('a fenced code block with a language tag gets real syntax highlighting, not plain text', async ({ page }) => {
+    await createRoom(page);
+    await typeInEditor(page, '```js\nfunction greet(name) {\n  return name;\n}\n```\n');
+    await setEditorMode(page, 'preview');
+    await page.keyboard.press('Control+End');
+
+    // The code block gets its own background box (cm-md-codeblock), and its
+    // content is broken into per-token highlighted spans rather than one
+    // plain-text run — a keyword like "function" is not styled the same as
+    // plain body text.
+    await expect(page.locator('.note-live .cm-md-codeblock').first()).toBeVisible();
+    const editor = page.locator('.note-live');
+    await expect(editor).toContainText('function greet(name)');
+    // At least one syntax-highlighted span should exist inside the code
+    // block's line — distinct from a plain, unstyled text node.
+    const highlightedTokens = page.locator('.note-live .cm-md-codeblock span[class]');
+    expect(await highlightedTokens.count()).toBeGreaterThan(0);
+  });
+
+  test('a fenced code block with no language tag stays plain (no highlighting)', async ({ page }) => {
+    await createRoom(page);
+    await typeInEditor(page, '```\nplain text code block\n```\n');
+    await setEditorMode(page, 'preview');
+    await page.keyboard.press('Control+End');
+
+    await expect(page.locator('.note-live .cm-md-codeblock').first()).toBeVisible();
+    await expect(page.locator('.note-live')).toContainText('plain text code block');
+  });
 });

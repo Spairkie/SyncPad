@@ -96,3 +96,19 @@ SyncPad has two rendering surfaces:
   output does (just an inline superscript + a labeled definition line) —
   moving text out of document order isn't appropriate for an editable
   surface the way it is for a read-only render.
+- **Fenced code blocks with a language tag now get real syntax highlighting
+  in the live surface too (Phase 32)**, not just a monospace font. Vendored
+  `@codemirror/lang-javascript`, `-python`, `-json`, `-html`, `-css`, and
+  `@codemirror/legacy-modes`' shell mode (covers `js`/`ts`/`jsx`/`tsx`,
+  `py`, `json`, `html`/`xml`, `css`, and `sh`/`bash`/`zsh` fence tags — any
+  other/unrecognized tag still falls back to the previous plain-monospace
+  behavior, same as no tag at all), wired through `markdown()`'s
+  `codeLanguages` option, and extended the live surface's shared
+  `HighlightStyle` to cover the standard `@lezer/highlight` token tags
+  (keyword, string, number, comment, function, …) using the exact same
+  `--syntax-*` CSS variables the classic renderer's Prism-highlighted
+  Preview pane already used — so a code block looks the same color-wise in
+  either surface. Code blocks also gained a background box matching the
+  classic renderer's `<pre>` styling, applied as a per-line decoration
+  since the live surface styles lines rather than wrapping a block element
+  (the block stays individually editable).

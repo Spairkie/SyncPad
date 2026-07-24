@@ -8,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Phase 32 — Syntax highlighting for fenced code blocks in Live/Split mode
+
+Branch: `claude/codebase-review-testing-fjicqa`
+
+#### Added
+- **Real syntax highlighting for fenced code blocks in the CM6 Live/Split surface**, closing the one known gap flagged after Phase 30's table/alert/footnote rendering fixes — a `js`/`python`/`json`/`html`/`css`/`bash` code block previously showed as plain monospace text with no token coloring in Live/Split mode, unlike the static export/Preview-fallback path (Prism.js). Vendored `@codemirror/lang-javascript`, `-python`, `-json`, `-html`, `-css`, and `@codemirror/legacy-modes`' shell mode into `vendor/codemirror.js`, wired through `markdown()`'s `codeLanguages` option (maps a fence's info string — `js`, `ts`, `jsx`, `tsx`, `py`, `json`, `html`, `xml`, `css`, `sh`, `bash`, `zsh` — to the right language parser; anything else keeps the previous plain-text behavior).
+- Extended the live surface's shared `HighlightStyle` to cover the standard `@lezer/highlight` token tags (keyword, string, number, comment, function, operator, …) using the exact same `--syntax-string`/`--syntax-number`/`--syntax-fn`/`--syntax-regex` CSS variables `panels.css` already uses for the static renderer's Prism-highlighted code — a code block looks color-consistent whichever surface it's viewed in.
+- Fenced code blocks also gained a background box (`.cm-md-codeblock`) matching the classic renderer's `<pre>` styling — a new `FencedCode` case in the seamless-decoration walk applies a per-line background/border class across the block (rounded corners on the first/last line) rather than wrapping a block element, since the lines need to stay individually editable.
+- Verified against the full markdown feature-test document again (screenshot + a fresh full-document render pass) — no regressions in any of the other 33 sections; two harmless, expected side effects noted (not fixed, not bugs): raw HTML typed directly in prose (section 11's `<div>`/`<script>` example) and a literal `:smile:`-shaped run of text (section 18) now pick up incidental tag/string coloring from the same shared `HighlightStyle`, since those node types were already being parsed by the base grammar before this change — only the color mapping is new, and neither affects the actual rendering-safety or literalness guarantees those sections test for.
+- New tests in `tests/live-editor-rendering.spec.js`: a language-tagged fence produces highlighted token spans and the new background-box class; a bare fence (no language) stays plain, exactly as before.
+
 ### Phase 31 — Fresh production DB baseline SQL script
 
 Branch: `claude/codebase-review-testing-fjicqa`
