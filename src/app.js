@@ -3298,8 +3298,9 @@ function _syncMonospaceSettingUI() {
  * the CM6 live proxy in Preview mode (or Split, when the live pane has
  * focus), the plain textarea otherwise. Mirrors UI.insertAtCursor()'s
  * behaviour, which only ever touches the (possibly hidden) textarea and
- * silently no-ops visually when Preview mode has it hidden. Shared by any
- * "insert this at my cursor" action — timestamp insert today.
+ * silently no-ops visually when Preview mode has it hidden. Shared by
+ * every "insert this at my cursor" action: timestamp insert, template
+ * insert, and pasted/dropped-image insert.
  */
 function _insertTextAtActiveCursor(text) {
   const useLive = LiveEditor.isMounted() && (_markdownMode === 'preview' || LiveEditor.hasFocus());

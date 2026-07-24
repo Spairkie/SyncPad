@@ -924,11 +924,11 @@ export function mount(container, initialValue, { onChange, onCursorActivity, onI
         // paste/drop — the Write textarea's own paste/dragover/drop
         // listeners (app.js) are bound to #note-editor specifically, so
         // they never fire when this surface owns the event (true whenever
-        // it's focused, which since Phase 34 is the default on room open).
-        // Handled here rather than left to CM6's own paste handling, which
-        // has nothing meaningful to do with an image-only clipboard item
-        // (no text representation to insert) and would otherwise silently
-        // no-op.
+        // this surface is focused, including whenever Preview is the
+        // active mode, since the textarea is hidden then). Handled here
+        // rather than left to CM6's own paste handling, which has nothing
+        // meaningful to do with an image-only clipboard item (no text
+        // representation to insert) and would otherwise silently no-op.
         EditorView.domEventHandlers({
           mousedown: (e, view) => {
             if (!(e.ctrlKey || e.metaKey)) return false;
