@@ -570,13 +570,12 @@ revoke execute on function public.admin_unquarantine_room(text)
 --        p_metadata:       { cleared_reason: 'manual' },
 --      });
 --
--- 5. SERVER-SIDE QUARANTINE ENFORCEMENT (OPTIONAL)
---    To block anonymous API access to quarantined rooms, replace
---    the base anon read/update policies in 0001_base_schema.sql (superseded for update by 0007_room_edit_tokens.sql)
---    with the tightened versions shown in the FRONTEND-ONLY
---    SECURITY WARNING at the top of this file.  Do this only
---    after verifying that no other app behaviour depends on
---    unconditional anon read access to all rooms.
+-- 5. SERVER-SIDE QUARANTINE ENFORCEMENT
+--    Run 0008_quarantine_enforcement.sql — a BEFORE UPDATE trigger on
+--    syncpad_rooms (same technique as this migration's own room-lock
+--    trigger) that rejects writes to a quarantined room regardless of
+--    which policy or code path let the request through. See the
+--    FRONTEND-ONLY WARNING at the top of this file for why that matters.
 --
 -- ════════════════════════════════════════════════════════════════
 -- END OF MIGRATION
