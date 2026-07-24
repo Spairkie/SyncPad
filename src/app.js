@@ -146,6 +146,36 @@ function _rememberLastRoom(roomId) {
   try { localStorage.setItem(LAST_ROOM_KEY, roomId); } catch {}
 }
 
+// ── Recent rooms (landing page shortcut list) ───────────────────────────────
+// Safe to persist plainly now that room_id alone grants access again (see
+// supabase/migrations/0009_revert_edit_token_write_gating.sql) — there's no
+// token that could leak by remembering more than the single "last room" slot
+// above. Tracks every successful room visit, read-only included — this is a
+// personal "places I've been" convenience, not tied to edit permission.
+const RECENT_ROOMS_KEY = 'syncpad_recent_rooms';
+const RECENT_ROOMS_MAX = 8;
+
+function _loadRecentRooms() {
+  try {
+    const list = JSON.parse(localStorage.getItem(RECENT_ROOMS_KEY) || '[]');
+    return Array.isArray(list) ? list.filter((r) => r && typeof r.id === 'string') : [];
+  } catch { return []; }
+}
+
+function _rememberRecentRoom(roomId, name) {
+  try {
+    const list = _loadRecentRooms().filter((r) => r.id !== roomId);
+    list.unshift({ id: roomId, name: (name || '').trim() || roomId, visitedAt: Date.now() });
+    localStorage.setItem(RECENT_ROOMS_KEY, JSON.stringify(list.slice(0, RECENT_ROOMS_MAX)));
+  } catch {}
+}
+
+function _forgetRecentRoom(roomId) {
+  try {
+    localStorage.setItem(RECENT_ROOMS_KEY, JSON.stringify(_loadRecentRooms().filter((r) => r.id !== roomId)));
+  } catch {}
+}
+
 // Any control that deliberately navigates to the app root (header logo,
 // "Back to SyncPad" links, view-once "Go home" button, etc.) must call this
 // first so boot() shows the real landing screen instead of immediately
@@ -499,6 +529,39 @@ function wireLandingEvents() {
   createBtn?.addEventListener('click', handleCreateRoomClick);
   joinBtn?.addEventListener('click', joinRoom_);
   joinInput?.addEventListener('keydown', (e) => { if (e.key === 'Enter') joinRoom_(); });
+
+  _renderRecentRooms();
+}
+
+function _renderRecentRooms() {
+  const container = document.getElementById('landing-recent');
+  const list = document.getElementById('landing-recent-list');
+  if (!container || !list) return;
+  const rooms = _loadRecentRooms();
+  if (!rooms.length) { container.classList.add('hidden'); list.innerHTML = ''; return; }
+  container.classList.remove('hidden');
+  list.innerHTML = rooms.map((r) => `
+    <div class="landing-recent-item">
+      <button class="landing-recent-item-btn" data-room-id="${escapeHtml(r.id)}">
+        <span class="landing-recent-name">${escapeHtml(r.name)}</span>
+        <span class="landing-recent-time">${escapeHtml(formatTimestamp(r.visitedAt))}</span>
+      </button>
+      <button class="landing-recent-remove" data-remove-id="${escapeHtml(r.id)}" title="Remove from recent rooms" aria-label="Remove ${escapeHtml(r.name)} from recent rooms">×</button>
+    </div>`).join('');
+  list.querySelectorAll('.landing-recent-item-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const roomId = btn.dataset.roomId;
+      history.pushState(null, '', `${BASE}/${roomId}`);
+      UI.showScreen('loading');
+      joinRoom(roomId);
+    });
+  });
+  list.querySelectorAll('.landing-recent-remove').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      _forgetRecentRoom(btn.dataset.removeId);
+      _renderRecentRooms();
+    });
+  });
 }
 
 
@@ -777,6 +840,7 @@ async function startApp() {
   // Only for genuine editable visits — not read-only share links or
   // ?mode=read, which are bound to someone else's link rather than "my" room.
   if (!_isReadOnly) _rememberLastRoom(_roomId);
+  _rememberRecentRoom(_roomId, _room?.room_name);
 
   // ── Expiration check ───────────────────────────────────────────────────────
   if (_room.expires_at && new Date(_room.expires_at) <= new Date()) {

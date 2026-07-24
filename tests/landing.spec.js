@@ -102,4 +102,52 @@ test.describe('Landing page', () => {
     await expect(chips.first()).toBeVisible();
     expect(await chips.count()).toBeGreaterThanOrEqual(3);
   });
+
+  test('recent rooms list is hidden when empty and shown when localStorage has entries', async ({ page }) => {
+    await goToLanding(page);
+    await expect(page.locator('#landing-recent')).toHaveClass(/hidden/);
+
+    await page.evaluate(() => {
+      localStorage.setItem('syncpad_recent_rooms', JSON.stringify([
+        { id: 'test-recent-room', name: 'Test Recent Room', visitedAt: Date.now() },
+      ]));
+    });
+    await page.reload();
+    await page.waitForSelector('#landing-screen:not(.hidden)', { timeout: 10_000 });
+    await expect(page.locator('#landing-recent')).not.toHaveClass(/hidden/);
+    await expect(page.locator('.landing-recent-item')).toHaveCount(1);
+    await expect(page.locator('.landing-recent-name')).toHaveText('Test Recent Room');
+  });
+
+  test('removing a recent room updates localStorage and the list', async ({ page }) => {
+    await goToLanding(page);
+    await page.evaluate(() => {
+      localStorage.setItem('syncpad_recent_rooms', JSON.stringify([
+        { id: 'test-recent-a', name: 'Room A', visitedAt: Date.now() },
+        { id: 'test-recent-b', name: 'Room B', visitedAt: Date.now() },
+      ]));
+    });
+    await page.reload();
+    await page.waitForSelector('#landing-screen:not(.hidden)', { timeout: 10_000 });
+    await expect(page.locator('.landing-recent-item')).toHaveCount(2);
+
+    await page.locator('.landing-recent-remove').first().click();
+    await expect(page.locator('.landing-recent-item')).toHaveCount(1);
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('syncpad_recent_rooms')));
+    expect(stored).toHaveLength(1);
+    expect(stored[0].id).toBe('test-recent-b');
+  });
+
+  test('clicking a recent room navigates to it', async ({ page }) => {
+    await goToLanding(page);
+    await page.evaluate(() => {
+      localStorage.setItem('syncpad_recent_rooms', JSON.stringify([
+        { id: 'test-recent-click', name: 'Click Me', visitedAt: Date.now() },
+      ]));
+    });
+    await page.reload();
+    await page.waitForSelector('#landing-screen:not(.hidden)', { timeout: 10_000 });
+    await page.locator('.landing-recent-item-btn').first().click();
+    await expect(page).toHaveURL(/test-recent-click/);
+  });
 });

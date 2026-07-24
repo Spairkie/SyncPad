@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Phase 28 — Recent rooms list on landing
+
+Branch: `claude/codebase-review-testing-fjicqa`
+
+#### Added
+- **Recent rooms list on the landing page.** The last 8 rooms visited on this device now appear below the join box (room name or, if unnamed, the room id, plus a relative visit timestamp), letting a returning visitor jump back into a room without remembering or retyping its id/link. Backed by a plain `localStorage` array (`syncpad_recent_rooms`) written on every `joinRoom()` regardless of read-only/editable status — this is safe to persist unconditionally now that `room_id` alone is a write credential again (Phase 26), so there's no token to leak by keeping more local history than before. Each entry has an inline "×" remove button; the whole section is hidden when the list is empty. This is a local, this-device-only convenience, distinct from the existing single-slot PWA "last room" resume feature.
+
 ### Phase 27 — Floating cursor chat, inline comment margin dots, footer/tools decluttering
 
 Branch: `claude/codebase-review-testing-fjicqa`

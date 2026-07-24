@@ -92,6 +92,13 @@
       <button id="landing-join-btn" class="landing-join-btn">Join</button>
     </div>
 
+    <!-- Populated by app.js from a local (this-device-only) list of recently
+         visited rooms — hidden entirely when the list is empty. -->
+    <div class="landing-recent hidden" id="landing-recent">
+      <div class="landing-recent-title">Recent rooms</div>
+      <div class="landing-recent-list" id="landing-recent-list"></div>
+    </div>
+
     <div class="landing-chips">
       <span class="landing-chip">No account needed</span>
       <span class="landing-chip">Realtime sync</span>
