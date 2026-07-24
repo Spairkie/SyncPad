@@ -20,6 +20,7 @@ import {
   ViewPlugin, Decoration, WidgetType, syntaxTree,
   StateField, StateEffect,
 } from '../vendor/codemirror.js';
+import { escapeHtml } from './utils.js';
 
 let _view             = null;
 let _onChange         = null;
@@ -135,6 +136,130 @@ class _HrWidget extends WidgetType {
 
 const _bulletWidget = new _BulletWidget();
 const _hrWidget     = new _HrWidget();
+
+// ── GFM alerts (> [!NOTE] etc.) ──────────────────────────────────────────────
+//
+// lezer-markdown's base grammar has no concept of these — a "[!NOTE]" on its
+// own line inside a blockquote just parses as an ordinary (unresolved)
+// shortcut-reference Link node. Detected here by matching the blockquote's
+// first line against GitHub's five alert kinds, mirroring markdown.js's own
+// static renderer (_ALERT_ICONS) so Live/Split/Preview shows the same
+// coloured box + icon+label the exported HTML already did.
+const _ALERT_LABEL = {
+  note: 'ℹ️ Note', tip: '💡 Tip', important: '❗ Important', warning: '⚠️ Warning', caution: '🛑 Caution',
+};
+const _ALERT_LINE_RE = /^>\s*\[!(note|tip|important|warning|caution)\]\s*$/i;
+
+function _blockquoteAlertKind(state, from) {
+  const m = _ALERT_LINE_RE.exec(state.doc.lineAt(from).text);
+  return m ? m[1].toLowerCase() : null;
+}
+
+const _alertLineDeco = Object.fromEntries(
+  Object.keys(_ALERT_LABEL).map((kind) => [kind, Decoration.line({ class: `cm-md-alert cm-md-alert-${kind}` })]),
+);
+
+class _AlertLabelWidget extends WidgetType {
+  constructor(kind) { super(); this.kind = kind; }
+  eq(other) { return other.kind === this.kind; }
+  toDOM() {
+    const span = document.createElement('span');
+    span.className = `cm-md-alert-title cm-md-alert-title-${this.kind}`;
+    span.textContent = _ALERT_LABEL[this.kind];
+    return span;
+  }
+}
+
+// ── Footnotes ─────────────────────────────────────────────────────────────────
+//
+// "[^label]" parses the same way "[!NOTE]" does — an unresolved shortcut
+// Link node — since footnotes aren't part of lezer-markdown's base grammar
+// either. No attempt to relocate definitions into a rendered "Footnotes"
+// section the way the static renderer does (this is an editable surface;
+// moving text out of document order would fight the user editing it) — just
+// enough visual distinction that neither form reads as stray bracket noise.
+const _FOOTNOTE_RE = /^\[\^([^\]]+)\]$/;
+
+class _FootnoteRefWidget extends WidgetType {
+  constructor(label) { super(); this.label = label; }
+  eq(other) { return other.label === this.label; }
+  toDOM() {
+    const sup = document.createElement('sup');
+    sup.className = 'cm-md-footnote-ref';
+    sup.textContent = this.label;
+    return sup;
+  }
+}
+
+class _FootnoteDefMarkerWidget extends WidgetType {
+  constructor(label) { super(); this.label = label; }
+  eq(other) { return other.label === this.label; }
+  toDOM() {
+    const span = document.createElement('span');
+    span.className = 'cm-md-footnote-def-marker';
+    span.textContent = `${this.label}.`;
+    return span;
+  }
+}
+
+// ── GFM tables ────────────────────────────────────────────────────────────────
+//
+// The base markdown() config (via markdownLanguage) already parses GFM
+// tables into Table/TableHeader/TableRow/TableCell/TableDelimiter nodes —
+// same grammar that gives us TaskList/Strikethrough for free — but nothing
+// previously turned that tree into an actual <table>, so it just sat there
+// as literal pipe-delimited text. Rendered as a whole-block replace widget,
+// same "reveal raw source while the selection touches it" pattern as Image.
+class _TableWidget extends WidgetType {
+  constructor(html) { super(); this.html = html; }
+  eq(other) { return other.html === this.html; }
+  toDOM() {
+    const wrap = document.createElement('div');
+    wrap.className = 'cm-md-table-wrap';
+    wrap.innerHTML = this.html;
+    return wrap;
+  }
+  ignoreEvent() { return true; }
+}
+
+function _tableAlignments(delimiterText) {
+  return delimiterText.split('|').slice(1, -1).map((seg) => {
+    const s = seg.trim();
+    if (s.startsWith(':') && s.endsWith(':')) return 'center';
+    if (s.endsWith(':')) return 'right';
+    if (s.startsWith(':')) return 'left';
+    return '';
+  });
+}
+
+function _buildTableHtml(state, tableNode) {
+  const rows = [];
+  let alignments = [];
+  for (let child = tableNode.firstChild; child; child = child.nextSibling) {
+    if (child.name === 'TableDelimiter') {
+      alignments = _tableAlignments(state.doc.sliceString(child.from, child.to));
+    } else if (child.name === 'TableHeader' || child.name === 'TableRow') {
+      const cells = [];
+      for (let cell = child.firstChild; cell; cell = cell.nextSibling) {
+        if (cell.name === 'TableCell') cells.push(state.doc.sliceString(cell.from, cell.to).trim());
+      }
+      rows.push({ header: child.name === 'TableHeader', cells });
+    }
+  }
+  const alignAttr = (i) => (alignments[i] ? ` style="text-align:${alignments[i]}"` : '');
+  const headRow   = rows.find((r) => r.header);
+  const bodyRows  = rows.filter((r) => !r.header);
+  let html = '<table class="cm-md-table">';
+  if (headRow) {
+    html += '<thead><tr>' + headRow.cells.map((c, i) => `<th${alignAttr(i)}>${escapeHtml(c)}</th>`).join('') + '</tr></thead>';
+  }
+  if (bodyRows.length) {
+    html += '<tbody>' + bodyRows.map((r) =>
+      '<tr>' + r.cells.map((c, i) => `<td${alignAttr(i)}>${escapeHtml(c)}</td>`).join('') + '</tr>',
+    ).join('') + '</tbody>';
+  }
+  return html + '</table>';
+}
 
 // "3/5 done" badge above a top-level checklist block, counting every
 // checkbox in the block including nested sub-items — mirrors the badge the
@@ -331,6 +456,33 @@ const _tocField = StateField.define({
   provide: (f) => EditorView.decorations.from(f),
 });
 
+// GFM tables → real <table>s. A block-replace decoration (unlike the
+// additive widgets above) must come from a StateField — CM6 rejects block
+// decorations from a ViewPlugin outright ("Block decorations may not be
+// specified via plugins"), which is also why this couldn't just be one more
+// case in the _seamless plugin above. Recomputed on every transaction, not
+// just docChanged, because whether a given table renders as a widget or its
+// raw pipe syntax depends on the *selection* (reveal-while-touched, same as
+// Image/HorizontalRule) — cheap enough at BODY_MAX's ~50k-char ceiling.
+function _computeTableDecorations(state) {
+  const ranges = [];
+  syntaxTree(state).iterate({
+    enter: (nodeRef) => {
+      if (nodeRef.name !== 'Table') return;
+      if (_selectionTouches(state, nodeRef.from, nodeRef.to)) return;
+      const html = _buildTableHtml(state, nodeRef.node);
+      ranges.push(Decoration.replace({ widget: new _TableWidget(html), block: true }).range(nodeRef.from, nodeRef.to));
+    },
+  });
+  return Decoration.set(ranges, true);
+}
+
+const _tableField = StateField.define({
+  create: (state) => _computeTableDecorations(state),
+  update(value, tr) { return _computeTableDecorations(tr.state); },
+  provide: (f) => EditorView.decorations.from(f),
+});
+
 /** Stable per-device caret colour derived from its id. */
 export function colorForDevice(deviceId) {
   let hash = 0;
@@ -461,16 +613,56 @@ const _seamless = ViewPlugin.fromClass(class {
           }
 
 
-          // Blockquote: styled left border on each line; the > marks are
-          // hidden below via QuoteMark when the quote isn't being edited.
+          // Blockquote: styled left border on each line (a GFM-alert kind's
+          // coloured variant when the first line is "> [!NOTE]" etc.); the
+          // > marks are hidden below via QuoteMark when not being edited.
           if (name === 'Blockquote') {
+            const alertKind = _blockquoteAlertKind(state, nodeRef.from);
+            const lineDeco  = alertKind ? _alertLineDeco[alertKind] : _quoteLine;
             for (let line = state.doc.lineAt(nodeRef.from); line.from <= nodeRef.to;) {
-              ranges.push(_quoteLine.range(line.from));
+              ranges.push(lineDeco.range(line.from));
               if (line.to + 1 > state.doc.length) break;
               line = state.doc.lineAt(line.to + 1);
             }
             return;
           }
+
+          // "[!NOTE]" etc. parses as an ordinary (unresolved) shortcut Link
+          // node — relabel it to an icon+title when it's alone on the first
+          // line of its enclosing blockquote (matches _blockquoteAlertKind's
+          // own check, so the two agree on which blockquotes are alerts).
+          // Falls through to normal Link handling (below) for anything else.
+          if (name === 'Link') {
+            const text = state.doc.sliceString(nodeRef.from, nodeRef.to);
+            const parent = nodeRef.node.parent;
+            const grandparent = parent?.parent;
+
+            const alertMatch = /^\[!(note|tip|important|warning|caution)\]$/i.exec(text);
+            if (alertMatch && parent?.name === 'Paragraph' && grandparent?.name === 'Blockquote' &&
+                _blockquoteAlertKind(state, grandparent.from) === alertMatch[1].toLowerCase()) {
+              if (!_selectionTouches(state, nodeRef.from, nodeRef.to)) {
+                ranges.push(Decoration.replace({ widget: new _AlertLabelWidget(alertMatch[1].toLowerCase()) }).range(nodeRef.from, nodeRef.to));
+              }
+              return false; // skip its LinkMark children — already fully replaced
+            }
+
+            const fnMatch = _FOOTNOTE_RE.exec(text);
+            if (fnMatch) {
+              const isDefinition = parent?.name === 'Paragraph' && nodeRef.from === parent.from &&
+                state.doc.sliceString(nodeRef.to, nodeRef.to + 1) === ':';
+              if (!_selectionTouches(state, nodeRef.from, nodeRef.to)) {
+                const widget = isDefinition ? new _FootnoteDefMarkerWidget(fnMatch[1]) : new _FootnoteRefWidget(fnMatch[1]);
+                ranges.push(Decoration.replace({ widget }).range(nodeRef.from, nodeRef.to));
+              }
+              return false;
+            }
+
+            return;
+          }
+
+          // GFM tables are handled by _tableField below — block-replace
+          // decorations can only come from a StateField, not this plugin
+          // ("Block decorations may not be specified via plugins").
 
           // Horizontal rule → rendered line (revealed while touched).
           if (name === 'HorizontalRule') {
@@ -534,13 +726,19 @@ const _seamless = ViewPlugin.fromClass(class {
             ranges.push(_hideDeco.range(nodeRef.from, to));
             return;
           }
-          if (name === 'LinkMark' || name === 'URL') {
+          if (name === 'LinkMark' || name === 'URL' || name === 'LinkLabel') {
+            // LinkLabel is also how a reference *definition* line's own
+            // "[id]:" starts — walking up from there never reaches a Link/
+            // Image (its parent is LinkReference, not Link), so the walk
+            // below naturally leaves that instance alone and only folds a
+            // LinkLabel that's actually a reference *usage*, e.g. the
+            // "[ref1]" in "[text][ref1]".
             let link = nodeRef.node.parent;
             while (link && link.name !== 'Link' && link.name !== 'Image') link = link.parent;
             if (!link) return;
             if (_selectionTouches(state, link.from, link.to)) return;
-            // Hide [ ] ( ) marks and the URL — leaving just the link text.
-            // For URL also swallow nothing extra; marks bracket it already.
+            // Hide [ ] ( ) marks, the URL, and a reference usage's own
+            // "[id]" label — leaving just the link text.
             ranges.push(_hideDeco.range(nodeRef.from, nodeRef.to));
             return;
           }
@@ -644,6 +842,7 @@ export function mount(container, initialValue, { onChange, onCursorActivity, rea
         _remoteCursorField,
         _checklistProgressField,
         _tocField,
+        _tableField,
         _commentAnchorsField,
         EditorView.updateListener.of((update) => {
           const external = update.transactions.some((tr) => tr.annotation(External));

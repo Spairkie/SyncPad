@@ -8,6 +8,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Phase 30 — Fix Live/Split surface: tables, GFM alerts, and footnotes weren't rendering
+
+Branch: `claude/codebase-review-testing-fjicqa`
+
+#### Fixed
+- **Diagnosed the reported "markdown rendering is broken" issue on Live/Split/Preview mode.** Root cause: `live-editor.js`'s CM6 WYSIWYG surface is a *separate* rendering path from `markdown.js`'s static `renderMarkdown()` — it decorates the plain-markdown source directly rather than producing HTML — and three features had no decoration logic there at all, so they rendered as literal, unstyled markdown syntax instead of the formatted output the static export/PDF/copy-as-HTML paths already produced correctly:
+  - **GFM tables** (`| a | b |`) showed as plain pipe-delimited text lines with no grid, borders, or column alignment.
+  - **GitHub-style alerts** (`> [!NOTE]`/`[!TIP]`/`[!IMPORTANT]`/`[!WARNING]`/`[!CAUTION]`) showed as a plain blockquote with the literal `[!NOTE]` marker text visible, no colour, icon, or label.
+  - **Footnotes** (`[^1]`) showed as literal bracket-caret text, no superscript, no visual distinction from the surrounding sentence.
+  - Confirmed via a byte-for-byte diff against a prior "golden" HTML export of the project's own markdown feature-test document (matched almost exactly, save for two checkbox states explained by manual toggle-testing) — proving the *static* renderer (`markdown.js`) was already correct, and isolating the bug entirely to the CM6 live surface most users actually see day-to-day (Preview/Split mode mount the live surface whenever it mounts successfully, which is virtually always).
+- **Tables** now render as a real `<table>` — a `_tableField` `StateField` (block-replace decorations can only come from a StateField, not the existing `_seamless` `ViewPlugin` — "Block decorations may not be specified via plugins") walks the `Table`/`TableHeader`/`TableRow`/`TableCell`/`TableDelimiter` nodes `markdownLanguage` was already parsing (the same GFM extension task lists and strikethrough come from) and swaps the whole block for a built `<table>` with correct column alignment, following the same "reveal raw markdown while the selection touches it" pattern already used for images/horizontal rules. Recomputed on every transaction (not just doc changes) since whether a table shows as a widget or its raw syntax depends on the selection.
+- **GFM alerts** now render as a coloured, icon-labelled box matching the static renderer's `.md-alert` styling exactly (same icons/colours per kind) — detected by matching a blockquote's first line against the five alert kinds; the `[!NOTE]` marker (which parses as an ordinary unresolved shortcut-reference `Link` node, since GFM alerts aren't part of the base grammar either) is replaced with an icon+label widget.
+- **Footnotes** get a superscript reference marker inline and a small bold label on the definition line — not a full relocated "Footnotes" section (this is an editable surface; moving text out of document order would fight the person editing it, unlike the read-only static export, which already does exactly that).
+- **Reference-style link labels** (`[text][ref1]`, including the collapsed `[text][]` form) now fold away in Live/Split the same way inline `[text](url)` links already did — found during a full visual pass over the feature-test document after the fixes above. `LinkLabel` (the `[ref1]` part of a reference *usage*) wasn't in the existing generic mark-hiding case, which only knew about `LinkMark`/`URL`; added it there rather than as a new special case, since the same "walk up to find the enclosing Link/Image, hide if not" logic already applies correctly — a reference *definition* line's own `[id]:` uses the same `LinkLabel` node type but under `LinkReference`, not `Link`, so that walk naturally leaves it alone and its label stays visible.
+- New `tests/live-editor-rendering.spec.js` covers all four fixes plus the click-to-reveal-raw-source interaction.
+
+### Phase 29 — Slash-command quick-insert menu, emoji quick-react on cursor chat
+
+Branch: `claude/codebase-review-testing-fjicqa`
+
+#### Added
+- **Slash-command quick-insert menu.** Typing `/` at the start of a line in Write mode (start of the doc, or right after a newline/space/tab — so `and/or` mid-word never triggers it) opens a small filterable popup anchored at the caret, listing every block-level formatting action already reachable via the toolbar/context menu (headings, bold/italic/strikethrough/highlight/code, code block, link, quote, bullet/numbered/checklist list, divider, table of contents) plus Insert timestamp and Insert template. Typing after the `/` filters the list by label or keyword; Up/Down moves the selection, Enter or Tab confirms, Escape or a space in the query closes it. Selecting an item deletes the `/query` text and reuses the existing `_applyMarkdownFormat()` action registry (or `insertTimestamp()` / the templates modal for the two non-formatting entries) — no new insertion logic, just a faster way to reach what already existed. New `checklist` action (`- [ ] `) added to that registry as part of this, since it didn't have a toolbar/menu entry before. Positioning reuses `UI.getCaretViewportCoords()`, the same mirror-div caret measurement cursor chat and comment margin dots already rely on. Scoped to Write mode for now — Live/Split would need the CM6 coordinate equivalent wired up separately.
+- **Emoji quick-react on cursor-chat bubbles.** Hovering (or focusing) any visible cursor-chat bubble — yours or a remote one — reveals a small 👍 ❤️ 😂 🎉 👀 row; clicking one broadcasts a reaction tied to that message's id over the same ephemeral Broadcast channel cursor chat itself uses (`cursor_chat_reaction`, never persisted). The reacted-to bubble shows the emoji as a small fading badge, both for the reactor (optimistic local echo — Realtime's `self:false` means a reactor never receives its own broadcast back) and for anyone else still looking at that bubble when the reaction arrives; a bubble that already faded locally simply has nothing to attach the badge to, consistent with cursor chat's existing "ephemeral, best-effort" design. `broadcastCursorChat()` now returns the message id it generated so the sender's own local bubble echo can be reacted to the same way a received one can. No permission gate, matching cursor chat itself — neither writes to the note.
+
+### Phase 28 — Recent rooms list on landing
+
+Branch: `claude/codebase-review-testing-fjicqa`
+
+#### Added
+- **Recent rooms list on the landing page.** The last 8 rooms visited on this device now appear below the join box (room name or, if unnamed, the room id, plus a relative visit timestamp), letting a returning visitor jump back into a room without remembering or retyping its id/link. Backed by a plain `localStorage` array (`syncpad_recent_rooms`) written on every `joinRoom()` regardless of read-only/editable status — this is safe to persist unconditionally now that `room_id` alone is a write credential again (Phase 26), so there's no token to leak by keeping more local history than before. Each entry has an inline "×" remove button; the whole section is hidden when the list is empty. This is a local, this-device-only convenience, distinct from the existing single-slot PWA "last room" resume feature.
+
 ### Phase 27 — Floating cursor chat, inline comment margin dots, footer/tools decluttering
 
 Branch: `claude/codebase-review-testing-fjicqa`

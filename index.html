@@ -92,6 +92,13 @@
       <button id="landing-join-btn" class="landing-join-btn">Join</button>
     </div>
 
+    <!-- Populated by app.js from a local (this-device-only) list of recently
+         visited rooms — hidden entirely when the list is empty. -->
+    <div class="landing-recent hidden" id="landing-recent">
+      <div class="landing-recent-title">Recent rooms</div>
+      <div class="landing-recent-list" id="landing-recent-list"></div>
+    </div>
+
     <div class="landing-chips">
       <span class="landing-chip">No account needed</span>
       <span class="landing-chip">Realtime sync</span>
@@ -1231,6 +1238,14 @@
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
     Link
   </button>
+</div>
+
+<!-- Slash-command quick-insert menu — opens in Write mode when '/' is typed
+     at the start of a line, so you can insert a heading/list/link/etc.
+     without leaving the keyboard for the toolbar. Content is rendered
+     dynamically (filtered as you type) by UI.showSlashMenu(). -->
+<div class="slash-menu" id="slash-menu" role="listbox" aria-label="Insert">
+  <div class="slash-menu-list" id="slash-menu-list"></div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════

@@ -17,7 +17,7 @@ import { listComments, addComment, deleteComment, subscribeToComments } from './
 import {
   initBroadcast, destroyBroadcast,
   broadcastSettingsChange, broadcastFilesChange, cancelPendingTypingBroadcast, cancelPendingLiveContentBroadcast,
-  broadcastClear, broadcastViewOnceCleared, broadcastCursorChat,
+  broadcastClear, broadcastViewOnceCleared, broadcastCursorChat, broadcastCursorChatReaction,
 } from './live-broadcast.js';
 
 import {
@@ -96,6 +96,35 @@ let _followedDeviceId = null;
 // straight into Write mode, where nothing is mounted yet to receive them).
 let _lastComments = [];
 
+// ── Slash-command quick-insert menu state (Write mode only) ───────────────────
+// Reset on room navigation like the other room-scoped state above/below.
+let _slashOpen        = false;
+let _slashStart        = null; // editor offset of the triggering '/'
+let _slashCoords       = null; // viewport coords, cached at open (the '/' doesn't move as the query grows)
+let _slashFiltered     = [];
+let _slashActiveIndex  = 0;
+
+const SLASH_MENU_ITEMS = [
+  { id: 'h1',            label: 'Heading 1',         hint: '#',        keywords: 'h1 heading title' },
+  { id: 'h2',            label: 'Heading 2',         hint: '##',       keywords: 'h2 heading subtitle' },
+  { id: 'h3',            label: 'Heading 3',         hint: '###',      keywords: 'h3 heading' },
+  { id: 'bold',          label: 'Bold',              hint: '**text**', keywords: 'bold strong' },
+  { id: 'italic',        label: 'Italic',            hint: '_text_',   keywords: 'italic emphasis' },
+  { id: 'strikethrough', label: 'Strikethrough',     hint: '~~text~~', keywords: 'strikethrough strike' },
+  { id: 'highlight',     label: 'Highlight',         hint: '==text==', keywords: 'highlight mark' },
+  { id: 'code',          label: 'Inline code',       hint: '`code`',   keywords: 'code inline' },
+  { id: 'codeblock',     label: 'Code block',        hint: '```',      keywords: 'code block fence' },
+  { id: 'link',          label: 'Link',              hint: '[text](url)', keywords: 'link url hyperlink' },
+  { id: 'quote',         label: 'Quote',             hint: '>',        keywords: 'quote blockquote' },
+  { id: 'ul',            label: 'Bullet list',       hint: '-',        keywords: 'bullet list unordered' },
+  { id: 'ol',            label: 'Numbered list',     hint: '1.',       keywords: 'numbered list ordered' },
+  { id: 'checklist',     label: 'Checklist',         hint: '- [ ]',    keywords: 'checklist todo task checkbox' },
+  { id: 'hr',            label: 'Divider',           hint: '---',      keywords: 'divider horizontal rule line' },
+  { id: 'toc',           label: 'Table of contents', hint: '[TOC]',    keywords: 'toc table contents outline' },
+  { id: 'timestamp',     label: 'Insert timestamp',  hint: '',         keywords: 'timestamp time date now' },
+  { id: 'template',      label: 'Insert template',   hint: '',         keywords: 'template' },
+];
+
 // ── Search state ──────────────────────────────────────────────────────────────
 let _searchMatches    = []; // [{start,end}]
 let _searchIndex      = -1;
@@ -144,6 +173,36 @@ function _isStandalonePwa() {
 
 function _rememberLastRoom(roomId) {
   try { localStorage.setItem(LAST_ROOM_KEY, roomId); } catch {}
+}
+
+// ── Recent rooms (landing page shortcut list) ───────────────────────────────
+// Safe to persist plainly now that room_id alone grants access again (see
+// supabase/migrations/0009_revert_edit_token_write_gating.sql) — there's no
+// token that could leak by remembering more than the single "last room" slot
+// above. Tracks every successful room visit, read-only included — this is a
+// personal "places I've been" convenience, not tied to edit permission.
+const RECENT_ROOMS_KEY = 'syncpad_recent_rooms';
+const RECENT_ROOMS_MAX = 8;
+
+function _loadRecentRooms() {
+  try {
+    const list = JSON.parse(localStorage.getItem(RECENT_ROOMS_KEY) || '[]');
+    return Array.isArray(list) ? list.filter((r) => r && typeof r.id === 'string') : [];
+  } catch { return []; }
+}
+
+function _rememberRecentRoom(roomId, name) {
+  try {
+    const list = _loadRecentRooms().filter((r) => r.id !== roomId);
+    list.unshift({ id: roomId, name: (name || '').trim() || roomId, visitedAt: Date.now() });
+    localStorage.setItem(RECENT_ROOMS_KEY, JSON.stringify(list.slice(0, RECENT_ROOMS_MAX)));
+  } catch {}
+}
+
+function _forgetRecentRoom(roomId) {
+  try {
+    localStorage.setItem(RECENT_ROOMS_KEY, JSON.stringify(_loadRecentRooms().filter((r) => r.id !== roomId)));
+  } catch {}
 }
 
 // Any control that deliberately navigates to the app root (header logo,
@@ -499,6 +558,39 @@ function wireLandingEvents() {
   createBtn?.addEventListener('click', handleCreateRoomClick);
   joinBtn?.addEventListener('click', joinRoom_);
   joinInput?.addEventListener('keydown', (e) => { if (e.key === 'Enter') joinRoom_(); });
+
+  _renderRecentRooms();
+}
+
+function _renderRecentRooms() {
+  const container = document.getElementById('landing-recent');
+  const list = document.getElementById('landing-recent-list');
+  if (!container || !list) return;
+  const rooms = _loadRecentRooms();
+  if (!rooms.length) { container.classList.add('hidden'); list.innerHTML = ''; return; }
+  container.classList.remove('hidden');
+  list.innerHTML = rooms.map((r) => `
+    <div class="landing-recent-item">
+      <button class="landing-recent-item-btn" data-room-id="${escapeHtml(r.id)}">
+        <span class="landing-recent-name">${escapeHtml(r.name)}</span>
+        <span class="landing-recent-time">${escapeHtml(formatTimestamp(r.visitedAt))}</span>
+      </button>
+      <button class="landing-recent-remove" data-remove-id="${escapeHtml(r.id)}" title="Remove from recent rooms" aria-label="Remove ${escapeHtml(r.name)} from recent rooms">×</button>
+    </div>`).join('');
+  list.querySelectorAll('.landing-recent-item-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const roomId = btn.dataset.roomId;
+      history.pushState(null, '', `${BASE}/${roomId}`);
+      UI.showScreen('loading');
+      joinRoom(roomId);
+    });
+  });
+  list.querySelectorAll('.landing-recent-remove').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      _forgetRecentRoom(btn.dataset.removeId);
+      _renderRecentRooms();
+    });
+  });
 }
 
 
@@ -777,6 +869,7 @@ async function startApp() {
   // Only for genuine editable visits — not read-only share links or
   // ?mode=read, which are bound to someone else's link rather than "my" room.
   if (!_isReadOnly) _rememberLastRoom(_roomId);
+  _rememberRecentRoom(_roomId, _room?.room_name);
 
   // ── Expiration check ───────────────────────────────────────────────────────
   if (_room.expires_at && new Date(_room.expires_at) <= new Date()) {
@@ -927,7 +1020,11 @@ async function startApp() {
         deviceName: payload.device_name,
         text:       String(payload.text || '').slice(0, 80),
         x: coords.x, y: coords.y,
-      });
+        id: payload.id,
+      }, (targetId, emoji) => broadcastCursorChatReaction(targetId, emoji));
+    },
+    onRemoteCursorChatReaction: (payload) => {
+      UI.addCursorChatReaction(payload.target_id, payload.emoji);
     },
   });
 
@@ -1751,11 +1848,13 @@ function _wireEditorCore() {
     // Debounced so large documents don't re-render markdown on every keystroke.
     _debouncedRefreshPreview();
     _debouncedRefreshCommentMargin();
+    _updateSlashMenu();
   });
-  editor?.addEventListener('blur', () => onEditorBlur());
+  editor?.addEventListener('blur', () => { onEditorBlur(); _closeSlashMenu(); });
 
   // ── Smart editor keyboard behaviour ────────────────────────────────────────
   editor?.addEventListener('keydown', (e) => {
+    if (_handleSlashMenuKeydown(e)) return;
     if (!canEdit() || e.isComposing || e.ctrlKey || e.metaKey || e.altKey) return;
 
     // Tab / Shift+Tab — indent/dedent only when there is a multi-character selection
@@ -2170,6 +2269,20 @@ function _wireEditorContextMenu() {
   });
   document.addEventListener('scroll', _closeEditorContextMenu, true);
   window.addEventListener('resize', _closeEditorContextMenu);
+}
+
+// Dismiss the slash menu on an outside click (e.g. clicking elsewhere in the
+// editor to move the caret away from the trigger) or window resize.
+// Deliberately NOT closed on scroll like the context menu above — the
+// textarea auto-scrolling to keep the caret visible while its query is
+// typed would otherwise close the menu mid-use.
+function _wireSlashMenuDismissal() {
+  const menu = document.getElementById('slash-menu');
+  if (!menu) return;
+  document.addEventListener('click', (e) => {
+    if (_slashOpen && !menu.contains(e.target)) _closeSlashMenu();
+  });
+  window.addEventListener('resize', _closeSlashMenu);
 }
 
 function _wireSegmentedMarkdownControl() {
@@ -3100,6 +3213,7 @@ function wireEvents() {
   _wireEditorPreferenceToggles();
   _wireCommandPalette();
   _wireEditorContextMenu();
+  _wireSlashMenuDismissal();
 }
 
 // ── Editor preference helpers ─────────────────────────────────────────────────
@@ -3209,6 +3323,7 @@ function _applyMarkdownFormat(action, editor) {
     case 'quote':         toggleLinePrefix('> '); break;
     case 'ul':            toggleLinePrefix('- '); break;
     case 'ol':            toggleLinePrefix('1. '); break;
+    case 'checklist':     toggleLinePrefix('- [ ] '); break;
     case 'link': {
       const insert = sel ? `[${sel}](url)` : '[link text](url)';
       const urlStart = start + insert.indexOf('url');
@@ -3237,6 +3352,98 @@ function _applyMarkdownFormat(action, editor) {
   }
 }
 
+/**
+ * Slash-command quick-insert menu (Write mode only — a plain <textarea>
+ * gives us caret pixel coordinates via UI.getCaretViewportCoords(), the same
+ * measurement cursor chat and comment margin dots already rely on; Live/Split
+ * would need the CM6 equivalent wired up separately, left for later).
+ */
+function _filterSlashItems(query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return SLASH_MENU_ITEMS;
+  return SLASH_MENU_ITEMS.filter((it) => it.keywords.includes(q) || it.label.toLowerCase().includes(q));
+}
+
+function _closeSlashMenu() {
+  if (!_slashOpen) return;
+  _slashOpen = false;
+  _slashStart = null;
+  _slashCoords = null;
+  _slashFiltered = [];
+  _slashActiveIndex = 0;
+  UI.hideSlashMenu();
+}
+
+function _renderSlashMenu() {
+  UI.showSlashMenu(_slashCoords, _slashFiltered, _slashActiveIndex, _selectSlashItem);
+}
+
+function _openSlashMenuAt(pos) {
+  const coords = UI.getCaretViewportCoords(pos);
+  if (!coords) return;
+  _slashOpen = true;
+  _slashStart = pos;
+  _slashCoords = coords;
+  _slashFiltered = SLASH_MENU_ITEMS;
+  _slashActiveIndex = 0;
+  _renderSlashMenu();
+}
+
+function _selectSlashItem(item) {
+  const editor = document.getElementById('note-editor');
+  if (!editor || _slashStart == null || !item) return;
+  const from = _slashStart;
+  const to = editor.selectionStart;
+  _closeSlashMenu();
+  UI.replaceEditorRange(from, to, '');
+  editor.focus();
+  if (item.id === 'timestamp') UI.insertAtCursor(insertTimestamp());
+  else if (item.id === 'template') _openTemplatesModalFresh();
+  else _applyMarkdownFormat(item.id, editor);
+}
+
+/** Called on every editor input event; only active in Write mode. */
+function _updateSlashMenu() {
+  if (_markdownMode !== 'write') { _closeSlashMenu(); return; }
+  const editor = document.getElementById('note-editor');
+  if (!editor) { _closeSlashMenu(); return; }
+  const pos = editor.selectionStart;
+  if (pos !== editor.selectionEnd) { _closeSlashMenu(); return; }
+  const val = editor.value;
+
+  if (_slashOpen) {
+    if (pos <= _slashStart || val[_slashStart] !== '/') { _closeSlashMenu(); return; }
+    const query = val.slice(_slashStart + 1, pos);
+    if (/\s/.test(query)) { _closeSlashMenu(); return; } // whitespace in the query ends the command
+    _slashFiltered = _filterSlashItems(query);
+    _slashActiveIndex = 0;
+    _renderSlashMenu();
+    return;
+  }
+
+  if (pos > 0 && val[pos - 1] === '/' && canEdit()) {
+    // Only trigger at the start of a line (or start of the doc) — "and/or"
+    // shouldn't pop the menu open mid-word.
+    const before = pos >= 2 ? val[pos - 2] : '\n';
+    if (before === '\n' || before === ' ' || before === '\t') _openSlashMenuAt(pos - 1);
+  }
+}
+
+/** Handle Up/Down/Enter/Tab/Escape while the slash menu is open; returns true if the key was consumed. */
+function _handleSlashMenuKeydown(e) {
+  if (!_slashOpen) return false;
+  if (e.key === 'ArrowDown') { e.preventDefault(); _slashActiveIndex = Math.min(_slashActiveIndex + 1, _slashFiltered.length - 1); _renderSlashMenu(); return true; }
+  if (e.key === 'ArrowUp')   { e.preventDefault(); _slashActiveIndex = Math.max(_slashActiveIndex - 1, 0); _renderSlashMenu(); return true; }
+  if (e.key === 'Enter' || e.key === 'Tab') {
+    e.preventDefault();
+    const item = _slashFiltered[_slashActiveIndex];
+    if (item) _selectSlashItem(item); else _closeSlashMenu();
+    return true;
+  }
+  if (e.key === 'Escape') { e.preventDefault(); _closeSlashMenu(); return true; }
+  return false;
+}
+
 function teardownRealtimeSession() {
   try { _unsubRoom?.(); } catch {}
   try { _unsubFiles?.(); } catch {}
@@ -3254,6 +3461,7 @@ function teardownRealtimeSession() {
   _followedDeviceId = null;
   _lastComments = [];
   UI.renderCommentMargin([]);
+  _closeSlashMenu();
   // Remove the keydown handler so wireEvents() can install fresh callbacks
   // on the next room join. DOM element listeners (editor, buttons, etc.) are
   // protected by the _eventsWired guard and must NOT be reset here — resetting
@@ -3596,6 +3804,7 @@ function _applyMarkdownMode(mode) {
   // textarea or the CM6 live view) — any mode switch invalidates that
   // position, so clear before switching rather than float a stale bubble.
   UI.clearCursorChat();
+  _closeSlashMenu(); // Write-mode-only feature — never valid to keep open across a mode switch
   _markdownMode = mode;
   _showPreview  = mode !== 'write';
 
@@ -3683,8 +3892,11 @@ function _openCursorChatComposer() {
   }
   if (pos == null || !coords) return;
   UI.openCursorChatComposer(coords, (text) => {
-    broadcastCursorChat(text, pos);
-    UI.showCursorChatBubble({ deviceId: getDeviceId(), deviceName: 'You', text, x: coords.x, y: coords.y });
+    const id = broadcastCursorChat(text, pos);
+    UI.showCursorChatBubble(
+      { deviceId: getDeviceId(), deviceName: 'You', text, x: coords.x, y: coords.y, id },
+      (targetId, emoji) => broadcastCursorChatReaction(targetId, emoji),
+    );
   });
 }
 

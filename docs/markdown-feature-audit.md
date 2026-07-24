@@ -69,16 +69,30 @@ inspecting the source), so this table reflects real output, not intent.
 ## Both renderers
 
 SyncPad has two rendering surfaces:
-- `markdown.js` — the classic parser, used for read-only-viewer preview,
-  HTML/print export, and the reference behavior this audit describes.
-- `src/live-editor.js` — the CodeMirror 6 "Live" mode surface, which uses
-  `@codemirror/lang-markdown`'s own GFM-aware syntax tree plus custom
-  decorations for the seamless-preview effect (hiding syntax markers away
-  from the caret). It parses everything `markdown.js` does structurally
-  (including tables, task lists, and strikethrough, which are built into
-  `@codemirror/lang-markdown`'s base language), but new constructs added
-  here (alerts, footnotes) don't yet have matching custom decorations there
-  — they still edit and save correctly, they just don't get the extra
-  visual polish (colored alert box, numbered footnote markers) until viewed
-  through the classic renderer (read-only view, export, or Preview-adjacent
-  paths). Worth a follow-up pass if these see real usage.
+- `markdown.js` — the classic parser, used for read-only-viewer preview
+  (when the live surface fails to mount), HTML/print export, copy-as-HTML,
+  and the reference behavior this audit describes.
+- `src/live-editor.js` — the CodeMirror 6 "Live" mode surface, which
+  Preview and Split modes actually show whenever it mounts successfully
+  (virtually always, in practice — the classic renderer above is mostly a
+  fallback + export-time code path, not something most users see day to
+  day). It uses `@codemirror/lang-markdown`'s own GFM-aware syntax tree plus
+  custom decorations for the seamless-preview effect (hiding syntax markers
+  away from the caret). As of Phase 30, tables, GFM alerts, and footnotes
+  all have matching custom decorations here too — previously (reported
+  directly: "a lot of the features are broken/do not work as they should")
+  tables rendered as literal unstyled pipe text, alerts as a plain
+  blockquote showing the raw `[!NOTE]` marker, and footnotes as literal
+  `[^1]` bracket-caret text, none of which had been caught because this
+  audit's "parses everything markdown.js does structurally" claim was true
+  of the syntax tree but didn't mean any of it actually *rendered* —
+  parsing and decorating are different steps, and only the latter existed
+  for headings/emphasis/lists/links/images/blockquotes/code/highlight/`[TOC]`/
+  checklists before this fix. Confirmed via a byte-for-byte diff against a
+  prior golden HTML export of this repo's own markdown feature-test document
+  (`syncpad-markdown-test.md`) for the classic renderer, then a targeted CM6
+  mount harness for the live surface specifically. Footnotes still don't get
+  a relocated "Footnotes" section the way the classic renderer's read-only
+  output does (just an inline superscript + a labeled definition line) —
+  moving text out of document order isn't appropriate for an editable
+  surface the way it is for a read-only render.

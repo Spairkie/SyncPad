@@ -371,12 +371,40 @@
   padding: 6px 10px; box-shadow: var(--shadow-md);
   animation: cursor-chat-in 0.15s ease forwards;
   overflow-wrap: break-word; word-break: break-word;
+  pointer-events: auto; /* hoverable — reveals the emoji quick-react row below */
 }
 .cursor-chat-bubble.out { animation: cursor-chat-out 0.4s ease forwards; }
 .cursor-chat-bubble-name {
   display: block; font-size: 10.5px; font-weight: 650; margin-bottom: 2px;
 }
 .cursor-chat-bubble-text { color: var(--text-primary); }
+
+/* Emoji quick-react row — hidden until the bubble is hovered/focused. */
+.cursor-chat-bubble-reacts {
+  position: absolute; left: 0; top: 100%; margin-top: 4px;
+  display: flex; gap: 2px; padding: 3px;
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: var(--radius-md); box-shadow: var(--shadow-md);
+  opacity: 0; transform: translateY(-2px); pointer-events: none;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+.cursor-chat-bubble:hover .cursor-chat-bubble-reacts,
+.cursor-chat-bubble:focus-within .cursor-chat-bubble-reacts { opacity: 1; transform: translateY(0); pointer-events: auto; }
+.cursor-chat-bubble-reacts button {
+  font-size: 14px; line-height: 1; padding: 3px 4px; border-radius: 5px;
+}
+.cursor-chat-bubble-reacts button:hover { background: var(--bg-elevated); transform: scale(1.15); }
+
+/* Received reactions — small fading emoji chips above the bubble. */
+.cursor-chat-bubble-badges {
+  position: absolute; right: 0; bottom: 100%; margin-bottom: 2px;
+  display: flex; gap: 2px; pointer-events: none;
+}
+.cursor-chat-reaction-badge {
+  font-size: 13px; animation: cursor-chat-badge-in 0.2s ease forwards;
+}
+.cursor-chat-reaction-badge.out { animation: cursor-chat-out 0.3s ease forwards; }
+@keyframes cursor-chat-badge-in { from{ opacity:0; transform:translateY(3px) scale(0.8); } to{ opacity:1; transform:translateY(0) scale(1); } }
 .cursor-chat-composer {
   pointer-events: auto; padding: 0;
 }
@@ -678,6 +706,30 @@ kbd {
 }
 .editor-context-item code { background: none; border: none; padding: 0; font-family: var(--font-mono); }
 .editor-context-sep { height: 1px; background: var(--border); margin: 4px 2px; }
+
+
+/* ══════════════════════════════════════════════════════════════
+   SLASH-COMMAND QUICK-INSERT MENU
+══════════════════════════════════════════════════════════════ */
+.slash-menu {
+  position: fixed; z-index: 1300;
+  background: var(--bg-surface); border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+  border-radius: 10px; box-shadow: var(--shadow-lg);
+  padding: 6px; width: 220px; max-height: 280px; overflow-y: auto;
+  opacity: 0; transform: scale(0.96); pointer-events: none;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+.slash-menu.visible { opacity: 1; transform: scale(1); pointer-events: auto; }
+.slash-menu-list { display: flex; flex-direction: column; gap: 1px; }
+.slash-menu-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%;
+  padding: 7px 9px; border-radius: 7px;
+  font-size: 13px; color: var(--text-primary); text-align: left;
+}
+.slash-menu-item:hover, .slash-menu-item.active { background: var(--bg-elevated); }
+.slash-menu-item-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slash-menu-item-hint { flex-shrink: 0; font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); }
+.slash-menu-empty { padding: 10px 9px; font-size: 13px; color: var(--text-muted); }
 
 
 /* ══════════════════════════════════════════════════════════════

@@ -94,4 +94,34 @@ test.describe('Cursor chat', () => {
     await page.keyboard.press('Control+Shift+/');
     await expect(page.locator('.cursor-chat-composer input')).toBeVisible();
   });
+
+  test('hovering a bubble reveals an emoji quick-react row', async ({ page }) => {
+    await createRoom(page);
+    await typeInEditor(page, 'Some text to place a caret in.');
+    await page.locator('#btn-cursor-chat-fab').click();
+    const input = page.locator('.cursor-chat-composer input');
+    await input.fill('react to me');
+    await input.press('Enter');
+
+    const bubble = page.locator('.cursor-chat-bubble');
+    await expect(bubble).toBeVisible();
+    const reacts = page.locator('.cursor-chat-bubble-reacts button');
+    await expect(reacts.first()).toHaveCount(5);
+    await bubble.hover();
+    await expect(reacts.first()).toBeVisible();
+  });
+
+  test('clicking an emoji react shows a fading badge on the bubble', async ({ page }) => {
+    await createRoom(page);
+    await typeInEditor(page, 'Some text to place a caret in.');
+    await page.locator('#btn-cursor-chat-fab').click();
+    const input = page.locator('.cursor-chat-composer input');
+    await input.fill('react to me');
+    await input.press('Enter');
+
+    const bubble = page.locator('.cursor-chat-bubble');
+    await bubble.hover();
+    await page.locator('.cursor-chat-bubble-reacts button').first().click();
+    await expect(page.locator('.cursor-chat-reaction-badge')).toHaveCount(1);
+  });
 });

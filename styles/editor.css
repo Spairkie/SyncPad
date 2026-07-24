@@ -194,6 +194,46 @@
   border: 1px dashed var(--border); box-sizing: border-box;
 }
 
+/* GFM tables — a real <table>, built from the GFM Table syntax-tree nodes
+   markdownLanguage already parses (same GFM extension task lists come from)
+   and swapped in as a whole-block replace widget; matches .note-preview's
+   own table styling. */
+.note-live .cm-md-table-wrap { margin: 0.4em 0; overflow-x: auto; }
+.note-live .cm-md-table { width: 100%; border-collapse: collapse; font-size: 0.9em; }
+.note-live .cm-md-table th, .note-live .cm-md-table td { border: 1px solid var(--border); padding: 6px 12px; text-align: left; }
+.note-live .cm-md-table th { background: var(--bg-elevated); font-weight: 600; }
+.note-live .cm-md-table tbody tr:nth-child(even) td { background: var(--bg-elevated); opacity: 0.7; }
+
+/* GitHub-style alerts — > [!NOTE]/[!TIP]/[!IMPORTANT]/[!WARNING]/[!CAUTION].
+   Matches .note-preview's .md-alert colours; the border lives on the line
+   decoration itself (cm-md-alert-<kind>) rather than a wrapping div, since
+   this surface styles per-line, not per-block. */
+.note-live .cm-md-alert {
+  border-left: 3px solid var(--border); padding-left: 0.8em;
+}
+.note-live .cm-md-alert-title { font-weight: 600; }
+.note-live .cm-md-alert-note        { border-left-color: var(--blue); }
+.note-live .cm-md-alert-title-note        { color: var(--blue); }
+.note-live .cm-md-alert-tip         { border-left-color: var(--green); }
+.note-live .cm-md-alert-title-tip         { color: var(--green); }
+.note-live .cm-md-alert-important   { border-left-color: var(--accent); }
+.note-live .cm-md-alert-title-important   { color: var(--accent); }
+.note-live .cm-md-alert-warning     { border-left-color: var(--yellow); }
+.note-live .cm-md-alert-title-warning     { color: var(--yellow); }
+.note-live .cm-md-alert-caution     { border-left-color: var(--red); }
+.note-live .cm-md-alert-title-caution     { color: var(--red); }
+
+/* Footnotes — a superscript reference marker inline, and a small "1."-style
+   label on the definition line. No relocated "Footnotes" section here (this
+   is an editable surface; the static/export renderer's real footnotes
+   section covers that view). */
+.note-live .cm-md-footnote-ref {
+  font-size: 0.75em; color: var(--accent); font-weight: 600;
+}
+.note-live .cm-md-footnote-def-marker {
+  font-size: 0.85em; font-weight: 600; color: var(--text-secondary);
+}
+
 /* Remote collaborator carets (Google-Docs style) */
 .note-live .cm-remote-caret {
   position: relative;
