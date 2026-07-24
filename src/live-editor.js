@@ -16,9 +16,10 @@ import {
   defaultKeymap, history, historyKeymap, indentWithTab,
   markdown, markdownLanguage, markdownKeymap,
   closeBrackets, closeBracketsKeymap,
-  syntaxHighlighting, HighlightStyle, tags,
+  syntaxHighlighting, HighlightStyle, StreamLanguage, tags,
   ViewPlugin, Decoration, WidgetType, syntaxTree,
   StateField, StateEffect,
+  javascript, python, json, html, css, shell,
 } from '../vendor/codemirror.js';
 import { escapeHtml } from './utils.js';
 
@@ -33,7 +34,14 @@ const _readOnly = new Compartment();
 const External = Annotation.define();
 
 // Markdown syntax colouring that follows the app's theme variables, so all
-// seven themes work without per-theme CM6 config.
+// seven themes work without per-theme CM6 config. Also covers the embedded-
+// language tags fenced code blocks parse into (see codeLanguages/mount()
+// below) — the same shared HighlightStyle applies everywhere in this view,
+// and @lezer/highlight's tag vocabulary (keyword, string, number, …) is
+// consistent across JS/Python/JSON/HTML/CSS grammars, so one rule set
+// covers all of them. Mirrors the --syntax-* palette panels.css already
+// uses for the static Preview pane's Prism highlighting, so a code block
+// looks the same whether you're looking at it in Preview or Live/Split.
 const _mdHighlight = HighlightStyle.define([
   { tag: tags.heading1, fontSize: '1.5em',  fontWeight: '700' },
   { tag: tags.heading2, fontSize: '1.3em',  fontWeight: '700' },
@@ -50,7 +58,31 @@ const _mdHighlight = HighlightStyle.define([
   { tag: tags.quote,    color: 'var(--text-secondary)', fontStyle: 'italic' },
   { tag: tags.processingInstruction, color: 'var(--text-muted)' }, // #, *, `, > markers
   { tag: tags.contentSeparator, color: 'var(--text-muted)' },      // --- rules
+  // Embedded fenced-code-block languages.
+  { tag: [tags.comment, tags.lineComment, tags.blockComment, tags.docComment], color: 'var(--text-muted)', fontStyle: 'italic' },
+  { tag: [tags.keyword, tags.controlKeyword, tags.moduleKeyword, tags.operatorKeyword, tags.definitionKeyword, tags.modifier, tags.self, tags.tagName, tags.attributeName], color: 'var(--accent)' },
+  { tag: [tags.string, tags.special(tags.string), tags.character, tags.attributeValue], color: 'var(--syntax-string)' },
+  { tag: [tags.number, tags.integer, tags.float, tags.bool, tags.null, tags.atom], color: 'var(--syntax-number)' },
+  { tag: [tags.function(tags.variableName), tags.function(tags.propertyName), tags.className, tags.typeName], color: 'var(--syntax-fn)' },
+  { tag: [tags.operator, tags.punctuation, tags.bracket, tags.paren, tags.squareBracket, tags.brace, tags.separator], color: 'var(--text-secondary)' },
+  { tag: tags.regexp, color: 'var(--syntax-regex)' },
 ]);
+
+const _CODE_LANG_MAP = {
+  js: javascript().language, javascript: javascript().language, mjs: javascript().language, cjs: javascript().language,
+  jsx: javascript().language, ts: javascript().language, typescript: javascript().language, tsx: javascript().language,
+  py: python().language, python: python().language,
+  json: json().language, jsonc: json().language,
+  html: html().language, htm: html().language, xml: html().language,
+  css: css().language,
+  sh: StreamLanguage.define(shell), bash: StreamLanguage.define(shell), shell: StreamLanguage.define(shell), zsh: StreamLanguage.define(shell),
+};
+
+/** markdown()'s codeLanguages callback — maps a fenced code block's info string (```js etc.) to a Language for real syntax highlighting instead of plain text. */
+function _codeLanguageFor(info) {
+  const lang = (info || '').trim().split(/\s+/)[0].toLowerCase();
+  return _CODE_LANG_MAP[lang] || null;
+}
 
 // ── ==highlight== extension ──────────────────────────────────────────────────
 //
@@ -91,6 +123,9 @@ const _hideDeco      = Decoration.replace({});
 const _codeDeco      = Decoration.mark({ class: 'cm-md-inlinecode' });
 const _highlightDeco = Decoration.mark({ class: 'cm-md-highlight' });
 const _quoteLine     = Decoration.line({ class: 'cm-md-blockquote' });
+const _codeLine      = Decoration.line({ class: 'cm-md-codeblock' });
+const _codeFirstLine = Decoration.line({ class: 'cm-md-codeblock cm-md-codeblock-first' });
+const _codeLastLine  = Decoration.line({ class: 'cm-md-codeblock cm-md-codeblock-last' });
 
 function _selectionTouches(state, from, to) {
   return state.selection.ranges.some((r) => r.from <= to && r.to >= from);
@@ -627,6 +662,24 @@ const _seamless = ViewPlugin.fromClass(class {
             return;
           }
 
+          // Fenced code block → a background box across all its lines,
+          // matching the static Preview pane's <pre> styling (background,
+          // rounded corners top/bottom). The ``` marks and info string
+          // still fold/reveal via the generic mark-hiding logic below —
+          // this only adds the box, it doesn't return early.
+          if (name === 'FencedCode') {
+            const first = state.doc.lineAt(nodeRef.from);
+            const last  = state.doc.lineAt(nodeRef.to);
+            for (let line = first; line.from <= last.from;) {
+              const deco = line.number === first.number ? _codeFirstLine
+                : line.number === last.number ? _codeLastLine
+                : _codeLine;
+              ranges.push(deco.range(line.from));
+              if (line.to + 1 > state.doc.length) break;
+              line = state.doc.lineAt(line.to + 1);
+            }
+          }
+
           // "[!NOTE]" etc. parses as an ordinary (unresolved) shortcut Link
           // node — relabel it to an icon+title when it's alone on the first
           // line of its enclosing blockquote (matches _blockquoteAlertKind's
@@ -818,7 +871,7 @@ export function mount(container, initialValue, { onChange, onCursorActivity, rea
         // Backspace; closeBrackets auto-pairs brackets/quotes.
         closeBrackets(),
         keymap.of([...closeBracketsKeymap, ...markdownKeymap, ...defaultKeymap, ...historyKeymap, indentWithTab]),
-        markdown({ base: markdownLanguage, extensions: [_highlightExtension] }),
+        markdown({ base: markdownLanguage, extensions: [_highlightExtension], codeLanguages: _codeLanguageFor }),
         syntaxHighlighting(_mdHighlight),
         _seamless,
         // Ctrl/Cmd+click a folded link to open it (http(s) only — same

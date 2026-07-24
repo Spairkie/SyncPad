@@ -175,6 +175,26 @@
   padding-left: 0.8em;
   color: var(--text-secondary);
 }
+/* Fenced code block — background box matching .note-preview pre, applied
+   per-line since this surface styles lines rather than wrapping a <pre>
+   around the block (the lines stay individually editable). */
+.note-live .cm-md-codeblock {
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  padding-left: 16px; padding-right: 16px;
+  font-family: var(--font-mono); font-size: 0.9em;
+}
+.note-live .cm-md-codeblock-first {
+  border-top: 1px solid var(--border);
+  border-top-left-radius: var(--radius-md); border-top-right-radius: var(--radius-md);
+  padding-top: 10px;
+}
+.note-live .cm-md-codeblock-last {
+  border-bottom: 1px solid var(--border);
+  border-bottom-left-radius: var(--radius-md); border-bottom-right-radius: var(--radius-md);
+  padding-bottom: 10px;
+}
 .note-live .cm-md-bullet { color: var(--text-secondary); margin-right: 0.35em; }
 .note-live .cm-md-checkbox {
   accent-color: var(--accent);
