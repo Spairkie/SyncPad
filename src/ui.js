@@ -118,8 +118,9 @@ export function showToast(message, type = '', duration = 2800) {
 // Bubbles live in #cursor-chat-layer, a full-viewport fixed layer — see
 // style.css. Never persisted; a bubble is just a DOM node with a timer.
 
-const _cursorChatBubbles = new Map(); // device_id -> { el, timer }
+const _cursorChatBubbles = new Map(); // device_id -> { el, timer, id }
 let _cursorChatComposerEl = null;
+const CURSOR_CHAT_EMOJI = ['👍', '❤️', '😂', '🎉', '👀'];
 
 /**
  * Open a small inline input at `{x, y}` (viewport coordinates, e.g. from
@@ -176,9 +177,13 @@ export function closeCursorChatComposer() {
  * Show (or replace) an ephemeral cursor-chat bubble from `deviceId`, fading
  * out on its own after ~5s. A second message from the same device before
  * the first fades replaces it and resets the timer, rather than stacking.
- * @param {{deviceId: string, deviceName: string, text: string, x: number, y: number}} msg
+ * Hovering the bubble reveals a small emoji quick-react row (any visible
+ * bubble — yours or a remote one — can be reacted to, matching cursor
+ * chat's own no-permission-gate design since neither writes to the note).
+ * @param {{deviceId: string, deviceName: string, text: string, x: number, y: number, id: string}} msg
+ * @param {(id: string, emoji: string) => void} [onReact]
  */
-export function showCursorChatBubble({ deviceId, deviceName, text, x, y }) {
+export function showCursorChatBubble({ deviceId, deviceName, text, x, y, id }, onReact) {
   const layer = document.getElementById('cursor-chat-layer');
   if (!layer) return;
 
@@ -191,20 +196,53 @@ export function showCursorChatBubble({ deviceId, deviceName, text, x, y }) {
   el.style.top  = `${y}px`;
   el.innerHTML = `
     <span class="cursor-chat-bubble-name">${escapeHtml(deviceName || 'Someone')}</span>
-    <span class="cursor-chat-bubble-text">${escapeHtml(text)}</span>`;
+    <span class="cursor-chat-bubble-text">${escapeHtml(text)}</span>
+    <div class="cursor-chat-bubble-badges"></div>
+    <div class="cursor-chat-bubble-reacts">
+      ${CURSOR_CHAT_EMOJI.map((em) => `<button type="button" data-emoji="${em}" aria-label="React with ${em}">${em}</button>`).join('')}
+    </div>`;
+  el.querySelectorAll('.cursor-chat-bubble-reacts button').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const emoji = btn.dataset.emoji;
+      addCursorChatReaction(id, emoji); // optimistic local echo — self:false means we never receive our own broadcast back
+      onReact?.(id, emoji);
+    });
+  });
   layer.appendChild(el);
 
   const timer = setTimeout(() => {
     el.classList.add('out');
     setTimeout(() => { el.remove(); _cursorChatBubbles.delete(deviceId); }, 400);
   }, 5000);
-  _cursorChatBubbles.set(deviceId, { el, timer });
+  _cursorChatBubbles.set(deviceId, { el, timer, id });
 
   // The bubble itself is a purely visual, viewport-positioned element — a
   // screen reader has no way to discover it otherwise, so announce it
   // through the same live region presence typing/join events use.
   const region = document.getElementById('presence-live-region');
   if (region) region.textContent = `${deviceName || 'Someone'} says: ${text}`;
+}
+
+/**
+ * Attach a fading emoji badge to whichever currently-visible bubble has
+ * `targetId` — a no-op if that bubble already faded out locally (the
+ * reaction has nothing left to attach to, and that's fine; it's as ephemeral
+ * as the message itself).
+ * @param {string} targetId
+ * @param {string} emoji
+ */
+export function addCursorChatReaction(targetId, emoji) {
+  const entry = [..._cursorChatBubbles.values()].find((b) => b.id === targetId);
+  const badges = entry?.el.querySelector('.cursor-chat-bubble-badges');
+  if (!badges) return;
+  const badge = document.createElement('span');
+  badge.className = 'cursor-chat-reaction-badge';
+  badge.textContent = emoji;
+  badges.appendChild(badge);
+  setTimeout(() => {
+    badge.classList.add('out');
+    setTimeout(() => badge.remove(), 300);
+  }, 2200);
 }
 
 /** Clear every cursor-chat bubble/composer immediately — used on room navigation. */
@@ -788,6 +826,59 @@ export function renderCommentMargin(dots, onJump) {
     dot.addEventListener('click', () => onJump?.(d.id));
     layer.appendChild(dot);
   });
+}
+
+// ── Slash-command quick-insert menu ────────────────────────────────────────────
+//
+// Popup list anchored at the caret's viewport coordinates when '/' is typed
+// at the start of a line — app.js owns trigger detection, filtering, and
+// keyboard navigation; this module only renders the current item list and
+// positions the popup, matching the same DOM-boundary split used for the
+// editor context menu and comment margin dots.
+
+/**
+ * @param {{x: number, y: number}} coords - viewport coordinates of the triggering '/'
+ * @param {{id: string, label: string, hint: string}[]} items - already filtered
+ * @param {number} activeIndex
+ * @param {(item: object) => void} onSelect
+ */
+export function showSlashMenu(coords, items, activeIndex, onSelect) {
+  const menu = document.getElementById('slash-menu');
+  const list = document.getElementById('slash-menu-list');
+  if (!menu || !list || !coords) return;
+
+  list.innerHTML = '';
+  if (!items.length) {
+    const empty = document.createElement('div');
+    empty.className = 'slash-menu-empty';
+    empty.textContent = 'No matches';
+    list.appendChild(empty);
+  } else {
+    items.forEach((item, i) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'slash-menu-item' + (i === activeIndex ? ' active' : '');
+      btn.setAttribute('role', 'option');
+      btn.setAttribute('aria-selected', String(i === activeIndex));
+      btn.innerHTML = `<span class="slash-menu-item-label">${escapeHtml(item.label)}</span>` +
+        (item.hint ? `<span class="slash-menu-item-hint">${escapeHtml(item.hint)}</span>` : '');
+      // mousedown (not click) fires before the textarea's blur, so the
+      // selection this action needs is still intact when onSelect runs.
+      btn.addEventListener('mousedown', (e) => { e.preventDefault(); onSelect?.(item); });
+      list.appendChild(btn);
+    });
+  }
+
+  menu.classList.add('visible');
+  const rect = menu.getBoundingClientRect();
+  const left = Math.min(coords.x, window.innerWidth  - rect.width  - 8);
+  const top  = Math.min(coords.y + 20, window.innerHeight - rect.height - 8);
+  menu.style.left = `${Math.max(8, left)}px`;
+  menu.style.top  = `${Math.max(8, top)}px`;
+}
+
+export function hideSlashMenu() {
+  document.getElementById('slash-menu')?.classList.remove('visible');
 }
 
 // ── Panels ────────────────────────────────────────────────────────────────────

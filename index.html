@@ -1240,6 +1240,14 @@
   </button>
 </div>
 
+<!-- Slash-command quick-insert menu — opens in Write mode when '/' is typed
+     at the start of a line, so you can insert a heading/list/link/etc.
+     without leaving the keyboard for the toolbar. Content is rendered
+     dynamically (filtered as you type) by UI.showSlashMenu(). -->
+<div class="slash-menu" id="slash-menu" role="listbox" aria-label="Insert">
+  <div class="slash-menu-list" id="slash-menu-list"></div>
+</div>
+
 <!-- ══════════════════════════════════════════════════════════════
      TOAST CONTAINER
 ═══════════════════════════════════════════════════════════════ -->

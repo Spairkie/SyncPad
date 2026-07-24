@@ -38,6 +38,7 @@ export function initBroadcast(roomId, handlers) {
     .on('broadcast', { event: 'clear' },            _on('clear',            'onRemoteClear'))
     .on('broadcast', { event: 'view_once_cleared' },_on('view_once_cleared','onRemoteViewOnce'))
     .on('broadcast', { event: 'cursor_chat' },      _on('cursor_chat',      'onRemoteCursorChat'))
+    .on('broadcast', { event: 'cursor_chat_reaction' }, _on('cursor_chat_reaction', 'onRemoteCursorChatReaction'))
     .subscribe();
 
   return _channel;
@@ -123,9 +124,27 @@ export function broadcastViewOnceCleared() {
  * @param {string} text
  * @param {number} pos – character offset into the note, for positioning
  *                        the bubble near the sender's caret.
+ * @returns {string} a message id, so the sender's own local bubble echo can
+ *                    be reacted to (via broadcastCursorChatReaction) the same
+ *                    way a received one can.
  */
 export function broadcastCursorChat(text, pos) {
   const trimmed = String(text || '').trim().slice(0, 80);
-  if (!trimmed) return;
-  _send('cursor_chat', { device_name: getDeviceName(), text: trimmed, pos, ts: Date.now() });
+  if (!trimmed) return null;
+  const id = `${getDeviceId()}:${Date.now()}:${Math.random().toString(36).slice(2, 7)}`;
+  _send('cursor_chat', { device_name: getDeviceName(), text: trimmed, pos, ts: Date.now(), id });
+  return id;
+}
+
+/**
+ * Send an emoji quick-react targeting a specific cursor-chat message id.
+ * Fire-and-forget, same as the message itself — not persisted, and the
+ * target bubble may have already faded on some devices by the time this
+ * arrives, in which case they simply have nothing to attach it to.
+ * @param {string} targetId
+ * @param {string} emoji
+ */
+export function broadcastCursorChatReaction(targetId, emoji) {
+  if (!targetId || !emoji) return;
+  _send('cursor_chat_reaction', { target_id: targetId, emoji });
 }

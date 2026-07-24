@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Phase 29 — Slash-command quick-insert menu, emoji quick-react on cursor chat
+
+Branch: `claude/codebase-review-testing-fjicqa`
+
+#### Added
+- **Slash-command quick-insert menu.** Typing `/` at the start of a line in Write mode (start of the doc, or right after a newline/space/tab — so `and/or` mid-word never triggers it) opens a small filterable popup anchored at the caret, listing every block-level formatting action already reachable via the toolbar/context menu (headings, bold/italic/strikethrough/highlight/code, code block, link, quote, bullet/numbered/checklist list, divider, table of contents) plus Insert timestamp and Insert template. Typing after the `/` filters the list by label or keyword; Up/Down moves the selection, Enter or Tab confirms, Escape or a space in the query closes it. Selecting an item deletes the `/query` text and reuses the existing `_applyMarkdownFormat()` action registry (or `insertTimestamp()` / the templates modal for the two non-formatting entries) — no new insertion logic, just a faster way to reach what already existed. New `checklist` action (`- [ ] `) added to that registry as part of this, since it didn't have a toolbar/menu entry before. Positioning reuses `UI.getCaretViewportCoords()`, the same mirror-div caret measurement cursor chat and comment margin dots already rely on. Scoped to Write mode for now — Live/Split would need the CM6 coordinate equivalent wired up separately.
+- **Emoji quick-react on cursor-chat bubbles.** Hovering (or focusing) any visible cursor-chat bubble — yours or a remote one — reveals a small 👍 ❤️ 😂 🎉 👀 row; clicking one broadcasts a reaction tied to that message's id over the same ephemeral Broadcast channel cursor chat itself uses (`cursor_chat_reaction`, never persisted). The reacted-to bubble shows the emoji as a small fading badge, both for the reactor (optimistic local echo — Realtime's `self:false` means a reactor never receives its own broadcast back) and for anyone else still looking at that bubble when the reaction arrives; a bubble that already faded locally simply has nothing to attach the badge to, consistent with cursor chat's existing "ephemeral, best-effort" design. `broadcastCursorChat()` now returns the message id it generated so the sender's own local bubble echo can be reacted to the same way a received one can. No permission gate, matching cursor chat itself — neither writes to the note.
+
 ### Phase 28 — Recent rooms list on landing
 
 Branch: `claude/codebase-review-testing-fjicqa`
