@@ -118,4 +118,22 @@ test.describe('Live/Split surface rendering', () => {
     await expect(page.locator('.note-live .cm-md-codeblock').first()).toBeVisible();
     await expect(page.locator('.note-live')).toContainText('plain text code block');
   });
+
+  test('an unconverted emoji shortcode does not pick up string-literal coloring', async ({ page }) => {
+    // markdownLanguage's own built-in Emoji extension tags ":smile:" with
+    // tags.character, which @lezer/highlight defines as a sub-tag of
+    // tags.string — without an explicit override, the shared HighlightStyle
+    // added for fenced-code string literals would visibly (mis)color this
+    // literal, unconverted shortcode text as if it were a real string.
+    await createRoom(page);
+    await typeInEditor(page, 'Shortcode: :smile: :rocket:\n');
+    await setEditorMode(page, 'preview');
+    await page.keyboard.press('Control+End');
+
+    const shortcode = page.locator('.note-live').getByText(':smile:', { exact: true });
+    await expect(shortcode).toBeVisible();
+    const color = await shortcode.evaluate((el) => getComputedStyle(el).color);
+    const bodyColor = await page.locator('.note-live').first().evaluate((el) => getComputedStyle(el).color);
+    expect(color).toBe(bodyColor);
+  });
 });

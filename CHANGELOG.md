@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Phase 33 — Follow-up: fix emoji-shortcode mis-coloring from Phase 32
+
+Branch: `claude/codebase-review-testing-fjicqa`
+
+#### Fixed
+- **Unconverted emoji shortcodes (`:smile:`) no longer pick up string-literal coloring in Live/Split mode.** `markdownLanguage`'s own built-in Emoji extension tags a shortcode match with `tags.character`, which `@lezer/highlight` defines as a sub-tag of `tags.string` (`character: t(string)`) — so Phase 32's new string-highlighting rule was inheriting onto it too, visibly (mis)coloring literal, still-unconverted shortcode text (shortcodes remain unsupported by design; see "Emoji" in `docs/markdown-feature-audit.md`) as if it were a real string. Fixed with an explicit, more-specific `{ tag: tags.character, color: 'inherit' }` override — real string/char content in the 5 supported code languages is unaffected (none of them use `tags.character` for their own literals). New test in `tests/live-editor-rendering.spec.js`.
+- Investigated a second, related-looking case (raw HTML typed directly in prose, e.g. `<div>…</div>` as a literal example, picking up the same tag-name coloring `​```html` fenced blocks need) and determined it's not fixable the same way — traced to `markdownLanguage` itself nesting an HTML grammar for raw HTML content independent of this feature (only the color is new; the parse already existed), with no tag-hierarchy distinction available between "fenced code" and "prose" instances of the same tag. Documented as an accepted, non-breaking side effect in `docs/markdown-feature-audit.md` rather than risking a fragile ancestor-aware decoration override for a cosmetic edge case — the literal-text and never-executes safety properties both still hold.
+
 ### Phase 32 — Syntax highlighting for fenced code blocks in Live/Split mode
 
 Branch: `claude/codebase-review-testing-fjicqa`

@@ -112,3 +112,33 @@ SyncPad has two rendering surfaces:
   classic renderer's `<pre>` styling, applied as a per-line decoration
   since the live surface styles lines rather than wrapping a block element
   (the block stays individually editable).
+- **Two side effects of the highlighting rules above, one fixed, one kept
+  as-is on purpose (Phase 33 follow-up pass):**
+  - **Fixed:** `markdownLanguage`'s own built-in Emoji extension tags an
+    unconverted shortcode like `:smile:` with `tags.character` — which
+    `@lezer/highlight` defines as a sub-tag of `tags.string`
+    (`character: t(string)`), so it inherited the string-literal color
+    above. Neutralized with an explicit, more-specific `{ tag:
+    tags.character, color: 'inherit' }` override, so shortcode text (still
+    correctly unconverted — see Emoji above) reads as plain text again,
+    matching the classic renderer.
+  - **Kept as-is, considered and not a bug:** raw HTML typed directly in
+    prose (e.g. section 11 of the feature-test doc, `<div>…</div>` as a
+    literal example) picks up the *same* `tags.tagName`/`tags.attributeName`
+    coloring fenced ```` ```html ```` blocks legitimately need — investigated
+    down to the exact rule match (confirmed via computed-style inspection,
+    not guessing) and traced to `markdownLanguage` itself nesting an HTML
+    grammar for raw `HTMLBlock`/inline-HTML content, independent of anything
+    this feature added; only the *color* is new, the parse already existed.
+    There is no tag-hierarchy trick available here the way there was for
+    `tags.character` (fenced-code tag names and prose-HTML tag names carry
+    the identical tag, not a parent/child pair), so suppressing it would
+    require either disabling `markdownLanguage`'s own raw-HTML nesting
+    entirely (losing it for legitimate cases too) or a materially riskier
+    ancestor-aware decoration override reaching into mounted/overlay parse
+    trees. Given the literal-text and never-executes safety properties both
+    still hold — this is styling of inert text, not a rendering or security
+    change — and this reads as reasonable "seamless editor" behavior (Typora/
+    Obsidian-style tools commonly highlight recognized syntax wherever they
+    see it), left in place rather than risking a fragile fix for a cosmetic
+    edge case.
