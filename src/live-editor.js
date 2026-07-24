@@ -433,8 +433,10 @@ const _checklistProgressField = StateField.define({
 // Typora-style [TOC] marker: a line containing only "[TOC]" gets a rendered
 // contents nav placed above it (the literal "[TOC]" text stays visible/
 // editable below, same badge-above-content pattern as the checklist
-// progress indicator). Non-interactive — this is a document-editing surface,
-// not the read-only preview pane, so links here don't need to navigate.
+// progress indicator). Clicking an entry jumps the caret to (and scrolls to)
+// that heading — the same "Contents" list the static/export renderer's
+// nav offers, just navigating within this surface instead of via real
+// document.location anchors.
 function _stripHeadingMarkup(raw) {
   return raw
     .replace(/^#{1,6}\s+/, '')
@@ -447,9 +449,9 @@ class _TocWidget extends WidgetType {
   constructor(entries) { super(); this.entries = entries; }
   eq(other) {
     return other.entries.length === this.entries.length &&
-      other.entries.every((e, i) => e.level === this.entries[i].level && e.text === this.entries[i].text);
+      other.entries.every((e, i) => e.level === this.entries[i].level && e.text === this.entries[i].text && e.pos === this.entries[i].pos);
   }
-  toDOM() {
+  toDOM(view) {
     const nav = document.createElement('div');
     nav.className = 'cm-md-inline-toc';
     const label = document.createElement('strong');
@@ -462,6 +464,17 @@ class _TocWidget extends WidgetType {
       const a = document.createElement('a');
       a.href = '#';
       a.textContent = e.text || 'section';
+      a.addEventListener('mousedown', (evt) => {
+        // mousedown (not click) so this fires before the editor would
+        // otherwise steal focus/selection on the way to a click.
+        evt.preventDefault();
+        const pos = Math.min(e.pos, view.state.doc.length);
+        view.dispatch({
+          selection: { anchor: pos },
+          effects: EditorView.scrollIntoView(pos, { y: 'center' }),
+        });
+        view.focus();
+      });
       li.appendChild(a);
       ul.appendChild(li);
     }
@@ -480,6 +493,7 @@ function _computeTocBadges(state) {
       headings.push({
         level: Number(m[1]),
         text: _stripHeadingMarkup(state.doc.sliceString(nodeRef.from, nodeRef.to)),
+        pos: nodeRef.from,
       });
     },
   });
@@ -577,6 +591,24 @@ export function setRemoteCursors(cursors) {
 export function scrollToPos(pos) {
   if (!_view || typeof pos !== 'number' || pos < 0 || pos > _view.state.doc.length) return;
   _view.dispatch({ effects: EditorView.scrollIntoView(pos, { y: 'center' }) });
+}
+
+/**
+ * Select [from, to] and scroll it into view without touching the document —
+ * the Live/Split-surface counterpart of setting selectionStart/selectionEnd
+ * + scrollTop on a plain textarea. Used by Find & Replace to highlight the
+ * current match on this surface instead of forcing a switch back to Write
+ * mode just to move the caret.
+ */
+export function setSelection(from, to) {
+  if (!_view) return;
+  const docLen = _view.state.doc.length;
+  const a = Math.max(0, Math.min(from ?? 0, docLen));
+  const b = Math.max(0, Math.min(to ?? a, docLen));
+  _view.dispatch({
+    selection: { anchor: a, head: b },
+    effects: EditorView.scrollIntoView(b, { y: 'center' }),
+  });
 }
 
 // ── Comment anchors ───────────────────────────────────────────────────────────
@@ -938,26 +970,38 @@ export function destroy() {
 // had. Rewired on every mount() since CM6's scrollDOM is a fresh element
 // each time the view is (re)created, unlike the old #note-preview div.
 
+// Guarding re-entrancy with a boolean "lock" cleared on the next animation
+// frame (the original approach here) is a timing race, not a real guard:
+// a scrollTop assignment's resulting 'scroll' event is dispatched
+// asynchronously by the browser, on a schedule this code doesn't control —
+// if that echo arrives even one tick after the lock already cleared, it's
+// treated as a fresh user scroll and bounced back to the other pane. That
+// round trip is the "phantom scroll": two panes visibly correcting each
+// other by a few pixels after every real scroll (and, since the same
+// listeners fire on any 'scroll' event regardless of cause, after every
+// content reflow while typing too). Fixed by comparing actual positions
+// instead of guessing about timing: skip the write entirely when the
+// target pane is already within a hair of where the math says it should
+// be. A real user scroll still produces a real cross-pane update; an echo
+// from that update computes back to (approximately) where the source pane
+// already sits and becomes a no-op, so the loop has nothing left to chase.
 export function wireScrollSync(editorEl) {
   unwireScrollSync();
   if (!_view || !editorEl) return;
   const scrollEl = _view.scrollDOM;
-  let lock = false;
   const onEditorScroll = () => {
-    if (lock) return;
-    lock = true;
     const maxScroll = editorEl.scrollHeight - editorEl.clientHeight;
     const ratio = maxScroll > 0 ? editorEl.scrollTop / maxScroll : 0;
-    scrollEl.scrollTop = ratio * (scrollEl.scrollHeight - scrollEl.clientHeight);
-    requestAnimationFrame(() => { lock = false; });
+    const target = ratio * (scrollEl.scrollHeight - scrollEl.clientHeight);
+    if (Math.abs(scrollEl.scrollTop - target) < 1) return;
+    scrollEl.scrollTop = target;
   };
   const onSelfScroll = () => {
-    if (lock) return;
-    lock = true;
     const maxScroll = scrollEl.scrollHeight - scrollEl.clientHeight;
     const ratio = maxScroll > 0 ? scrollEl.scrollTop / maxScroll : 0;
-    editorEl.scrollTop = ratio * (editorEl.scrollHeight - editorEl.clientHeight);
-    requestAnimationFrame(() => { lock = false; });
+    const target = ratio * (editorEl.scrollHeight - editorEl.clientHeight);
+    if (Math.abs(editorEl.scrollTop - target) < 1) return;
+    editorEl.scrollTop = target;
   };
   editorEl.addEventListener('scroll', onEditorScroll);
   scrollEl.addEventListener('scroll', onSelfScroll);

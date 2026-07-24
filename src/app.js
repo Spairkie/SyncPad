@@ -145,6 +145,17 @@ const _TYPEWRITER_MODE_KEY = 'syncpad_typewriter_mode';
 let _typewriterMode = localStorage.getItem(_TYPEWRITER_MODE_KEY) === 'true';
 const _HIDE_PRESENCE_KEY = 'syncpad_hide_presence';
 let _hidePresence = localStorage.getItem(_HIDE_PRESENCE_KEY) === 'true';
+// Which editor mode a room opens into. Defaults to Live (Preview) rather
+// than Source — most reading/reviewing happens rendered, and Write is one
+// segmented-control click away for anyone who wants raw markdown. Once a
+// user picks a mode it's remembered like the other preferences above,
+// including Write for anyone who prefers it. See _applyMarkdownMode(),
+// which persists on every switch, and _resolveInitialEditorMode() below.
+const _EDITOR_MODE_KEY = 'syncpad_editor_mode';
+function _resolveInitialEditorMode() {
+  const stored = localStorage.getItem(_EDITOR_MODE_KEY);
+  return (stored === 'write' || stored === 'preview' || stored === 'split') ? stored : 'preview';
+}
 
 // ── Files state ───────────────────────────────────────────────────────────────
 let _filesSelectMode = false;
@@ -927,8 +938,12 @@ async function startApp() {
   UI.setFocusMode(_focusMode);
   UI.setTypewriterMode(_typewriterMode);
   UI.setReadOnlyMode(_isReadOnly);
-  // Ensure the editor always starts in write mode when entering a new room,
-  // since _markdownMode was reset to 'write' in teardownRealtimeSession().
+  // Transient state for the loading screen only — safe before real content
+  // exists because Write mode needs no content (Preview/Split mount the
+  // live surface against the current editor value, which isn't set yet).
+  // The user's actual remembered mode is applied below, once content is in
+  // place; see _resolveInitialEditorMode() and the setContentNoSave() calls
+  // further down.
   UI.setMarkdownMode('write', null);
   UI.setLockedMode(!!_room.editing_locked);
   UI.renderThemePicker(THEMES, getSavedTheme(), (id) => applyTheme(id));
@@ -968,6 +983,13 @@ async function startApp() {
     setContentNoSave(displayContent);
   }
   UI.updateWordCount(UI.getEditorValue());
+
+  // Apply the user's remembered editor mode now that real content exists —
+  // Preview/Split mount the live surface against the current editor value,
+  // so this has to run after setContentNoSave() above, not alongside the
+  // 'write' placeholder set earlier for the loading screen.
+  const _initialMode = _resolveInitialEditorMode();
+  if (_initialMode !== 'write') _applyMarkdownMode(_initialMode);
 
   initBroadcast(_roomId, {
     onRemoteTyping: async (payload) => {
@@ -1452,7 +1474,7 @@ async function _uploadAndInsertImages(files) {
     if (toUpload.length > 1) UI.setUploadingState(true, `Uploading image ${i + 1} of ${toUpload.length}…`);
     try {
       const record = await uploadFile(_roomId, toUpload[i]);
-      UI.insertAtCursor(`![${record.filename}](syncpad-file:${record.file_path})\n`);
+      _insertTextAtActiveCursor(`![${record.filename}](syncpad-file:${record.file_path})\n`);
       succeeded++;
     } catch { failed++; }
   }
@@ -1703,7 +1725,7 @@ function _wireShortcuts() {
     },
     onInsertTimestamp: () => {
       if (!canEdit()) { UI.showToast(editBlockedReason() || 'Editing is disabled.', 'warning'); return; }
-      UI.insertAtCursor(insertTimestamp());
+      _insertTextAtActiveCursor(insertTimestamp());
       UI.showToast('Timestamp inserted.', 'success');
     },
     onCopyNote: () => _copyNoteToClipboard(),
@@ -2101,14 +2123,27 @@ function _wireEditorToolbarAndLifecycle() {
     _uploadAndInsertImages(imageFiles);
   });
 
-  window.addEventListener('beforeunload', () => {
+  // beforeunload does NOT reliably fire for every real tab-close — mobile
+  // Safari/iOS (including this app's own installed-PWA path, see
+  // _isStandalonePwa()) is well documented to skip or delay it when a tab is
+  // closed/backgrounded rather than navigated. When that happens, this
+  // device's presence row is only cleared server-side once its WebSocket
+  // eventually times out — until then it keeps counting as "connected",
+  // which is the most direct way the device count drifts from reality.
+  // pagehide is the modern, more-reliably-fired sibling event (also covers
+  // the bfcache-navigation case beforeunload can miss); registering the same
+  // cleanup on both costs nothing extra since destroyPresence() is a no-op
+  // once _ch is already null; whichever fires first wins.
+  const _cleanupOnLeave = () => {
     // setTyping(false) clears the isTyping flag in Supabase Presence so other
     // devices don't see a ghost "typing" indicator after this tab closes.
-    // visibilitychange handles tab-hide; beforeunload handles close/navigate.
+    // visibilitychange handles tab-hide; these handle close/navigate.
     setTyping(false);
     flushSave();
     destroyPresence();
-  });
+  };
+  window.addEventListener('beforeunload', _cleanupOnLeave);
+  window.addEventListener('pagehide', _cleanupOnLeave);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
       flushSave();
@@ -2320,7 +2355,7 @@ function _wireFooterQuickButtons() {
   // ── Footer quick buttons ───────────────────────────────────────────────────
   document.getElementById('btn-insert-ts')?.addEventListener('click', () => {
     if (!canEdit()) { UI.showToast(editBlockedReason() || 'Editing is disabled.', 'warning'); return; }
-    UI.insertAtCursor(insertTimestamp());
+    _insertTextAtActiveCursor(insertTimestamp());
   });
   UI.initFooterClock();
 
@@ -2921,6 +2956,10 @@ function _wireFindReplacePanel() {
       // Collapse any selection left by the previous _jumpToMatch() call so the
       // editor doesn't keep showing a stale highlighted range.
       if (editor) UI.setEditorSelection(editor.selectionEnd, editor.selectionEnd);
+      if (_markdownMode === 'preview' && LiveEditor.isMounted()) {
+        const sel = LiveEditor.getSelection();
+        LiveEditor.setSelection(sel.to, sel.to);
+      }
       _syncReplaceButtons();
       return;
     }
@@ -2945,14 +2984,26 @@ function _wireFindReplacePanel() {
     if (!editor || !_searchMatches.length) return;
     const m = _searchMatches[idx];
     if (!m) return;
-    // Switch to write mode if in preview
-    if (_markdownMode !== 'write' && _markdownMode !== 'split') {
-      _applyMarkdownMode('write');
-    }
     // Only steal focus from the editor when the search/replace inputs don't
     // own it — otherwise typing in the search panel scrolls away mid-query.
     const active = document.activeElement;
     const searchPanelFocused = active === searchInput || active === replaceInput;
+    // Preview mode hides the plain textarea entirely (`editor.classList.add
+    // ('hidden')` in UI.setMarkdownMode) — moving its selectionStart/
+    // selectionEnd and scrollTop there has no visible effect, which used to
+    // be worked around by force-switching back to Write mode just to show
+    // the match. That fought the user's chosen mode every time they hit
+    // Enter/Next in the search box. Route to the CM6 live surface instead,
+    // the same selection+scrollIntoView primitive the TOC widget uses, and
+    // only fall back to a mode switch when the live surface failed to mount
+    // (rare — classic-renderer fallback has no caret to move at all).
+    if (_markdownMode === 'preview' && LiveEditor.isMounted()) {
+      LiveEditor.setSelection(m.start, m.end);
+      if (!searchPanelFocused && !keepFocus) LiveEditor.focus();
+      if (searchCount) searchCount.textContent = `${idx + 1} / ${_searchMatches.length}`;
+      return;
+    }
+    if (_markdownMode === 'preview') _applyMarkdownMode('write');
     if (!searchPanelFocused && !keepFocus) editor.focus();
     UI.setEditorSelection(m.start, m.end);
     // Scroll into view
@@ -2977,12 +3028,12 @@ function _wireFindReplacePanel() {
       _jumpToMatch(_searchIndex);
     }
     if (e.key === 'Tab' && !e.shiftKey) { e.preventDefault(); replaceInput?.focus(); }
-    if (e.key === 'Escape') { UI.closeAllPanels(); editor?.focus(); }
+    if (e.key === 'Escape') { UI.closeAllPanels(); _focusActiveEditorSurface(); }
   });
   replaceInput?.addEventListener('keydown', (e) => {
     if (e.key === 'Tab'    && e.shiftKey)  { e.preventDefault(); searchInput?.focus(); }
     if (e.key === 'Enter')  { e.preventDefault(); replaceOne?.click(); }
-    if (e.key === 'Escape') { UI.closeAllPanels(); editor?.focus(); }
+    if (e.key === 'Escape') { UI.closeAllPanels(); _focusActiveEditorSurface(); }
   });
 
   document.getElementById('search-next')?.addEventListener('click', () => {
@@ -3238,6 +3289,44 @@ function _syncMonospaceSettingUI() {
 }
 
 // ── Markdown format helpers ───────────────────────────────────────────────────
+
+/**
+ * Insert `text` at the caret of whichever surface is actually active —
+ * the CM6 live proxy in Preview mode (or Split, when the live pane has
+ * focus), the plain textarea otherwise. Mirrors UI.insertAtCursor()'s
+ * behaviour, which only ever touches the (possibly hidden) textarea and
+ * silently no-ops visually when Preview mode has it hidden. Shared by any
+ * "insert this at my cursor" action — timestamp insert today.
+ */
+function _insertTextAtActiveCursor(text) {
+  const useLive = LiveEditor.isMounted() && (_markdownMode === 'preview' || LiveEditor.hasFocus());
+  if (useLive) {
+    const proxy = LiveEditor.asEditorProxy();
+    if (proxy == null) return;
+    const start = proxy.selectionStart ?? proxy.value.length;
+    const end   = proxy.selectionEnd   ?? start;
+    proxy.value = proxy.value.slice(0, start) + text + proxy.value.slice(end);
+    proxy.selectionStart = proxy.selectionEnd = start + text.length;
+    proxy.dispatchEvent();
+  } else {
+    UI.insertAtCursor(text);
+  }
+}
+
+/**
+ * Focus whichever editing surface is actually visible/relevant right now —
+ * the CM6 live surface in Preview mode (the plain textarea is hidden there
+ * and focusing it is a no-op the user can't see), the plain textarea
+ * otherwise. Shared by any call site that used to blindly call
+ * `editor.focus()` regardless of markdown mode.
+ */
+function _focusActiveEditorSurface() {
+  if (_markdownMode === 'preview' && LiveEditor.isMounted()) {
+    LiveEditor.focus();
+  } else {
+    document.getElementById('note-editor')?.focus();
+  }
+}
 
 /**
  * Resolve which surface (plain textarea or CM6 live proxy) a formatting
@@ -3496,10 +3585,12 @@ function teardownRealtimeSession() {
   // silently encrypt saves in a subsequent non-encrypted room.
   _encKey  = null;
   _encSalt = null;
-  // Reset editor mode so the next room always starts in plain-write view
-  // rather than inheriting preview / split mode from the previous room.
-  // setMarkdownMode() cleans up DOM mode classes immediately (mode-split, etc.)
-  // so the card layout doesn't show a stale divider during the loading screen.
+  // Reset in-memory mode to a safe, content-independent placeholder so the
+  // loading screen never shows a stale divider (mode-split, etc.) from the
+  // previous room. This is NOT the mode the next room opens into — startApp()
+  // applies the user's remembered mode (_resolveInitialEditorMode()) once
+  // that room's content is actually loaded, which is what the next room
+  // visibly starts in.
   _markdownMode = 'write';
   _showPreview  = false;
   UI.setMarkdownMode('write', null);
@@ -3556,7 +3647,7 @@ async function _onTemplateChosen(key, mode) {
 
   if (mode === 'insert') {
     // Insert at the current cursor position; fall back to append if no editor focus.
-    UI.insertAtCursor(body);
+    _insertTextAtActiveCursor(body);
     // The shared 'input' handler (_wireEditorCore) enforces BODY_MAX centrally.
     editor?.dispatchEvent(new Event('input', { bubbles: true }));
     UI.updateWordCount(UI.getEditorValue());
@@ -3807,6 +3898,7 @@ function _applyMarkdownMode(mode) {
   _closeSlashMenu(); // Write-mode-only feature — never valid to keep open across a mode switch
   _markdownMode = mode;
   _showPreview  = mode !== 'write';
+  try { localStorage.setItem(_EDITOR_MODE_KEY, mode); } catch {}
 
   let live = false;
   if (mode === 'preview' || mode === 'split') {
