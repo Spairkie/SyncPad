@@ -26,6 +26,7 @@ import { escapeHtml } from './utils.js';
 let _view             = null;
 let _onChange         = null;
 let _onCursorActivity = null;
+let _onImageFiles     = null;
 let _scrollSync       = null; // { editorEl, scrollEl, onEditorScroll, onSelfScroll }
 const _readOnly = new Compartment();
 
@@ -899,10 +900,11 @@ export function coordsAtPos(pos) {
  * already mounted). `onChange(text)` fires only for edits made in this
  * surface, never for syncFromText() applications.
  */
-export function mount(container, initialValue, { onChange, onCursorActivity, readOnly = false } = {}) {
+export function mount(container, initialValue, { onChange, onCursorActivity, onImageFiles, readOnly = false } = {}) {
   destroy();
   _onChange = onChange || null;
   _onCursorActivity = onCursorActivity || null;
+  _onImageFiles = onImageFiles || null;
   _view = new EditorView({
     state: EditorState.create({
       doc: initialValue || '',
@@ -918,7 +920,15 @@ export function mount(container, initialValue, { onChange, onCursorActivity, rea
         syntaxHighlighting(_mdHighlight),
         _seamless,
         // Ctrl/Cmd+click a folded link to open it (http(s) only — same
-        // destination policy as the markdown renderer).
+        // destination policy as the markdown renderer), and image
+        // paste/drop — the Write textarea's own paste/dragover/drop
+        // listeners (app.js) are bound to #note-editor specifically, so
+        // they never fire when this surface owns the event (true whenever
+        // it's focused, which since Phase 34 is the default on room open).
+        // Handled here rather than left to CM6's own paste handling, which
+        // has nothing meaningful to do with an image-only clipboard item
+        // (no text representation to insert) and would otherwise silently
+        // no-op.
         EditorView.domEventHandlers({
           mousedown: (e, view) => {
             if (!(e.ctrlKey || e.metaKey)) return false;
@@ -928,6 +938,30 @@ export function mount(container, initialValue, { onChange, onCursorActivity, rea
             if (!url) return false;
             e.preventDefault();
             window.open(url, '_blank', 'noopener');
+            return true;
+          },
+          paste: (e) => {
+            if (!_onImageFiles) return false;
+            const files = Array.from(e.clipboardData?.items || [])
+              .filter((it) => it.kind === 'file' && it.type.startsWith('image/'))
+              .map((it) => it.getAsFile())
+              .filter(Boolean);
+            if (!files.length) return false;
+            e.preventDefault();
+            _onImageFiles(files);
+            return true;
+          },
+          dragover: (e) => {
+            if (!_onImageFiles) return false;
+            if (Array.from(e.dataTransfer?.items || []).some((it) => it.kind === 'file')) e.preventDefault();
+            return false;
+          },
+          drop: (e) => {
+            if (!_onImageFiles) return false;
+            const files = Array.from(e.dataTransfer?.files || []).filter((f) => f.type.startsWith('image/'));
+            if (!files.length) return false;
+            e.preventDefault();
+            _onImageFiles(files);
             return true;
           },
         }),
@@ -961,6 +995,7 @@ export function destroy() {
   _view = null;
   _onChange = null;
   _onCursorActivity = null;
+  _onImageFiles = null;
 }
 
 // ── Split-mode scroll sync ───────────────────────────────────────────────────

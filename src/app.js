@@ -1123,7 +1123,10 @@ async function startApp() {
   });
   if (!isOnline()) UI.showOfflineBanner();
 
-  if (!isMobile() && !_isReadOnly) UI.focusEditor();
+  // Preview is now a possible starting mode (see _resolveInitialEditorMode()
+  // above), where the plain textarea is hidden — UI.focusEditor() would
+  // silently focus an invisible element and leave no visible caret anywhere.
+  if (!isMobile() && !_isReadOnly) _focusActiveEditorSurface();
 
   // ── View-once: consume AFTER the note is visible to the user ───────────────
   // Set _consumingViewOnce so the subscribeToRoom postgres echo of our own
@@ -3909,6 +3912,7 @@ function _applyMarkdownMode(mode) {
           LiveEditor.mount(container, UI.getEditorValue(), {
             onChange: _onLiveEditorChange,
             onCursorActivity: _onLiveCursorActivity,
+            onImageFiles: (files) => { if (canEdit()) _uploadAndInsertImages(files); },
             readOnly: !canEdit(),
           });
           // CM6 persists across later mode switches (mount() is only called
