@@ -8,6 +8,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Phase 30 — Fix Live/Split surface: tables, GFM alerts, and footnotes weren't rendering
+
+Branch: `claude/codebase-review-testing-fjicqa`
+
+#### Fixed
+- **Diagnosed the reported "markdown rendering is broken" issue on Live/Split/Preview mode.** Root cause: `live-editor.js`'s CM6 WYSIWYG surface is a *separate* rendering path from `markdown.js`'s static `renderMarkdown()` — it decorates the plain-markdown source directly rather than producing HTML — and three features had no decoration logic there at all, so they rendered as literal, unstyled markdown syntax instead of the formatted output the static export/PDF/copy-as-HTML paths already produced correctly:
+  - **GFM tables** (`| a | b |`) showed as plain pipe-delimited text lines with no grid, borders, or column alignment.
+  - **GitHub-style alerts** (`> [!NOTE]`/`[!TIP]`/`[!IMPORTANT]`/`[!WARNING]`/`[!CAUTION]`) showed as a plain blockquote with the literal `[!NOTE]` marker text visible, no colour, icon, or label.
+  - **Footnotes** (`[^1]`) showed as literal bracket-caret text, no superscript, no visual distinction from the surrounding sentence.
+  - Confirmed via a byte-for-byte diff against a prior "golden" HTML export of the project's own markdown feature-test document (matched almost exactly, save for two checkbox states explained by manual toggle-testing) — proving the *static* renderer (`markdown.js`) was already correct, and isolating the bug entirely to the CM6 live surface most users actually see day-to-day (Preview/Split mode mount the live surface whenever it mounts successfully, which is virtually always).
+- **Tables** now render as a real `<table>` — a `_tableField` `StateField` (block-replace decorations can only come from a StateField, not the existing `_seamless` `ViewPlugin` — "Block decorations may not be specified via plugins") walks the `Table`/`TableHeader`/`TableRow`/`TableCell`/`TableDelimiter` nodes `markdownLanguage` was already parsing (the same GFM extension task lists and strikethrough come from) and swaps the whole block for a built `<table>` with correct column alignment, following the same "reveal raw markdown while the selection touches it" pattern already used for images/horizontal rules. Recomputed on every transaction (not just doc changes) since whether a table shows as a widget or its raw syntax depends on the selection.
+- **GFM alerts** now render as a coloured, icon-labelled box matching the static renderer's `.md-alert` styling exactly (same icons/colours per kind) — detected by matching a blockquote's first line against the five alert kinds; the `[!NOTE]` marker (which parses as an ordinary unresolved shortcut-reference `Link` node, since GFM alerts aren't part of the base grammar either) is replaced with an icon+label widget.
+- **Footnotes** get a superscript reference marker inline and a small bold label on the definition line — not a full relocated "Footnotes" section (this is an editable surface; moving text out of document order would fight the person editing it, unlike the read-only static export, which already does exactly that).
+- New `tests/live-editor-rendering.spec.js` covers all three fixes plus the click-to-reveal-raw-source interaction.
+
 ### Phase 29 — Slash-command quick-insert menu, emoji quick-react on cursor chat
 
 Branch: `claude/codebase-review-testing-fjicqa`
